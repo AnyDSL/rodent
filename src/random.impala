@@ -1,0 +1,14 @@
+struct Rng {
+    rand: fn () -> (float, Rng)
+}
+
+fn mwc64x(seed: u64) -> Rng {
+    Rng {
+        rand: || {
+            let c = seed >> 32u64;
+            let x = seed & 0xFFFFFFFFu64;
+            let new_seed = x * 4294883355u64 + c;
+            (((x^c) as float) / (0xFFFFFFFFu32 as float), $mwc64x(new_seed))
+        }
+    }
+}

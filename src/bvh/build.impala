@@ -1,0 +1,12 @@
+struct Bvh {
+    nodes:     fn (int) -> BvhNode,
+    num_nodes: int
+}
+
+struct BvhNode {
+    intersect: fn (Ray) -> bool
+}
+
+fn build_bvh(bboxes: fn (int) -> BBox, num_objs: int) -> Bvh {
+    
+}

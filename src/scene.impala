@@ -1,0 +1,52 @@
+struct Scene {
+    intersect: fn (Ray, bool, fn (Hit) -> ()) -> (),
+
+    instances: fn (int) -> Instance,
+    textures:  fn (int) -> Texture,
+    objects:   fn (int) -> Object,
+
+    num_instances: int,
+    num_textures:  int,
+    num_objects:   int
+}
+
+struct Texture {
+    lookup: fn (float, float) -> Vec4,
+}
+
+struct Instance {
+    object: int,
+    matrix: Mat3x4
+}
+
+struct Object {
+    intersect: fn (Ray, bool, fn (Hit) -> ()) -> ()
+}
+
+struct Ray {
+    org:  Vec3,
+    dmin: float,
+    dir:  Vec3,
+    dmax: float
+}
+
+struct Hit {
+    attr: fn (int) -> Attribute,
+    dist: float
+}
+
+struct Attribute {
+    f:    float,
+    vec2: Vec2,
+    vec3: Vec3,
+    vec4: Vec4
+}
+
+fn dummy_attr(i: int) -> Attribute {
+    Attribute {
+        f: 0.0f,
+        vec2: vec2(0.0f, 0.0f),
+        vec3: vec3(0.0f, 0.0f, 0.0f),
+        vec4: vec4(0.0f, 0.0f, 0.0f, 0.0f)
+    }
+}
