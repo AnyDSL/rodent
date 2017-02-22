@@ -5,7 +5,7 @@ struct Camera {
 fn perspective_camera(eye: Vec3, mut dir: Vec3, up: Vec3, fov: float, ratio: float) -> Camera {
     dir = vec3_norm(dir);
 
-    let w = tanf(fov * flt_pi / 360.0f);
+    let w = math.tanf(fov * flt_pi / 360.0f);
     let h = w / ratio;
 
     let right = vec3_norm(vec3_cross(dir, up));
@@ -16,12 +16,8 @@ fn perspective_camera(eye: Vec3, mut dir: Vec3, up: Vec3, fov: float, ratio: flo
 
     Camera {
         generate_ray: |x, y, rng| {
-            let ray = Ray {
-                org: eye,
-                dmin: 0.0f,
-                dir: vec3_add(dir, vec3_add(vec3_mulf(kx, x), vec3_mulf(ky, y))),
-                dmax: flt_max
-            };
+            let dir = vec3_add(dir, vec3_add(vec3_mulf(kx, x), vec3_mulf(ky, y)));
+            let ray = ray(eye, dir);
             (ray, rng)
         }
     }

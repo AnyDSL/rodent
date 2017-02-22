@@ -1,0 +1,64 @@
+struct Ray {
+    org:     fn () -> Vec3,
+    dir:     fn () -> Vec3,
+    inv_dir: fn () -> Vec3,
+    inv_org: fn () -> Vec3
+}
+
+struct BBox {
+    min: fn () -> Vec3,
+    max: fn () -> Vec3
+}
+
+struct Tri {
+    v0: fn () -> Vec3,
+    v1: fn () -> Vec3,
+    v2: fn () -> Vec3,
+    e1: fn () -> Vec3,
+    e2: fn () -> Vec3,
+    n:  fn () -> Vec3
+}
+
+fn ray(org: Vec3, dir: Vec3) -> Ray {
+    let inv_dir = vec3(1.0f / dir.x, 1.0f / dir.y, 1.0f / dir.z);
+    let inv_org = vec3_mul(org, inv_dir);
+    Ray {
+        org: || org,
+        dir: || dir,
+        inv_dir: || inv_dir,
+        inv_org: || inv_org
+    }
+}
+
+fn intersect_ray_box(ray: Ray, bbox: BBox, tmin: float, tmax: float, intr: fn (float, float) -> ()) -> () {
+    let t0 = vec3_sub(vec3_mul(ray.inv_dir(), bbox.min()), ray.inv_org());
+    let t1 = vec3_sub(vec3_mul(ray.inv_dir(), bbox.max()), ray.inv_org());
+    let tmin01 = vec3_min(t0, t1);
+    let tmax01 = vec3_max(t0, t1);
+    let tentry = math.fmaxf(math.fmaxf(tmin, tmin01.x), math.fmaxf(tmin01.y, tmin01.z));
+    let texit  = math.fminf(math.fminf(tmax, tmax01.x), math.fminf(tmax01.y, tmax01.z));
+
+    if tentry <= texit { intr(tentry, texit) }
+}
+
+fn intersect_ray_tri(ray: Ray, tri: Tri, tmin: float, tmax: float, intr: fn (float, float, float) -> ()) -> () {
+    let dir = ray.dir();
+    let n = tri.n();
+
+    let c = vec3_sub(tri.v0(), ray.org());
+    let r = vec3_cross(dir, c);
+    let det = vec3_dot(n, dir);
+    let abs_det = math.fabsf(det);
+
+    let u = prodsign(vec3_dot(r, tri.e2()), det);
+    let v = prodsign(vec3_dot(r, tri.e1()), det);
+    let w = abs_det - u - v;
+
+    if u >= 0.0f && v >= 0.0f && w >= 0.0f {
+        let t = prodsign(vec3_dot(n, c), det);
+        if t >= abs_det * tmin && t <= abs_det * tmax && det != 0.0f {
+            let inv_det = 1.0f / abs_det;
+            intr(t * inv_det, u * inv_det, v * inv_det);
+        }
+    }
+}

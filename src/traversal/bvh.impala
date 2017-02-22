@@ -1,0 +1,66 @@
+struct Bvh {
+    nodes:   fn (int) -> Node,
+    leaves:  fn (int) -> Leaf,
+    is_leaf: fn (int) -> bool,
+    arity:   fn () -> int,
+    root:    fn () -> int
+}
+
+struct Node {
+    child: fn (int) -> (BBox, int)
+}
+
+struct Leaf {
+    tris: fn (int) -> (Tri, int)
+}
+
+struct Hit {
+    id: int,
+    t:  float,
+    u:  float,
+    v:  float
+}
+
+struct Mapping {
+    iterate_children:  fn (Node, Stack, fn (BBox, fn (float, float) -> ()) -> ()) -> (),
+    iterate_triangles: fn (Leaf, fn (Tri, int) -> ()) -> ()
+}
+
+fn no_hit(t: float) -> Hit {
+    Hit {
+        id: -1,
+        t: t,
+        u: 0.0f,
+        v: 0.0f
+    }
+}
+
+fn traverse_bvh(mapping: Mapping, stack: Stack, bvh: Bvh, ray: Ray, tmin: float, tmax: float) -> Hit {
+    let mut hit = no_hit(tmax);
+
+    stack.push(bvh.root(), tmax);
+
+    while !stack.is_empty() {
+        let node = bvh.nodes(stack.top());
+        for bbox, hit in mapping.iterate_children(node, stack) {
+            intersect_ray_box(ray, bbox, tmin, tmax, hit);
+        }
+
+        while bvh.is_leaf(stack.top()) {
+            let leaf = bvh.leaves(stack.top());
+
+            for tri, id in mapping.iterate_triangles(leaf) {
+                with t, u, v in intersect_ray_tri(ray, tri, tmin, tmax) {
+                    hit.id = id;
+                    hit.t = t;
+                    hit.u = u;
+                    hit.v = v;
+                }
+            }
+
+            stack.pop()
+        }
+    }
+
+    hit
+}
