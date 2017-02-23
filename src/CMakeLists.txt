@@ -4,7 +4,7 @@ set(TRAVERSAL_SRCS
     traversal/bvh.impala
     traversal/ray.impala
     traversal/stack.impala
-    traversal/mappings.impala
+    traversal/mapping_cpu.impala
     common.impala
     vector.impala)
 

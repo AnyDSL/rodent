@@ -7,6 +7,20 @@ static flt_pi = 3.14159265359f;
 static flt_sqrt2 = 1.41421356237f;
 static flt_sqrt3 = 1.73205080757f;
 
+fn range(a: int, b: int, body: fn (int) -> ()) -> () {
+    if a < b {
+        body(a);
+        range(a + 1, b, body, return)
+    }
+}
+
+fn range_step(a: int, b: int, c: int, body: fn (int) -> ()) -> () {
+    if a < b {
+        body(a);
+        range(a + c, b, body, return)
+    }
+}
+
 fn prodsign(x: float, y: float) -> float {
     bitcast[float](bitcast[u32](x) ^ (bitcast[u32](y) & 0x80000000u))
 }

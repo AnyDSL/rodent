@@ -30,6 +30,13 @@ fn ray(org: Vec3, dir: Vec3) -> Ray {
     }
 }
 
+fn bbox(min: Vec3, max: Vec3) -> BBox {
+    BBox {
+        min: || min,
+        max: || max
+    }
+}
+
 fn intersect_ray_box(ray: Ray, bbox: BBox, tmin: float, tmax: float, intr: fn (float, float) -> ()) -> () {
     let t0 = vec3_sub(vec3_mul(ray.inv_dir(), bbox.min()), ray.inv_org());
     let t1 = vec3_sub(vec3_mul(ray.inv_dir(), bbox.max()), ray.inv_org());

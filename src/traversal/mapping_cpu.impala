@@ -1,0 +1,60 @@
+struct Bvh4 {
+    nodes: &[Bvh4Node],
+    tris:  &[Bvh4Tri]
+}
+
+struct Bvh4Tri {
+    v0: [float * 4],
+    e1: [float * 4],
+    e2: [float * 4],
+    n:  [float * 4]
+}
+
+struct Bvh4Node {
+    min_x: [float * 4],
+    min_y: [float * 4],
+    min_z: [float * 4],
+    max_x: [float * 4],
+    max_y: [float * 4],
+    max_z: [float * 4],
+    child: [int * 4]
+}
+
+fn cpu_traverse_bvh(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_count: int) -> () {
+    for i in range(0, ray_count) {
+        let (ray, tmin, tmax) = rays(i);
+
+        for j in vectorize(4, 16, 0, 4) {
+            let stack = alloc_stack();
+
+            let mapping = TraversalMapping {
+                iterate_children: |node_id, stack, body| {
+                    let node = bvh.nodes(node_id.id);
+                    let bbox = bbox(vec3(node.min_x(i), node.min_y(i), node.min_z(i)),
+                                    vec3(node.max_x(i), node.max_y(i), node.max_z(i)));
+                    let mut child : [int * 4] = [-1, -1, -1, -1];
+                    let mut entry : [float * 4];
+                    body(bbox, |tentry, texit| {
+                        entry(i) = tentry;
+                        child(i) = node.child(i);
+                    });
+                    let mut count = 0;
+                    for i in range(0, 4) {
+                        if child(i) >= 0 {
+                            stack.push(NodeId{ id: child(i) }, entry(i));
+                            count++;
+                        }
+                    }
+                    stack.sort(count);
+                },
+
+                iterate_triangles: |leaf_id, body| {
+                },
+
+                is_leaf: |node_id| node_id.id < 0
+            };
+
+            traverse_bvh(mapping, stack, ray, tmin, tmax);
+        }
+    }
+}
