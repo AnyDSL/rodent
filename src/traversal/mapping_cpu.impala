@@ -4,10 +4,19 @@ struct Bvh4 {
 }
 
 struct Bvh4Tri {
-    v0: [float * 4],
-    e1: [float * 4],
-    e2: [float * 4],
-    n:  [float * 4]
+    v0_x: [float * 4],
+    v0_y: [float * 4],
+    v0_z: [float * 4],
+    e1_x: [float * 4],
+    e1_y: [float * 4],
+    e1_z: [float * 4],
+    e2_x: [float * 4],
+    e2_y: [float * 4],
+    e2_z: [float * 4],
+    n_x:  [float * 4],
+    n_y:  [float * 4],
+    n_z:  [float * 4],
+    id:   [int * 4]
 }
 
 struct Bvh4Node {
@@ -28,33 +37,47 @@ fn cpu_traverse_bvh(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_count: int
             let stack = alloc_stack();
 
             let mapping = TraversalMapping {
-                iterate_children: |node_id, stack, body| {
+                iterate_children: |node_id, tmax, stack, body, exit| -> ! {
+                    if stack.tmin() > tmax { exit() }
+
                     let node = bvh.nodes(node_id.id);
-                    let bbox = bbox(vec3(node.min_x(i), node.min_y(i), node.min_z(i)),
-                                    vec3(node.max_x(i), node.max_y(i), node.max_z(i)));
+                    let bbox = bbox(vec3(node.min_x(j), node.min_y(j), node.min_z(j)),
+                                    vec3(node.max_x(j), node.max_y(j), node.max_z(j)));
+
                     let mut child : [int * 4] = [-1, -1, -1, -1];
                     let mut entry : [float * 4];
                     body(bbox, |tentry, texit| {
-                        entry(i) = tentry;
-                        child(i) = node.child(i);
+                        entry(j) = tentry;
+                        child(j) = node.child(j);
                     });
+
                     let mut count = 0;
-                    for i in range(0, 4) {
-                        if child(i) >= 0 {
-                            stack.push(NodeId{ id: child(i) }, entry(i));
+                    for k in range(0, 4) {
+                        if child(k) >= 0 {
+                            stack.push(NodeId{ id: child(k) }, entry(k));
                             count++;
                         }
                     }
+
                     stack.sort(count);
                 },
+                iterate_triangles: |leaf_id, tmax, stack, body, exit| -> ! {
+                    if stack.tmin() > tmax { exit() }
 
-                iterate_triangles: |leaf_id, body| {
+                    let mut tri_id = !stack.top().id;
+                    while true {
+                        let t = bvh.tris(tri_id++);
+                        body(tri(vec3(t.v0_x(j), t.v0_y(j), t.v0_z(j)),
+                                 vec3(t.e1_x(j), t.e1_y(j), t.e1_z(j)),
+                                 vec3(t.e2_x(j), t.e2_y(j), t.e2_z(j)),
+                                 vec3(t. n_x(j), t. n_y(j), t. n_z(j))), t.id(j));
+                        if t.id(0) < 0 { break() }
+                    }
                 },
-
                 is_leaf: |node_id| node_id.id < 0
             };
 
-            traverse_bvh(mapping, stack, ray, tmin, tmax);
+            hits(i, traverse_bvh(mapping, stack, ray, tmin, tmax));
         }
     }
 }

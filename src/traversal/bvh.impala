@@ -1,41 +1,22 @@
-struct Hit {
-    id: int,
-    t:  float,
-    u:  float,
-    v:  float
-}
-
 struct TraversalMapping {
-    iterate_children:  fn (NodeId, Stack, fn (BBox, fn (float, float) -> ()) -> ()) -> (),
-    iterate_triangles: fn (NodeId, fn (Tri, int) -> ()) -> (),
+    iterate_children:  fn (NodeId, float, Stack, fn (BBox, fn (float, float) -> ()) -> ()) -> (),
+    iterate_triangles: fn (NodeId, float, Stack, fn (Tri, int) -> ()) -> (),
     is_leaf: fn (NodeId) -> bool
 }
 
-type RayStream = fn (int) -> (Ray, float, float);
-type HitStream = fn (int, Hit) -> ();
-
-fn no_hit(t: float) -> Hit {
-    Hit {
-        id: -1,
-        t: t,
-        u: 0.0f,
-        v: 0.0f
-    }
-}
-
 fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, tmax: float) -> Hit {
-    let mut hit = no_hit(tmax);
+    let mut hit = empty_hit(tmax);
 
     while !stack.is_empty() {
         let node = stack.top();
-        for bbox, hit in mapping.iterate_children(node, stack) {
+        for bbox, hit in mapping.iterate_children(node, hit.t, stack) {
             intersect_ray_box(ray, bbox, tmin, tmax, hit);
         }
 
         while mapping.is_leaf(stack.top()) {
             let leaf = stack.top();
 
-            for tri, id in mapping.iterate_triangles(leaf) {
+            for tri, id in mapping.iterate_triangles(leaf, hit.t, stack) {
                 with t, u, v in intersect_ray_tri(ray, tri, tmin, tmax) {
                     hit.id = id;
                     hit.t = t;
