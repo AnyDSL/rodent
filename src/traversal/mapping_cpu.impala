@@ -81,3 +81,16 @@ fn cpu_traverse_bvh(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_count: int
         }
     }
 }
+
+extern fn test_traversal(bvh: &Bvh4, rays: &[float], hits: &mut [float], ray_count: int) -> () {
+    @cpu_traverse_bvh(bvh,
+        |i| (ray(vec3(rays(i * 8 + 0), rays(i * 8 + 1), rays(i * 8 + 2)),
+                 vec3(rays(i * 8 + 4), rays(i * 8 + 5), rays(i * 8 + 6))),
+             rays(i * 8 + 3), rays(i * 8 + 7)),
+        |i, hit| {
+            hits(i * 4 + 0) = bitcast[float](hit.id);
+            hits(i * 4 + 1) = hit.t;
+            hits(i * 4 + 2) = hit.u;
+            hits(i * 4 + 3) = hit.v;
+        }, ray_count);
+}

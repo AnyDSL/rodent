@@ -73,10 +73,8 @@ fn alloc_stack() -> Stack {
                 @sort(true, ptr - 1, 0, 2);
             } else if c == 3 {
                 @sort(true, ptr - 2, 0, 3);
-            } else if c == 4 {
+            } else /*if c == 4 */{
                 @sort(true, ptr - 3, 0, 4);
-            } else {
-                sort(true, ptr - c, 0, c);
             }
             node = nodes(ptr);
             tmin = tmins(ptr);
