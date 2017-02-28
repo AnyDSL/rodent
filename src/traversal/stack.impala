@@ -5,7 +5,7 @@ struct NodeId {
 struct Stack {
     push:     fn (NodeId, float) -> (),
     slot:     fn (NodeId, float) -> (),
-    sort:     fn (int) -> (),
+    sort_n:   fn (int) -> (),
     pop:      fn () -> (),
     top:      fn () -> NodeId,
     tmin:     fn () -> float,
@@ -65,17 +65,11 @@ fn alloc_stack() -> Stack {
             nodes(ptr) = n.id;
             tmins(ptr) = t;
         },
-        sort: |c| {
+        sort_n: |n| {
             ptr++;
             nodes(ptr) = node;
             tmins(ptr) = tmin;
-            if c == 2 {
-                @sort(true, ptr - 1, 0, 2);
-            } else if c == 3 {
-                @sort(true, ptr - 2, 0, 3);
-            } else /*if c == 4 */{
-                @sort(true, ptr - 3, 0, 4);
-            }
+            sort(true, ptr - n + 1, 0, n);
             node = nodes(ptr);
             tmin = tmins(ptr);
             ptr--;

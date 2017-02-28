@@ -33,8 +33,10 @@ fn cpu_traverse_bvh(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_count: int
     for i in range(0, ray_count) {
         let (ray, tmin, tmax) = rays(i);
 
-        for j in vectorize(4, 16, 0, 4) {
+        for j in vectorize(4, 16, 0, 4) @{
             let stack = alloc_stack();
+
+            stack.push(NodeId{ id: 0 }, tmin);
 
             let mapping = TraversalMapping {
                 iterate_children: |node_id, tmax, stack, body, exit| -> ! {
@@ -46,26 +48,33 @@ fn cpu_traverse_bvh(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_count: int
 
                     let mut child : [int * 4] = [-1, -1, -1, -1];
                     let mut entry : [float * 4];
-                    body(bbox, |tentry, texit| {
+                    @body(bbox, |tentry, texit| {
                         entry(j) = tentry;
                         child(j) = node.child(j);
                     });
 
                     let mut count = 0;
-                    for k in range(0, 4) {
+                    for k in @range(0, 4) {
                         if child(k) >= 0 {
                             stack.push(NodeId{ id: child(k) }, entry(k));
                             count++;
                         }
                     }
 
-                    stack.sort(count);
+                    if count < 2 { exit() }
+                    if count == 2 {
+                        @stack.sort_n(2);
+                    } else if count == 3 {
+                        @stack.sort_n(3);
+                    } else if count == 4 {
+                        @stack.sort_n(4);
+                    }
                 },
                 iterate_triangles: |leaf_id, tmax, stack, body, exit| -> ! {
                     if stack.tmin() > tmax { exit() }
 
                     let mut tri_id = !stack.top().id;
-                    while true {
+                    while true @{
                         let t = bvh.tris(tri_id++);
                         body(tri(vec3(t.v0_x(j), t.v0_y(j), t.v0_z(j)),
                                  vec3(t.e1_x(j), t.e1_y(j), t.e1_z(j)),
@@ -77,7 +86,7 @@ fn cpu_traverse_bvh(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_count: int
                 is_leaf: |node_id| node_id.id < 0
             };
 
-            hits(i, traverse_bvh(mapping, stack, ray, tmin, tmax));
+            @hits(i, @traverse_bvh(mapping, stack, ray, tmin, tmax));
         }
     }
 }
