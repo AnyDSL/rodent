@@ -5,6 +5,7 @@ set(TRAVERSAL_SRCS
     traversal/ray.impala
     traversal/stack.impala
     traversal/mapping_cpu.impala
+    traversal/mapping_gpu.impala
     traversal/frontend.impala
     common.impala
     vector.impala)

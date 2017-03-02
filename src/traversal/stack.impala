@@ -5,6 +5,7 @@ struct NodeId {
 struct Stack {
     push:     fn (NodeId, float) -> (),
     insert:   fn (NodeId, float) -> (),
+    swap:     fn (NodeId, float) -> (),
     sort_n:   fn (int) -> (),
     pop:      fn () -> (),
     top:      fn () -> NodeId,
@@ -64,6 +65,10 @@ fn alloc_stack() -> Stack {
             ptr++;
             nodes(ptr) = n.id;
             tmins(ptr) = t;
+        },
+        swap: |n, t| {
+            node = n.id;
+            tmin = t;
         },
         sort_n: |n| {
             ptr++;

@@ -12,17 +12,29 @@ struct HitAoS {
     v: float
 }
 
+fn read_rays_aos(rays: &[RayAoS]) -> RayStream {
+    |i| {
+        (ray(vec3(rays(i).org(0), rays(i).org(1), rays(i).org(2)),
+             vec3(rays(i).dir(0), rays(i).dir(1), rays(i).dir(2))),
+         rays(i).tmin, rays(i).tmax)
+    }
+}
+
+fn write_hits_aos(hits: &mut [HitAoS]) -> HitStream {
+    |i| {
+        |id, t, u, v| {
+            hits(i).tri_id = id;
+            hits(i).t = t;
+            hits(i).u = u;
+            hits(i).v = v;
+        }
+    }
+}
+
 extern fn frontend_cpu_traverse_bvh(bvh: &Bvh4, rays: &[RayAoS], hits: &mut [HitAoS], ray_count: int) -> () {
-    @cpu_traverse_bvh_packet(bvh,
-        |i| (ray(vec3(rays(i).org(0), rays(i).org(1), rays(i).org(2)),
-                 vec3(rays(i).dir(0), rays(i).dir(1), rays(i).dir(2))),
-             rays(i).tmin, rays(i).tmax),
-        |i| {
-            |id, t, u, v| {
-                hits(i).tri_id = id;
-                hits(i).t = t;
-                hits(i).u = u;
-                hits(i).v = v;
-            }
-        }, ray_count);
+    @cpu_traverse_bvh_packet(*bvh, read_rays_aos(rays), write_hits_aos(hits), ray_count);
+}
+
+extern fn frontend_gpu_traverse_bvh(bvh: &Bvh2, rays: &[RayAoS], hits: &mut [HitAoS], ray_count: int) -> () {
+    @gpu_traverse_bvh(*bvh, read_rays_aos(rays), write_hits_aos(hits), ray_count);
 }
