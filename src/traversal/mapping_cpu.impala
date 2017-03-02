@@ -39,6 +39,7 @@ fn cpu_traverse_bvh_packet(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_cou
     for i in range_step(0, ray_count, 8) {
         for j in vectorize(8, 32, 0, 8) {
             let (ray, tmin, tmax) = rays(i + j);
+            let hit = hits(i + j);
             let stack = alloc_stack();
 
             stack.push(NodeId{ id: 0 }, tmin);
@@ -84,7 +85,7 @@ fn cpu_traverse_bvh_packet(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_cou
                 is_leaf: |node_id| node_id.id < 0
             };
 
-            hits(i, traverse_bvh(mapping, stack, ray, tmin, tmax));
+            traverse_bvh(mapping, stack, ray, hit, tmin, tmax, false);
         }
     }
 }
@@ -92,6 +93,7 @@ fn cpu_traverse_bvh_packet(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_cou
 fn cpu_traverse_bvh_single(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_count: int) -> () {
     for i in range(0, ray_count) {
         let (ray, tmin, tmax) = rays(i);
+        let hit = hits(i);
 
         for j in vectorize(4, 16, 0, 4) {
             let stack = alloc_stack();
@@ -149,20 +151,7 @@ fn cpu_traverse_bvh_single(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_cou
                 is_leaf: |node_id| node_id.id < 0
             };
 
-            hits(i, traverse_bvh(mapping, stack, ray, tmin, tmax));
+            traverse_bvh(mapping, stack, ray, hit, tmin, tmax, false);
         }
     }
-}
-
-extern fn test_traversal(bvh: &Bvh4, rays: &[float], hits: &mut [float], ray_count: int) -> () {
-    @cpu_traverse_bvh_packet(bvh,
-        |i| (ray(vec3(rays(i * 8 + 0), rays(i * 8 + 1), rays(i * 8 + 2)),
-                 vec3(rays(i * 8 + 4), rays(i * 8 + 5), rays(i * 8 + 6))),
-             rays(i * 8 + 3), rays(i * 8 + 7)),
-        |i, hit| {
-            hits(i * 4 + 0) = bitcast[float](hit.id);
-            hits(i * 4 + 1) = hit.t;
-            hits(i * 4 + 2) = hit.u;
-            hits(i * 4 + 3) = hit.v;
-        }, ray_count);
 }

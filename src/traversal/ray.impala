@@ -19,25 +19,6 @@ struct Tri {
     n:  fn () -> Vec3
 }
 
-struct Hit {
-    id: int,
-    t:  float,
-    u:  float,
-    v:  float
-}
-
-type RayStream = fn (int) -> (Ray, float, float);
-type HitStream = fn (int, Hit) -> ();
-
-fn empty_hit(t: float) -> Hit {
-    Hit {
-        id: -1,
-        t: t,
-        u: 0.0f,
-        v: 0.0f
-    }
-}
-
 fn ray(org: Vec3, dir: Vec3) -> Ray {
     let inv_dir = vec3(1.0f / dir.x, 1.0f / dir.y, 1.0f / dir.z);
     let inv_org = vec3_mul(org, inv_dir);
