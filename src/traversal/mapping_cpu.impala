@@ -23,6 +23,22 @@ extern "C" {
     fn "rv_ballot" ballot(bool) -> int;
 }
 
+fn ray_box_intrinsics_avx() -> RayBoxIntrinsics {
+    ray_box_intrinsics(cpu_intrinsics.fminf, cpu_intrinsics.fmaxf)
+}
+
+fn ray_box_intrinsics_avx2() -> RayBoxIntrinsics {
+    let fminf = |x, y| {
+        let (x_, y_) = (bitcast[int](x), bitcast[int](y));
+        bitcast[float](if x < y { x } else { y })
+    };
+    let fmaxf = |x, y| {
+        let (x_, y_) = (bitcast[int](x), bitcast[int](y));
+        bitcast[float](if x > y { x } else { y })
+    };
+    ray_box_intrinsics(fminf, fmaxf)
+}
+
 fn cpu_traverse_bvh_packet(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_count: int) -> () {
     for i in range_step(0, ray_count, 8) {
         for j in vectorize(8, 32, 0, 8) {
@@ -70,7 +86,9 @@ fn cpu_traverse_bvh_packet(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_cou
                         if t.id(0) < 0 { break() }
                     }
                 },
-                is_leaf: |node_id| node_id.id < 0
+                is_leaf: |node_id| node_id.id < 0,
+                intrinsics: cpu_intrinsics,
+                ray_box_intrinsics: ray_box_intrinsics_avx()
             };
 
             traverse_bvh(mapping, stack, ray, hit, tmin, tmax, false);
@@ -136,7 +154,9 @@ fn cpu_traverse_bvh_single(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_cou
                         if t.id(0) < 0 { break() }
                     }
                 },
-                is_leaf: |node_id| node_id.id < 0
+                is_leaf: |node_id| node_id.id < 0,
+                intrinsics: cpu_intrinsics,
+                ray_box_intrinsics: ray_box_intrinsics_avx()
             };
 
             traverse_bvh(mapping, stack, ray, hit, tmin, tmax, false);
