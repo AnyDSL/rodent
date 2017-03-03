@@ -164,11 +164,11 @@ int main(int argc, char** argv) {
     auto avg = sum / timings.size();
     auto med = timings[timings.size() / 2];
     auto min = *std::min_element(timings.begin(), timings.end());
-    std::cout << intr << " intersection(s)." << std::endl;
     std::cout << sum << "ms for " << iters << " iteration(s)." << std::endl;
     std::cout << rays.size() * iters / (1000.0 * sum) << " Mrays/sec." << std::endl;
     std::cout << "# Average: " << avg << " ms" << std::endl;
     std::cout << "# Median: " << med  << " ms" << std::endl;
     std::cout << "# Min: " << min << " ms" << std::endl;
+    std::cout << intr << " intersection(s)." << std::endl;
     return 0;
 }

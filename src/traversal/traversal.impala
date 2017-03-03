@@ -1,7 +1,7 @@
 struct TraversalMapping {
-    iterate_children:  fn (NodeId, float, Stack, fn (BBox, fn (float, float) -> ()) -> ()) -> (),
-    iterate_triangles: fn (NodeId, float, Stack, fn (Tri, int) -> ()) -> (),
-    is_leaf: fn (NodeId) -> bool,
+    iterate_children:  fn (NodeRef, float, Stack, fn (BBox, fn (float, float) -> ()) -> ()) -> (),
+    iterate_triangles: fn (NodeRef, float, fn (Tri, int) -> ()) -> (),
+    is_leaf: fn (NodeRef) -> bool,
     intrinsics: Intrinsics,
     ray_box_intrinsics: RayBoxIntrinsics
 }
@@ -27,7 +27,7 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack,
         while mapping.is_leaf(stack.top()) {
             let leaf = stack.top();
 
-            for tri, id in mapping.iterate_triangles(leaf, t, stack) {
+            for tri, id in mapping.iterate_triangles(leaf, t) {
                 with t_, u_, v_ in intersect_ray_tri(mapping.intrinsics, ray, tri, tmin, t) {
                     tri_id = id;
                     t = t_;

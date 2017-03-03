@@ -1,16 +1,16 @@
-struct NodeId {
-    id: int
+struct NodeRef {
+    node: int,
+    tmin: float
 }
 
 struct Stack {
-    push:     fn (NodeId, float) -> (),
-    insert:   fn (NodeId, float) -> (),
-    swap:     fn (NodeId, float) -> (),
-    sort_n:   fn (int) -> (),
-    pop:      fn () -> (),
-    top:      fn () -> NodeId,
-    tmin:     fn () -> float,
-    is_empty: fn () -> bool
+    push:       fn (int, float) -> (),
+    push_after: fn (int, float) -> (),
+    set_top:    fn (int, float) -> (),
+    sort_n:     fn (int) -> (),
+    pop:        fn () -> (),
+    top:        fn () -> NodeRef,
+    is_empty:   fn () -> bool
 }
 
 fn alloc_stack() -> Stack {
@@ -58,16 +58,16 @@ fn alloc_stack() -> Stack {
             ptr++;
             nodes(ptr) = node;
             tmins(ptr) = tmin;
-            node = n.id;
+            node = n;
             tmin = t;
         },
-        insert: |n, t| {
+        push_after: |n, t| {
             ptr++;
-            nodes(ptr) = n.id;
+            nodes(ptr) = n;
             tmins(ptr) = t;
         },
-        swap: |n, t| {
-            node = n.id;
+        set_top: |n, t| {
+            node = n;
             tmin = t;
         },
         sort_n: |n| {
@@ -84,8 +84,7 @@ fn alloc_stack() -> Stack {
             tmin = tmins(ptr);
             ptr--;
         },
-        top: || NodeId { id: node },
-        tmin: || tmin,
+        top: || NodeRef { node: node, tmin: tmin },
         is_empty: || node == sentinel
     }
 }

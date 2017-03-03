@@ -20,5 +20,9 @@ fn range_step(a: int, b: int, c: int, body: fn (int) -> ()) -> () {
 }
 
 fn prodsign(x: float, y: float) -> float {
-    bitcast[float](bitcast[u32](x) ^ (bitcast[u32](y) & 0x80000000u))
+    bitcast[float](bitcast[int](x) ^ (bitcast[int](y) & bitcast[int](0x80000000u)))
+}
+
+fn safe_rcp(x: float) -> float {
+    if x == 0.0f { prodsign(flt_max, x) } else { 1.0f / x }
 }

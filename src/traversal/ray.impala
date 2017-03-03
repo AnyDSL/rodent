@@ -29,7 +29,7 @@ struct RayBoxIntrinsics {
 }
 
 fn ray(org: Vec3, dir: Vec3) -> Ray {
-    let inv_dir = vec3(1.0f / dir.x, 1.0f / dir.y, 1.0f / dir.z);
+    let inv_dir = vec3(safe_rcp(dir.x), safe_rcp(dir.y), safe_rcp(dir.z));
     let inv_org = vec3_mul(org, inv_dir);
     Ray {
         org: || org,
@@ -70,8 +70,9 @@ fn ray_box_intrinsics(fminf: fn (float, float) -> float,
 }
 
 fn intersect_ray_box(math: RayBoxIntrinsics, ray: Ray, bbox: BBox, tmin: float, tmax: float, intr: fn (float, float) -> ()) -> () {
-    let t0 = vec3_sub(vec3_mul(ray.inv_dir(), bbox.min()), ray.inv_org());
-    let t1 = vec3_sub(vec3_mul(ray.inv_dir(), bbox.max()), ray.inv_org());
+    let (inv_dir, inv_org) = (ray.inv_dir(), ray.inv_org());
+    let t0 = vec3_sub(vec3_mul(inv_dir, bbox.min()), inv_org);
+    let t1 = vec3_sub(vec3_mul(inv_dir, bbox.max()), inv_org);
 
     let tentry = math.fmaxmaxf(math.fminf(t0.x, t1.x), math.fminf(t0.y, t1.y), math.fminmaxf(t0.z, t1.z, tmin));
     let texit  = math.fminminf(math.fmaxf(t0.x, t1.x), math.fmaxf(t0.y, t1.y), math.fmaxminf(t0.z, t1.z, tmax));
@@ -80,8 +81,7 @@ fn intersect_ray_box(math: RayBoxIntrinsics, ray: Ray, bbox: BBox, tmin: float, 
 }
 
 fn intersect_ray_tri(math: Intrinsics, ray: Ray, tri: Tri, tmin: float, tmax: float, intr: fn (float, float, float) -> ()) -> () {
-    let dir = ray.dir();
-    let n = tri.n();
+    let (dir, n) = (ray.dir(), tri.n());
 
     let c = vec3_sub(tri.v0(), ray.org());
     let r = vec3_cross(dir, c);
@@ -92,9 +92,9 @@ fn intersect_ray_tri(math: Intrinsics, ray: Ray, tri: Tri, tmin: float, tmax: fl
     let v = prodsign(vec3_dot(r, tri.e1()), det);
     let w = abs_det - u - v;
 
-    if u >= 0.0f && v >= 0.0f && w >= 0.0f {
+    if (u >= 0.0f) & (v >= 0.0f) & (w >= 0.0f) {
         let t = prodsign(vec3_dot(n, c), det);
-        if t >= abs_det * tmin && t <= abs_det * tmax && det != 0.0f {
+        if (t >= abs_det * tmin) & (t <= abs_det * tmax) & (det != 0.0f) {
             let inv_det = 1.0f / abs_det;
             intr(t * inv_det, u * inv_det, v * inv_det);
         }

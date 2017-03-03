@@ -54,11 +54,11 @@ fn gpu_traverse_bvh(bvh: &Bvh2, rays: RayStream, hits: HitStream, ray_count: int
         let hit = hits(i);
 
         let stack = alloc_stack();
-        stack.push(NodeId{ id: 0 }, 0.0f);
+        stack.push(0, 0.0f);
 
         let mapping = TraversalMapping {
-            iterate_children: |node_id, tmax, stack, body, exit| -> ! {
-                let node_ptr = &nodes(node_id.id) as &[float];
+            iterate_children: |node_ref, tmax, stack, body, exit| -> ! {
+                let node_ptr = &nodes(node_ref.node) as &[float];
                 let bb0 = nvvm_ldg4_f32(&node_ptr(0) as &[1]simd[float * 4]);
                 let bb1 = nvvm_ldg4_f32(&node_ptr(4) as &[1]simd[float * 4]);
                 let bb2 = nvvm_ldg4_f32(&node_ptr(8) as &[1]simd[float * 4]);
@@ -70,7 +70,7 @@ fn gpu_traverse_bvh(bvh: &Bvh2, rays: RayStream, hits: HitStream, ray_count: int
                                 vec3(bb1(3), bb2(1), bb2(3)));
 
                 let intersect_child = |box| -> (bool, float) {
-                    body(box, |tentry, _, _| -> ! { return(true, tentry) });
+                    body(box, |tentry, texit, _| -> ! { return(true, tentry) });
                     (false, 0.0f)
                 };
 
@@ -86,15 +86,15 @@ fn gpu_traverse_bvh(bvh: &Bvh2, rays: RayStream, hits: HitStream, ray_count: int
                             children(0) = children(1);
                             children(1) = c;
                         }
-                        stack.insert(NodeId{ id: children(0) }, 0.0f);
-                        stack.swap(NodeId{ id: children(1) }, 0.0f);
+                        stack.push_after(children(0), 0.0f);
+                        stack.set_top(children(1), 0.0f);
                     } else {
-                        stack.swap(NodeId{ id: if hit1 { children(0) } else { children(1) } }, 0.0f)
+                        stack.set_top(if hit1 { children(0) } else { children(1) }, 0.0f)
                     }
                 }
             },
-            iterate_triangles: |leaf_id, tmax, stack, body, exit| -> ! {
-                let mut tri_id = !leaf_id.id;
+            iterate_triangles: |leaf_ref, tmax, body, exit| -> ! {
+                let mut tri_id = !leaf_ref.node;
                 while true {
                     let tri_ptr = tris as &[1][simd[float * 4]];
                     let tri0 = nvvm_ldg4_f32(&tri_ptr(tri_id + 0));
@@ -120,7 +120,7 @@ fn gpu_traverse_bvh(bvh: &Bvh2, rays: RayStream, hits: HitStream, ray_count: int
                     tri_id += 3;
                 }
             },
-            is_leaf: |node_id| node_id.id < 0,
+            is_leaf: |node_ref| node_ref.node < 0,
             intrinsics: nvvm_intrinsics,
             ray_box_intrinsics: ray_box_intrinsics_nvvm()
         };
