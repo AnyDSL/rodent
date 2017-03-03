@@ -23,7 +23,7 @@ extern "C" {
     fn "rv_ballot" ballot(bool) -> int;
 }
 
-fn cpu_traverse_bvh_packet(bvh: Bvh4, rays: RayStream, hits: HitStream, ray_count: int) -> () {
+fn cpu_traverse_bvh_packet(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_count: int) -> () {
     for i in range_step(0, ray_count, 8) {
         for j in vectorize(8, 32, 0, 8) {
             let (ray, tmin, tmax) = rays(i + j);
@@ -58,7 +58,7 @@ fn cpu_traverse_bvh_packet(bvh: Bvh4, rays: RayStream, hits: HitStream, ray_coun
                 iterate_triangles: |leaf_id, tmax, stack, body, exit| -> ! {
                     if stack.tmin() > tmax { exit() }
 
-                    let mut tri_id = !stack.top().id;
+                    let mut tri_id = !leaf_id.id;
                     while true {
                         let t = bvh.tris(tri_id++);
                         for k in range(0, 4) {
@@ -78,7 +78,7 @@ fn cpu_traverse_bvh_packet(bvh: Bvh4, rays: RayStream, hits: HitStream, ray_coun
     }
 }
 
-fn cpu_traverse_bvh_single(bvh: Bvh4, rays: RayStream, hits: HitStream, ray_count: int) -> () {
+fn cpu_traverse_bvh_single(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_count: int) -> () {
     for i in range(0, ray_count) {
         let (ray, tmin, tmax) = rays(i);
         let hit = hits(i);
@@ -126,7 +126,7 @@ fn cpu_traverse_bvh_single(bvh: Bvh4, rays: RayStream, hits: HitStream, ray_coun
                 iterate_triangles: |leaf_id, tmax, stack, body, exit| -> ! {
                     if stack.tmin() > tmax { exit() }
 
-                    let mut tri_id = !stack.top().id;
+                    let mut tri_id = !leaf_id.id;
                     while true {
                         let t = bvh.tris(tri_id++);
                         @body(tri(vec3(t.v0(0)(j), t.v0(1)(j), t.v0(2)(j)),

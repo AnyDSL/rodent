@@ -19,14 +19,14 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack,
     while !stack.is_empty() {
         let node = stack.top();
         for bbox, hit in mapping.iterate_children(node, t, stack) {
-            intersect_ray_box(ray, bbox, tmin, tmax, hit);
+            intersect_ray_box(ray, bbox, tmin, t, hit);
         }
 
         while mapping.is_leaf(stack.top()) {
             let leaf = stack.top();
 
             for tri, id in mapping.iterate_triangles(leaf, t, stack) {
-                with t_, u_, v_ in intersect_ray_tri(ray, tri, tmin, tmax) {
+                with t_, u_, v_ in intersect_ray_tri(ray, tri, tmin, t) {
                     tri_id = id;
                     t = t_;
                     u = u_;

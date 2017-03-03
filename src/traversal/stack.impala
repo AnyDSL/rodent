@@ -14,7 +14,7 @@ struct Stack {
 }
 
 fn alloc_stack() -> Stack {
-    let sentinel = bitcast[int](0x7FFFFFFu);
+    let sentinel = 0x7FFFFFFF;
     let mut nodes : [int * 64];
     let mut tmins : [float * 64];
     let mut node = sentinel;

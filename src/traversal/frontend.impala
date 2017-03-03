@@ -12,7 +12,7 @@ struct HitAoS {
     v: float
 }
 
-fn read_rays_aos(rays: &[RayAoS]) -> RayStream {
+fn cpu_read_rays_aos(rays: &[RayAoS]) -> RayStream {
     |i| {
         (ray(vec3(rays(i).org(0), rays(i).org(1), rays(i).org(2)),
              vec3(rays(i).dir(0), rays(i).dir(1), rays(i).dir(2))),
@@ -20,7 +20,7 @@ fn read_rays_aos(rays: &[RayAoS]) -> RayStream {
     }
 }
 
-fn write_hits_aos(hits: &mut [HitAoS]) -> HitStream {
+fn cpu_write_hits_aos(hits: &mut [HitAoS]) -> HitStream {
     |i| {
         |id, t, u, v| {
             hits(i).tri_id = id;
@@ -31,10 +31,29 @@ fn write_hits_aos(hits: &mut [HitAoS]) -> HitStream {
     }
 }
 
+fn gpu_read_rays_aos(rays: &[RayAoS]) -> RayStream {
+    |i| {
+        let ray_ptr = &rays(i) as &[float];
+        let ray0 = nvvm_ldg4_f32(&ray_ptr(0) as &[1]simd[float * 4]);
+        let ray1 = nvvm_ldg4_f32(&ray_ptr(4) as &[1]simd[float * 4]);
+        (ray(vec3(ray0(0), ray0(1), ray0(2)),
+             vec3(ray1(0), ray1(1), ray1(2))),
+         ray0(3), ray1(3))
+    }
+}
+
+fn gpu_write_hits_aos(hits: &mut [HitAoS]) -> HitStream {
+    |i| {
+        |id, t, u, v| {
+            *(&hits(i) as &mut simd[float * 4]) = simd[bitcast[float](id), t, u, v];
+        }
+    }
+}
+
 extern fn frontend_cpu_traverse_bvh(bvh: &Bvh4, rays: &[RayAoS], hits: &mut [HitAoS], ray_count: int) -> () {
-    @cpu_traverse_bvh_packet(*bvh, read_rays_aos(rays), write_hits_aos(hits), ray_count);
+    @cpu_traverse_bvh_packet(bvh, cpu_read_rays_aos(rays), cpu_write_hits_aos(hits), ray_count);
 }
 
 extern fn frontend_gpu_traverse_bvh(bvh: &Bvh2, rays: &[RayAoS], hits: &mut [HitAoS], ray_count: int) -> () {
-    @gpu_traverse_bvh(*bvh, read_rays_aos(rays), write_hits_aos(hits), ray_count);
+    @gpu_traverse_bvh(bvh, gpu_read_rays_aos(rays), gpu_write_hits_aos(hits), ray_count);
 }
