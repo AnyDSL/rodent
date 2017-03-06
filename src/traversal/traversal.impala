@@ -18,7 +18,8 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack,
     let mut u = 0.0f;
     let mut v = 0.0f;
 
-    while !stack.is_empty() {
+    // The traversal loop should not be unrolled
+    while !$stack.is_empty() @{
         let node = stack.top();
         for bbox, hit in mapping.iterate_children(node, t, stack) {
             intersect_ray_box(mapping.ray_box_intrinsics, ray, bbox, tmin, t, hit);

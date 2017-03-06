@@ -58,11 +58,11 @@ fn gpu_traverse_bvh(bvh: &Bvh2, rays: RayStream, hits: HitStream, ray_count: int
 
         let mapping = TraversalMapping {
             iterate_children: |node_ref, tmax, stack, body, exit| -> ! {
-                let node_ptr = &nodes(node_ref.node) as &[float];
-                let bb0 = nvvm_ldg4_f32(&node_ptr(0) as &[1]simd[float * 4]);
-                let bb1 = nvvm_ldg4_f32(&node_ptr(4) as &[1]simd[float * 4]);
-                let bb2 = nvvm_ldg4_f32(&node_ptr(8) as &[1]simd[float * 4]);
-                let mut children = nvvm_ldg4_i32(&node_ptr(12) as &[1]simd[int * 4]);
+                let node_ptr = &nodes(node_ref.node) as &[1][simd[float * 4]];
+                let bb0 = nvvm_ldg4_f32(&node_ptr(0));
+                let bb1 = nvvm_ldg4_f32(&node_ptr(1));
+                let bb2 = nvvm_ldg4_f32(&node_ptr(2));
+                let mut children = nvvm_ldg4_i32(&node_ptr(3) as &[1]simd[int * 4]);
 
                 let box1 = bbox(vec3(bb0(0), bb0(2), bb1(0)),
                                 vec3(bb0(1), bb0(3), bb1(1)));
@@ -70,7 +70,7 @@ fn gpu_traverse_bvh(bvh: &Bvh2, rays: RayStream, hits: HitStream, ray_count: int
                                 vec3(bb1(3), bb2(1), bb2(3)));
 
                 let intersect_child = |box| -> (bool, float) {
-                    body(box, |tentry, texit, _| -> ! { return(true, tentry) });
+                    body(box, |tentry, _, _| -> ! { return(true, tentry) });
                     (false, 0.0f)
                 };
 
@@ -94,12 +94,12 @@ fn gpu_traverse_bvh(bvh: &Bvh2, rays: RayStream, hits: HitStream, ray_count: int
                 }
             },
             iterate_triangles: |leaf_ref, tmax, body, exit| -> ! {
-                let mut tri_id = !leaf_ref.node;
+                let mut tri_id = !leaf_ref.node / 3;
                 while true {
-                    let tri_ptr = tris as &[1][simd[float * 4]];
-                    let tri0 = nvvm_ldg4_f32(&tri_ptr(tri_id + 0));
-                    let tri1 = nvvm_ldg4_f32(&tri_ptr(tri_id + 1));
-                    let tri2 = nvvm_ldg4_f32(&tri_ptr(tri_id + 2));
+                    let tri_ptr = &tris(tri_id) as &[1][simd[float * 4]];
+                    let tri0 = nvvm_ldg4_f32(&tri_ptr(0));
+                    let tri1 = nvvm_ldg4_f32(&tri_ptr(1));
+                    let tri2 = nvvm_ldg4_f32(&tri_ptr(2));
 
                     let id = bitcast[int](tri1(3));
                     let v0 = vec3(tri0(0), tri0(1), tri0(2));
@@ -117,7 +117,7 @@ fn gpu_traverse_bvh(bvh: &Bvh2, rays: RayStream, hits: HitStream, ray_count: int
                     @body(tri(v0, e1, e2, n), id);
 
                     if bitcast[uint](tri2(3)) == 0x80000000u { break() }
-                    tri_id += 3;
+                    tri_id++;
                 }
             },
             is_leaf: |node_ref| node_ref.node < 0,

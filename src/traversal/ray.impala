@@ -58,7 +58,7 @@ fn tri(v0: Vec3, e1: Vec3, e2: Vec3, n: Vec3) -> Tri {
 }
 
 fn ray_box_intrinsics(fminf: fn (float, float) -> float,
-                     fmaxf: fn (float, float) -> float) -> RayBoxIntrinsics {
+                      fmaxf: fn (float, float) -> float) -> RayBoxIntrinsics {
     RayBoxIntrinsics {
         fminf: fminf,
         fmaxf: fmaxf,
