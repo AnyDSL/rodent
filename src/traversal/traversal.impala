@@ -1,3 +1,5 @@
+// Structure containing the mapping of the traversal algorithm
+// for a particular device and/or use case.
 struct TraversalMapping {
     iterate_children:   fn (NodeRef, float, Stack, fn (BBox, fn (float, float) -> ()) -> ()) -> (),
     iterate_primitives: fn (NodeRef, float, fn (Primitive) -> ()) -> (),
@@ -8,23 +10,27 @@ struct TraversalMapping {
     ray_box_intrinsics: RayBoxIntrinsics
 }
 
+// Result of a call to the traversal algorithm
 struct TraversalResult {
-    hit: Hit,
-    prim_id: fn () -> int,
-    inst_id: fn () -> int
+    hit: Hit,                   // Hit information
+    prim_id: fn () -> int,      // Primitive identifier, or -1 (no intersection found)
+    inst_id: fn () -> int       // Instance identifier, or -1 (no instance found)
 }
 
+// Instance of an object in the scene
 struct Instance {
-    id:       fn () -> int,
-    inverse:  fn () -> Mat3x4,
+    id:       fn () -> int,     // Instance identifier
+    inverse:  fn () -> Mat3x4,  // Inverse matrix
+
+    // Associated traversal algorithm for the object
     traverse: fn (Ray, float, float) -> TraversalResult
 }
 
 struct Ray {
-    org:     fn () -> Vec3,
-    dir:     fn () -> Vec3,
-    inv_dir: fn () -> Vec3,
-    inv_org: fn () -> Vec3
+    org:     fn () -> Vec3,     // Origin of the ray
+    dir:     fn () -> Vec3,     // Direction of the ray
+    inv_dir: fn () -> Vec3,     // Inverse of the direction
+    inv_org: fn () -> Vec3      // Origin multiplied by the inverse of the direction
 }
 
 type RayStream = fn (int) -> (Ray, float, float);

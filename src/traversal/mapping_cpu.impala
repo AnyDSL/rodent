@@ -17,6 +17,7 @@ struct Bvh4Node {
     child:  [int   * 4]
 }
 
+// Vectorizer intrinsics
 extern "C" {
     fn "rv_any"     any(bool) -> bool;
     fn "rv_all"     all(bool) -> bool;

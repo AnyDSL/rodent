@@ -28,6 +28,7 @@ struct Bvh2Node {
 }
 
 fn ray_box_intrinsics_nvvm() -> RayBoxIntrinsics {
+    // Use video instructions to speed-up the ray-box test
     RayBoxIntrinsics {
         fminf: nvvm_fminf,
         fmaxf: nvvm_fmaxf,
