@@ -1,14 +1,10 @@
-struct RndGen {
-    rand: fn () -> (float, RndGen)
-}
+type RndGen = fn () -> (float, RndGen);
 
 fn mwc64x(seed: u64) -> RndGen {
-    RndGen {
-        rand: || {
-            let c = seed >> 32u64;
-            let x = seed & 0xFFFFFFFFu64;
-            let new_seed = x * 4294883355u64 + c;
-            (((x^c) as float) / (0xFFFFFFFFu32 as float), $mwc64x(new_seed))
-        }
+    || {
+        let c = seed >> 32u64;
+        let x = seed & 0xFFFFFFFFu64;
+        let new_seed = x * 4294883355u64 + c;
+        (((x^c) as float) / (0xFFFFFFFFu32 as float), $mwc64x(new_seed))
     }
 }

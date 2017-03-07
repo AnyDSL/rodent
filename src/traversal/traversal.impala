@@ -1,22 +1,38 @@
 struct TraversalMapping {
-    iterate_children:  fn (NodeRef, float, Stack, fn (BBox, fn (float, float) -> ()) -> ()) -> (),
-    iterate_triangles: fn (NodeRef, float, fn (Tri, int) -> ()) -> (),
+    iterate_children:   fn (NodeRef, float, Stack, fn (BBox, fn (float, float) -> ()) -> ()) -> (),
+    iterate_primitives: fn (NodeRef, float, fn (Intersector, int) -> ()) -> (),
+    hit_callback: fn (Hit, fn () -> !, fn () -> !) -> !,
     is_leaf: fn (NodeRef) -> bool,
     intrinsics: Intrinsics,
     ray_box_intrinsics: RayBoxIntrinsics
 }
 
-type Hit = fn (int, float, float, float) -> ();
-type RayStream = fn (int) -> (Ray, float, float);
-type HitStream = fn (int) -> Hit;
+struct TraversalResult {
+    hit: Hit,
+    prim_id: fn () -> int,
+    inst_id: fn () -> int
+}
 
-fn traverse_bvh(mapping: TraversalMapping, stack: Stack,
-                ray: Ray, hit: Hit, tmin: float, tmax: float,
-                all_hits: bool) -> () {
-    let mut tri_id = -1;
+type RayStream = fn (int) -> (Ray, float, float);
+type HitStream = fn (int, TraversalResult) -> ();
+
+fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, tmax: float) -> TraversalResult {
+    let mut prim_id = -1;
     let mut t = tmax;
-    let mut u = 0.0f;
-    let mut v = 0.0f;
+    let mut n = vec3(0.0f, 0.0f, 0.0f);
+    let mut uv = vec2(0.0f, 0.0f);
+
+    fn exit() -> ! {
+        return (TraversalResult {
+            hit: Hit {
+                distance:  || t,
+                normal:    || n,
+                uv_coords: || uv
+            },
+            prim_id: || prim_id,
+            inst_id: || -1
+        })
+    }
 
     // The traversal loop should not be unrolled
     while !$stack.is_empty() @{
@@ -28,16 +44,13 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack,
         while mapping.is_leaf(stack.top()) {
             let leaf = stack.top();
 
-            for tri, id in mapping.iterate_triangles(leaf, t) {
-                with t_, u_, v_ in intersect_ray_tri(mapping.intrinsics, ray, tri, tmin, t) {
-                    tri_id = id;
-                    t = t_;
-                    u = u_;
-                    v = v_;
-
-                    if all_hits {
-                        hit(tri_id, t_, u_, v_)
-                    }
+            for intersector, id in mapping.iterate_primitives(leaf, t) {
+                with hit in intersector(mapping.intrinsics, ray, tmin, t) {
+                    prim_id = id;
+                    t = hit.distance();
+                    n = hit.normal();
+                    uv = hit.uv_coords();
+                    mapping.hit_callback(hit, break, exit)
                 }
             }
 
@@ -45,7 +58,5 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack,
         }
     }
 
-    if !all_hits {
-        hit(tri_id, t, u, v)
-    }
+    exit()
 }

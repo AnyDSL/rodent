@@ -1,0 +1,56 @@
+struct Hit {
+    distance:  fn () -> float,
+    normal:    fn () -> Vec3,
+    uv_coords: fn () -> Vec2
+}
+
+struct Tri {
+    v0: fn () -> Vec3,
+    v1: fn () -> Vec3,
+    v2: fn () -> Vec3,
+    e1: fn () -> Vec3,
+    e2: fn () -> Vec3,
+    n:  fn () -> Vec3
+}
+
+fn tri(v0: Vec3, e1: Vec3, e2: Vec3, n: Vec3) -> Tri {
+    Tri {
+        v0: || v0,
+        v1: || vec3_sub(v0, e1),
+        v2: || vec3_add(v0, e2),
+        e1: || e1,
+        e2: || e2,
+        n:  || n
+    }
+}
+
+type Intersector = fn (Intrinsics, Ray, float, float, fn (Hit) -> ()) -> ();
+
+fn ray_tri_intersector(tri: Tri) -> Intersector {
+    |math, ray, tmin, tmax, intr| {
+        let (org, dir, n) = (ray.org(), ray.dir(), tri.n());
+
+        let c = vec3_sub(tri.v0(), org);
+        let r = vec3_cross(dir, c);
+        let det = vec3_dot(n, dir);
+        let abs_det = math.fabsf(det);
+
+        let u = prodsign(vec3_dot(r, tri.e2()), det);
+        let v = prodsign(vec3_dot(r, tri.e1()), det);
+        let w = abs_det - u - v;
+
+        if (u >= 0.0f) & (v >= 0.0f) & (w >= 0.0f) {
+            let t = prodsign(vec3_dot(n, c), det);
+            if (t >= abs_det * tmin) & (t <= abs_det * tmax) & (det != 0.0f) {
+                let inv_det = 1.0f / abs_det;
+
+                let d = t * inv_det;
+                intr(Hit {
+                    distance:  || d,
+                    normal:    || n,
+                    uv_coords: || vec2(u * inv_det, v * inv_det)
+                })
+            }
+        }
+    }
+}

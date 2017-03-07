@@ -21,13 +21,11 @@ fn cpu_read_rays_aos(rays: &[RayAoS]) -> RayStream {
 }
 
 fn cpu_write_hits_aos(hits: &mut [HitAoS]) -> HitStream {
-    |i| {
-        |id, t, u, v| {
-            hits(i).tri_id = id;
-            hits(i).t = t;
-            hits(i).u = u;
-            hits(i).v = v;
-        }
+    |i, result| {
+        hits(i).tri_id = result.prim_id();
+        hits(i).t = result.hit.distance();
+        hits(i).u = result.hit.uv_coords().x;
+        hits(i).v = result.hit.uv_coords().y;
     }
 }
 
@@ -43,10 +41,10 @@ fn gpu_read_rays_aos(rays: &[RayAoS]) -> RayStream {
 }
 
 fn gpu_write_hits_aos(hits: &mut [HitAoS]) -> HitStream {
-    |i| {
-        |id, t, u, v| {
-            *(&hits(i) as &mut simd[float * 4]) = simd[bitcast[float](id), t, u, v];
-        }
+    |i, result| {
+        let hit = result.hit;
+        let uv = hit.uv_coords();
+        *(&hits(i) as &mut simd[float * 4]) = simd[bitcast[float](result.prim_id()), hit.distance(), uv.x, uv.y];
     }
 }
 

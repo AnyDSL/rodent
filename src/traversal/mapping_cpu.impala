@@ -30,6 +30,7 @@ fn ray_box_intrinsics_avx() -> RayBoxIntrinsics {
 }
 
 fn ray_box_intrinsics_avx2() -> RayBoxIntrinsics {
+    // AVX2 intrinsics: use integer min/max instead of floating point min/max
     let fminf = |x, y| {
         let (x_, y_) = (bitcast[int](x), bitcast[int](y));
         bitcast[float](if x < y { x } else { y })
@@ -41,18 +42,17 @@ fn ray_box_intrinsics_avx2() -> RayBoxIntrinsics {
     ray_box_intrinsics(fminf, fmaxf)
 }
 
-fn load_bvh4_tri(tri: &[Bvh4Tri], i: int) -> Tri {
+fn load_bvh4_tri(t: &Bvh4Tri, i: int) -> Tri {
     tri(vec3(t.v0(0)(i), t.v0(1)(i), t.v0(2)(i)),
         vec3(t.e1(0)(i), t.e1(1)(i), t.e1(2)(i)),
         vec3(t.e2(0)(i), t.e2(1)(i), t.e2(2)(i)),
-        vec3(t. n(0)(i), t. n(1)(i), t. n(2)(i))
+        vec3(t. n(0)(i), t. n(1)(i), t. n(2)(i)))
 }
 
 fn cpu_traverse_bvh_packet(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_count: int) -> () {
     for i in range_step(0, ray_count, 8) {
         for j in vectorize(8, 32, 0, 8) {
             let (ray, tmin, tmax) = rays(i + j);
-            let hit = hits(i + j);
             let stack = alloc_stack();
 
             stack.push(0, tmin);
@@ -79,24 +79,25 @@ fn cpu_traverse_bvh_packet(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_cou
                         });
                     }
                 },
-                iterate_triangles: |leaf_ref, tmax, body, exit| -> ! {
+                iterate_primitives: |leaf_ref, tmax, body, exit| -> ! {
                     if leaf_ref.tmin > tmax { exit() }
 
                     let mut tri_id = !leaf_ref.node;
                     while true {
                         let t = bvh.tris(tri_id++);
                         for k in range(0, 4) {
-                            @body(load_bvh4_tri(t, k), t.id(k));
+                            @body(ray_tri_intersector(load_bvh4_tri(t, k)), t.id(k));
                         }
                         if t.id(0) < 0 { break() }
                     }
                 },
+                hit_callback: |hit, continue, exit| -> ! continue(),
                 is_leaf: |node_ref| node_ref.node < 0,
                 intrinsics: cpu_intrinsics,
                 ray_box_intrinsics: ray_box_intrinsics_avx()
             };
 
-            traverse_bvh(mapping, stack, ray, hit, tmin, tmax, false);
+            hits(i, @traverse_bvh(mapping, stack, ray, tmin, tmax));
         }
     }
 }
@@ -104,7 +105,6 @@ fn cpu_traverse_bvh_packet(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_cou
 fn cpu_traverse_bvh_single(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_count: int) -> () {
     for i in range(0, ray_count) {
         let (ray, tmin, tmax) = rays(i);
-        let hit = hits(i);
 
         for j in vectorize(4, 16, 0, 4) {
             let stack = alloc_stack();
@@ -128,6 +128,7 @@ fn cpu_traverse_bvh_single(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_cou
                         child = node.child(j);
                     });
 
+                    // Push intersected nodes on the stack
                     let mut count = 0;
                     for k in @range(0, 4) {
                         let c = extracti(child, k);
@@ -137,6 +138,7 @@ fn cpu_traverse_bvh_single(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_cou
                         }
                     }
 
+                    // Sort the nodes on the stack, based on their distance
                     if count < 2 { exit() }
                     if count == 2 {
                         @stack.sort_n(2);
@@ -146,22 +148,23 @@ fn cpu_traverse_bvh_single(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_cou
                         @stack.sort_n(4);
                     }
                 },
-                iterate_triangles: |leaf_ref, tmax, body, exit| -> ! {
+                iterate_primitives: |leaf_ref, tmax, body, exit| -> ! {
                     if leaf_ref.tmin > tmax { exit() }
 
                     let mut tri_id = !leaf_ref.node;
                     while true {
                         let t = bvh.tris(tri_id++);
-                        @body(load_bvh4_tri(t, j), t.id(j));
+                        @body(ray_tri_intersector(load_bvh4_tri(t, j)), t.id(j));
                         if t.id(0) < 0 { break() }
                     }
                 },
+                hit_callback: |hit, continue, exit| -> ! continue(),
                 is_leaf: |node_ref| node_ref.node < 0,
                 intrinsics: cpu_intrinsics,
                 ray_box_intrinsics: ray_box_intrinsics_avx()
             };
 
-            traverse_bvh(mapping, stack, ray, hit, tmin, tmax, false);
+            hits(i, @traverse_bvh(mapping, stack, ray, tmin, tmax));
         }
     }
 }

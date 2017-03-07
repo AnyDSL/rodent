@@ -51,7 +51,6 @@ fn gpu_traverse_bvh(bvh: &Bvh2, rays: RayStream, hits: HitStream, ray_count: int
         if i >= ray_count { break() }
 
         let (ray, tmin, tmax) = rays(i);
-        let hit = hits(i);
 
         let stack = alloc_stack();
         stack.push(0, 0.0f);
@@ -93,7 +92,7 @@ fn gpu_traverse_bvh(bvh: &Bvh2, rays: RayStream, hits: HitStream, ray_count: int
                     }
                 }
             },
-            iterate_triangles: |leaf_ref, tmax, body, exit| -> ! {
+            iterate_primitives: |leaf_ref, tmax, body, exit| -> ! {
                 let mut tri_id = !leaf_ref.node / 3;
                 while true {
                     let tri_ptr = &tris(tri_id) as &[1][simd[float * 4]];
@@ -114,17 +113,18 @@ fn gpu_traverse_bvh(bvh: &Bvh2, rays: RayStream, hits: HitStream, ray_count: int
                     //let e2 = vec3(tri2(0), tri2(1), tri2(2));
                     //let  n = vec3(tri0(3), tri1(3), vec3_cross(e1, e2).x);
 
-                    @body(tri(v0, e1, e2, n), id);
+                    @body(ray_tri_intersector(tri(v0, e1, e2, n)), id);
 
                     if $bitcast[uint](tri2(3)) == 0x80000000u { break() }
                     tri_id++;
                 }
             },
+            hit_callback: |hit, continue, exit| -> ! continue(),
             is_leaf: |node_ref| node_ref.node < 0,
             intrinsics: nvvm_intrinsics,
             ray_box_intrinsics: ray_box_intrinsics_nvvm()
         };
 
-        @traverse_bvh(mapping, stack, ray, hit, tmin, tmax, false);
+        hits(i, @traverse_bvh(mapping, stack, ray, tmin, tmax))
     }
 }
