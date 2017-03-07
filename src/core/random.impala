@@ -1,9 +1,9 @@
-struct Rng {
-    rand: fn () -> (float, Rng)
+struct RndGen {
+    rand: fn () -> (float, RndGen)
 }
 
-fn mwc64x(seed: u64) -> Rng {
-    Rng {
+fn mwc64x(seed: u64) -> RndGen {
+    RndGen {
         rand: || {
             let c = seed >> 32u64;
             let x = seed & 0xFFFFFFFFu64;

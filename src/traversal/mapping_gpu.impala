@@ -29,8 +29,8 @@ struct Bvh2Node {
 
 fn ray_box_intrinsics_nvvm() -> RayBoxIntrinsics {
     RayBoxIntrinsics {
-        fminf: nvvm_intrinsics.fminf,
-        fmaxf: nvvm_intrinsics.fmaxf,
+        fminf: nvvm_fminf,
+        fmaxf: nvvm_fmaxf,
         fminminf: |a, b, c| bitcast[float](nvvm_minmin(bitcast[int](a), bitcast[int](b), bitcast[int](c))),
         fmaxmaxf: |a, b, c| bitcast[float](nvvm_maxmax(bitcast[int](a), bitcast[int](b), bitcast[int](c))),
         fminmaxf: |a, b, c| bitcast[float](nvvm_minmax(bitcast[int](a), bitcast[int](b), bitcast[int](c))),
@@ -116,7 +116,7 @@ fn gpu_traverse_bvh(bvh: &Bvh2, rays: RayStream, hits: HitStream, ray_count: int
 
                     @body(tri(v0, e1, e2, n), id);
 
-                    if bitcast[uint](tri2(3)) == 0x80000000u { break() }
+                    if $bitcast[uint](tri2(3)) == 0x80000000u { break() }
                     tri_id++;
                 }
             },

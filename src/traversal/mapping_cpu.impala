@@ -18,9 +18,11 @@ struct Bvh4Node {
 }
 
 extern "C" {
-    fn "rv_any"    any(bool) -> bool;
-    fn "rv_all"    all(bool) -> bool;
-    fn "rv_ballot" ballot(bool) -> int;
+    fn "rv_any"     any(bool) -> bool;
+    fn "rv_all"     all(bool) -> bool;
+    fn "rv_ballot"  ballot(bool) -> int;
+    fn "rv_extract" extractf(float, int) -> float;
+    fn "rv_extract" extracti(int, int) -> int;
 }
 
 fn ray_box_intrinsics_avx() -> RayBoxIntrinsics {
@@ -37,6 +39,13 @@ fn ray_box_intrinsics_avx2() -> RayBoxIntrinsics {
         bitcast[float](if x > y { x } else { y })
     };
     ray_box_intrinsics(fminf, fmaxf)
+}
+
+fn load_bvh4_tri(tri: &[Bvh4Tri], i: int) -> Tri {
+    tri(vec3(t.v0(0)(i), t.v0(1)(i), t.v0(2)(i)),
+        vec3(t.e1(0)(i), t.e1(1)(i), t.e1(2)(i)),
+        vec3(t.e2(0)(i), t.e2(1)(i), t.e2(2)(i)),
+        vec3(t. n(0)(i), t. n(1)(i), t. n(2)(i))
 }
 
 fn cpu_traverse_bvh_packet(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_count: int) -> () {
@@ -77,10 +86,7 @@ fn cpu_traverse_bvh_packet(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_cou
                     while true {
                         let t = bvh.tris(tri_id++);
                         for k in range(0, 4) {
-                            @body(tri(vec3(t.v0(0)(k), t.v0(1)(k), t.v0(2)(k)),
-                                      vec3(t.e1(0)(k), t.e1(1)(k), t.e1(2)(k)),
-                                      vec3(t.e2(0)(k), t.e2(1)(k), t.e2(2)(k)),
-                                      vec3(t. n(0)(k), t. n(1)(k), t. n(2)(k))), t.id(k));
+                            @body(load_bvh4_tri(t, k), t.id(k));
                         }
                         if t.id(0) < 0 { break() }
                     }
@@ -115,17 +121,18 @@ fn cpu_traverse_bvh_single(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_cou
                     let bbox = bbox(vec3(node.min(0)(j), node.min(1)(j), node.min(2)(j)),
                                     vec3(node.max(0)(j), node.max(1)(j), node.max(2)(j)));
 
-                    let mut child : [int   * 4] = [-1, -1, -1, -1];
-                    let mut entry : [float * 4];
-                    body(bbox, |tentry, texit| {
-                        entry(j) = tentry;
-                        child(j) = node.child(j);
+                    let mut child = -1;
+                    let mut tentry : float;
+                    body(bbox, |t, _| {
+                        tentry = t;
+                        child = node.child(j);
                     });
 
                     let mut count = 0;
-                    for k in range(0, 4) {
-                        if child(k) >= 0 {
-                            stack.push(child(k), entry(k));
+                    for k in @range(0, 4) {
+                        let c = extracti(child, k);
+                        if c >= 0 {
+                            stack.push(c, extractf(tentry, k));
                             count++;
                         }
                     }
@@ -145,10 +152,7 @@ fn cpu_traverse_bvh_single(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_cou
                     let mut tri_id = !leaf_ref.node;
                     while true {
                         let t = bvh.tris(tri_id++);
-                        @body(tri(vec3(t.v0(0)(j), t.v0(1)(j), t.v0(2)(j)),
-                                  vec3(t.e1(0)(j), t.e1(1)(j), t.e1(2)(j)),
-                                  vec3(t.e2(0)(j), t.e2(1)(j), t.e2(2)(j)),
-                                  vec3(t. n(0)(j), t. n(1)(j), t. n(2)(j))), t.id(j));
+                        @body(load_bvh4_tri(t, j), t.id(j));
                         if t.id(0) < 0 { break() }
                     }
                 },

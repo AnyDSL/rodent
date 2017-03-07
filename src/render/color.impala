@@ -1,0 +1,19 @@
+struct Color {
+    r: float,
+    g: float,
+    b: float,
+    a: float
+}
+
+fn color(r: float, g: float, b: float, a: float) -> Color {
+    Color {
+        r: r,
+        g: g,
+        b: b,
+        a: a
+    }
+}
+
+fn color_mulf(c: Color, f: float) -> Color {
+    color(c.r * f, c.g * f, c.b * f, c.a * f)
+}

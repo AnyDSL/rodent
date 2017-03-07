@@ -24,8 +24,8 @@ struct RayBoxIntrinsics {
     fminminf: fn (float, float, float) -> float,
     fminmaxf: fn (float, float, float) -> float,
     fmaxminf: fn (float, float, float) -> float,
-    fmaxf:    fn(float, float) -> float,
-    fminf:    fn(float, float) -> float
+    fmaxf:    fn (float, float) -> float,
+    fminf:    fn (float, float) -> float
 }
 
 fn ray(org: Vec3, dir: Vec3) -> Ray {

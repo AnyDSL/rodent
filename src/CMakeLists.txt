@@ -7,8 +7,8 @@ set(TRAVERSAL_SRCS
     traversal/mapping_cpu.impala
     traversal/mapping_gpu.impala
     traversal/frontend.impala
-    common.impala
-    vector.impala)
+    core/common.impala
+    core/vector.impala)
 
 anydsl_runtime_wrap(TRAVERSAL_OBJS
                     NAME "traversal"

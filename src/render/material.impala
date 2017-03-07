@@ -1,0 +1,78 @@
+struct SurfaceElement {
+    entering:    fn () -> bool,  // True if the path enters the surface
+    point:       fn () -> Vec3,  // Point on the surface
+    face_normal: fn () -> Vec3,  // Geometric normal at the surface point
+    uv_coords:   fn () -> Vec2,  // UV coordinates on the triangle
+    local:       fn () -> Mat3   // Local coordinate system at the surface point
+}
+
+type SurfaceColor = fn (SurfaceElement) -> Color;       // Surface-dependent color
+type SurfaceValue = fn (SurfaceElement) -> float;       // Surface-dependent value
+
+struct MaterialSample {
+    in_dir: fn () -> Vec3,  // Incoming direction
+    pdf:    fn () -> float, // Weight of the sample
+    color:  fn () -> Color  // Color of the sample
+}
+
+struct Material {
+    eval:        fn (Vec3, SurfaceElement, Vec3) -> Color,
+    pdf:         fn (Vec3, SurfaceElement, Vec3) -> float,
+    sample:      fn (RndGen, SurfaceElement, Vec3) -> (RndGen, MaterialSample),
+    emission:    fn (SurfaceElement) -> Color,
+    is_emissive: fn () -> bool
+}
+
+fn fresnel_factor(n1: float, n2: float, cos_i: float, cos_t: float) -> float {
+    let R_s = (n1 * cos_i - n2 * cos_t) / (n1 * cos_i + n2 * cos_t);
+    let R_p = (n2 * cos_i - n1 * cos_t) / (n2 * cos_i + n1 * cos_t);
+    (R_s * R_s + R_p * R_p) * 0.5f
+}
+
+fn positive_cos(a: Vec3, b: Vec3) -> float {
+    let cos = vec3_dot(a, b);
+    if cos >= 0.0f { cos } else { 0.0f }
+}
+
+fn material_sample(surf: SurfaceElement, in_dir: Vec3, pdf: float, color: Color, inverted: bool) -> MaterialSample {
+    // Checks that the sample is above the surface (or under it if inverted is true)
+    if pdf > 0.0f && (inverted ^ (vec3_dot(in_dir, surf.face_normal()) > 0.0f)) {
+        MaterialSample(in_dir, pdf, color)
+    } else {
+        MaterialSample(in_dir, 1.0f, rgb(0.0f));
+    }
+}
+
+fn emissive_material(ke: SurfaceColor) -> Material {
+    Material {
+        eval: |in_dir, surf, out_dir| { color(0.0f, 0.0f, 0.0f, 0.0f) },
+        pdf: |in_dir, surf, out_dir| { 0.0f },
+        sample: |rnd, surf, out_dir| {
+            MaterialSample {
+                in_dir: || vec3(0.0f, 0.0f, 0.0f),
+                pdf: || 0.0f,
+                color: || color(0.0f, 0.0f, 0.0f, 0.0f)
+            }
+        },
+        emission: |surf| ke(surf),
+        is_emissive: || true
+    }
+}
+
+fn diffuse_material(kd: SurfaceColor) -> Material {
+    Material {
+        eval: |in_dir, surf, out_dir| {
+            color_mulf(kd(surf), 1.0f / flt_pi)
+        },
+        pdf: |in_dir, surf, out_dir| {
+            cosine_hemisphere_pdf(vec3_dot(in_dir, surf.coords().col(2)))
+        },
+        sample: |rnd, surf, out_dir| {
+            let (rnd_, in_dir, pdf) = sample_cosine_hemisphere(rnd, surf.coords());
+            let color = color_mulf(kd(surf), positive_cos(in_dir, surf.coords().col(2)) * (1.0f / flt_pi));
+            material_sample(surf, in_dir, pdf, color, false)
+        },
+        emission: |surf| color(0.0f, 0.0f, 0.0f, 0.0f),
+        is_emissive: || false
+    }
+}
