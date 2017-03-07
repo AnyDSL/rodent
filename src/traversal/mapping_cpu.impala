@@ -42,11 +42,11 @@ fn ray_box_intrinsics_avx2() -> RayBoxIntrinsics {
     ray_box_intrinsics(fminf, fmaxf)
 }
 
-fn load_bvh4_tri(t: &Bvh4Tri, i: int) -> Tri {
-    tri(vec3(t.v0(0)(i), t.v0(1)(i), t.v0(2)(i)),
-        vec3(t.e1(0)(i), t.e1(1)(i), t.e1(2)(i)),
-        vec3(t.e2(0)(i), t.e2(1)(i), t.e2(2)(i)),
-        vec3(t. n(0)(i), t. n(1)(i), t. n(2)(i)))
+fn load_bvh4_tri(tri: &Bvh4Tri, i: int) -> Tri {
+    make_tri(vec3(tri.v0(0)(i), tri.v0(1)(i), tri.v0(2)(i)),
+             vec3(tri.e1(0)(i), tri.e1(1)(i), tri.e1(2)(i)),
+             vec3(tri.e2(0)(i), tri.e2(1)(i), tri.e2(2)(i)),
+             vec3(tri. n(0)(i), tri. n(1)(i), tri. n(2)(i)))
 }
 
 fn cpu_traverse_bvh_packet(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_count: int) -> () {
@@ -65,8 +65,8 @@ fn cpu_traverse_bvh_packet(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_cou
 
                     let node = bvh.nodes(node_ref.node);
                     for k in range(0, 4) {
-                        let bbox = bbox(vec3(node.min(0)(k), node.min(1)(k), node.min(2)(k)),
-                                        vec3(node.max(0)(k), node.max(1)(k), node.max(2)(k)));
+                        let bbox = make_bbox(vec3(node.min(0)(k), node.min(1)(k), node.min(2)(k)),
+                                             vec3(node.max(0)(k), node.max(1)(k), node.max(2)(k)));
 
                         body(bbox, |tentry, texit| {
                             if any(true) {
@@ -84,13 +84,14 @@ fn cpu_traverse_bvh_packet(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_cou
 
                     let mut tri_id = !leaf_ref.node;
                     while true {
-                        let t = bvh.tris(tri_id++);
+                        let tri = bvh.tris(tri_id++);
                         for k in range(0, 4) {
-                            @body(ray_tri_intersector(load_bvh4_tri(t, k)), t.id(k));
+                            @body(make_primitive(ray_tri_intersector(load_bvh4_tri(tri, k)), tri.id(k)));
                         }
-                        if t.id(0) < 0 { break() }
+                        if tri.id(0) < 0 { break() }
                     }
                 },
+                iterate_instances: |_, _, _| {},
                 hit_callback: |hit, continue, exit| -> ! continue(),
                 is_leaf: |node_ref| node_ref.node < 0,
                 intrinsics: cpu_intrinsics,
@@ -118,8 +119,8 @@ fn cpu_traverse_bvh_single(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_cou
                     if node_ref.tmin > tmax { exit() }
 
                     let node = bvh.nodes(node_ref.node);
-                    let bbox = bbox(vec3(node.min(0)(j), node.min(1)(j), node.min(2)(j)),
-                                    vec3(node.max(0)(j), node.max(1)(j), node.max(2)(j)));
+                    let bbox = make_bbox(vec3(node.min(0)(j), node.min(1)(j), node.min(2)(j)),
+                                         vec3(node.max(0)(j), node.max(1)(j), node.max(2)(j)));
 
                     let mut child = -1;
                     let mut tentry : float;
@@ -153,11 +154,12 @@ fn cpu_traverse_bvh_single(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_cou
 
                     let mut tri_id = !leaf_ref.node;
                     while true {
-                        let t = bvh.tris(tri_id++);
-                        @body(ray_tri_intersector(load_bvh4_tri(t, j)), t.id(j));
-                        if t.id(0) < 0 { break() }
+                        let tri = bvh.tris(tri_id++);
+                        @body(make_primitive(ray_tri_intersector(load_bvh4_tri(tri, j)), tri.id(j)));
+                        if tri.id(0) < 0 { break() }
                     }
                 },
+                iterate_instances: |_, _, _| {},
                 hit_callback: |hit, continue, exit| -> ! continue(),
                 is_leaf: |node_ref| node_ref.node < 0,
                 intrinsics: cpu_intrinsics,

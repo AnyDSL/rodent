@@ -6,6 +6,13 @@
 extern "C" {
 #endif
 
+struct RayAoS {
+    float org[3];
+    float tmin;
+    float dir[3];
+    float tmax;
+};
+
 struct Bvh2Tri {
     float v0[3];
     float nx;
@@ -19,19 +26,6 @@ struct Bvh4Node {
     float min[3];
     float max[3];
     int child[4];
-};
-
-struct Bvh4Tri {
-    float v0[3];
-    float e1[3];
-    float e2[3];
-    float n[3];
-    int id[4];
-};
-
-struct Bvh4 {
-    struct Bvh4Node* nodes;
-    struct Bvh4Tri* tris;
 };
 
 struct Bvh2BBox {
@@ -57,11 +51,17 @@ struct Bvh2 {
     struct Bvh2Tri* tris;
 };
 
-struct RayAoS {
-    float org[3];
-    float tmin;
-    float dir[3];
-    float tmax;
+struct Bvh4Tri {
+    float v0[3];
+    float e1[3];
+    float e2[3];
+    float n[3];
+    int id[4];
+};
+
+struct Bvh4 {
+    struct Bvh4Node* nodes;
+    struct Bvh4Tri* tris;
 };
 
 struct HitAoS {

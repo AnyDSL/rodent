@@ -12,7 +12,7 @@ struct RayBoxIntrinsics {
     fminf:    fn (float, float) -> float
 }
 
-fn bbox(min: Vec3, max: Vec3) -> BBox {
+fn make_bbox(min: Vec3, max: Vec3) -> BBox {
     BBox {
         min: || min,
         max: || max

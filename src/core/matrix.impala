@@ -81,10 +81,10 @@ fn mat3x3_mul(m: Mat3x3, v: Vec3) -> Vec3 {
          vec3_dot(m.row(2), v))
 }
 
-fn mat3x4_mul(m: Mat3x4, v: Vec3) -> Vec3 {
-    vec3(vec4_dot(m.row(0), vec3_to_4(v, 1.0f)),
-         vec4_dot(m.row(1), vec3_to_4(v, 1.0f)),
-         vec4_dot(m.row(2), vec3_to_4(v, 1.0f)))
+fn mat3x4_mul(m: Mat3x4, v: Vec4) -> Vec3 {
+    vec3(vec4_dot(m.row(0), v),
+         vec4_dot(m.row(1), v),
+         vec4_dot(m.row(2), v))
 }
 
 fn mat4x4_mul(m: Mat4x4, v: Vec4) -> Vec4 {

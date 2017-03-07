@@ -4,6 +4,11 @@ struct Hit {
     uv_coords: fn () -> Vec2
 }
 
+struct Primitive {
+    intersect: Intersector,
+    id: fn () -> int
+}
+
 struct Tri {
     v0: fn () -> Vec3,
     v1: fn () -> Vec3,
@@ -13,7 +18,16 @@ struct Tri {
     n:  fn () -> Vec3
 }
 
-fn tri(v0: Vec3, e1: Vec3, e2: Vec3, n: Vec3) -> Tri {
+type Intersector = fn (Intrinsics, Ray, float, float, fn (Hit) -> ()) -> ();
+
+fn make_primitive(intersect: Intersector, id: int) -> Primitive {
+    Primitive {
+        intersect: intersect,
+        id: || id
+    }
+}
+
+fn make_tri(v0: Vec3, e1: Vec3, e2: Vec3, n: Vec3) -> Tri {
     Tri {
         v0: || v0,
         v1: || vec3_sub(v0, e1),
@@ -23,8 +37,6 @@ fn tri(v0: Vec3, e1: Vec3, e2: Vec3, n: Vec3) -> Tri {
         n:  || n
     }
 }
-
-type Intersector = fn (Intrinsics, Ray, float, float, fn (Hit) -> ()) -> ();
 
 fn ray_tri_intersector(tri: Tri) -> Intersector {
     |math, ray, tmin, tmax, intr| {
