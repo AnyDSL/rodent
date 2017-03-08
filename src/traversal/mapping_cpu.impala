@@ -93,6 +93,7 @@ fn cpu_traverse_bvh_packet(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_cou
                     }
                 },
                 iterate_instances: |_, _, _| {},
+                transparency: |_, _| false,
                 hit_callback: |hit, continue, exit| -> ! continue(),
                 is_leaf: |node_ref| node_ref.node < 0,
                 intrinsics: cpu_intrinsics,
@@ -161,6 +162,7 @@ fn cpu_traverse_bvh_single(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_cou
                     }
                 },
                 iterate_instances: |_, _, _| {},
+                transparency: |_, _| false,
                 hit_callback: |hit, continue, exit| -> ! continue(),
                 is_leaf: |node_ref| node_ref.node < 0,
                 intrinsics: cpu_intrinsics,

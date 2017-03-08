@@ -4,6 +4,7 @@ struct TraversalMapping {
     iterate_children:   fn (NodeRef, float, Stack, fn (BBox, fn (float, float) -> ()) -> ()) -> (),
     iterate_primitives: fn (NodeRef, float, fn (Primitive) -> ()) -> (),
     iterate_instances:  fn (NodeRef, float, fn (Instance) -> ()) -> (),
+    transparency: fn (int, Hit) -> bool,
     hit_callback: fn (Hit, fn () -> !, fn () -> !) -> !,
     is_leaf: fn (NodeRef) -> bool,
     intrinsics: Intrinsics,
@@ -82,11 +83,13 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, 
             // Process primitives, if any
             for prim in mapping.iterate_primitives(leaf, t) {
                 with hit in prim.intersect(mapping.intrinsics, ray, tmin, t) {
-                    prim_id = prim.id();
-                    t = hit.distance();
-                    n = hit.normal();
-                    uv = hit.uv_coords();
-                    mapping.hit_callback(hit, break, exit)
+                    if !mapping.transparency(prim.id(), hit) {
+                        prim_id = prim.id();
+                        t = hit.distance();
+                        n = hit.normal();
+                        uv = hit.uv_coords();
+                        mapping.hit_callback(hit, break, exit)
+                    }
                 }
             }
 

@@ -2,7 +2,6 @@ set(CLANG_FLAGS -mavx2 -mavx -mfma -ffast-math CACHE ON "CLANG compilation optio
 
 set(TRAVERSAL_SRCS
     traversal/traversal.impala
-    traversal/bbox.impala
     traversal/intersection.impala
     traversal/stack.impala
     traversal/mapping_cpu.impala

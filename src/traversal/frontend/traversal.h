@@ -6,13 +6,6 @@
 extern "C" {
 #endif
 
-struct RayAoS {
-    float org[3];
-    float tmin;
-    float dir[3];
-    float tmax;
-};
-
 struct Bvh2Tri {
     float v0[3];
     float nx;
@@ -20,12 +13,6 @@ struct Bvh2Tri {
     float ny;
     float e2[3];
     int id;
-};
-
-struct Bvh4Node {
-    float min[3];
-    float max[3];
-    int child[4];
 };
 
 struct Bvh2BBox {
@@ -46,9 +33,10 @@ struct Bvh2Node {
     int pad2;
 };
 
-struct Bvh2 {
-    struct Bvh2Node* nodes;
-    struct Bvh2Tri* tris;
+struct Bvh4Node {
+    float min[3];
+    float max[3];
+    int child[4];
 };
 
 struct Bvh4Tri {
@@ -64,11 +52,23 @@ struct Bvh4 {
     struct Bvh4Tri* tris;
 };
 
+struct Bvh2 {
+    struct Bvh2Node* nodes;
+    struct Bvh2Tri* tris;
+};
+
 struct HitAoS {
     int tri_id;
     float t;
     float u;
     float v;
+};
+
+struct RayAoS {
+    float org[3];
+    float tmin;
+    float dir[3];
+    float tmax;
 };
 
 void frontend_cpu_traverse_bvh(struct Bvh4* bvh, struct RayAoS* rays, struct HitAoS* hits, int ray_count);

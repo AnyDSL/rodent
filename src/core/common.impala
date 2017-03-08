@@ -26,3 +26,7 @@ fn prodsign(x: float, y: float) -> float {
 fn safe_rcp(x: float) -> float {
     if x == 0.0f { prodsign(flt_max, x) } else { 1.0f / x }
 }
+
+fn lerp(a: float, b: float, k: float) -> float {
+    (1.0f - k) * a + k * b
+}
