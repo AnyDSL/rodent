@@ -39,7 +39,7 @@ fn ray_box_intrinsics_nvvm() -> RayBoxIntrinsics {
     }
 }
 
-fn gpu_traverse_bvh(bvh: &Bvh2, rays: RayStream, hits: HitStream, ray_count: int) -> () {
+fn gpu_traverse_bvh2(bvh: &Bvh2, rays: RayStream, hits: HitStream, ray_count: int, any_hit: bool) -> () {
     let (nodes, tris) = (bvh.nodes, bvh.tris);
 
     let block_size = 64;
@@ -122,7 +122,7 @@ fn gpu_traverse_bvh(bvh: &Bvh2, rays: RayStream, hits: HitStream, ray_count: int
             },
             iterate_instances: |_, _, _| {},
             transparency: |_, _| false,
-            hit_callback: |hit, continue, exit| -> ! continue(),
+            hit_callback: |hit, continue, exit| -> ! if any_hit { exit() } else { continue() },
             is_leaf: |node_ref| node_ref.node < 0,
             intrinsics: nvvm_intrinsics,
             ray_box_intrinsics: ray_box_intrinsics_nvvm()

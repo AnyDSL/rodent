@@ -6,15 +6,6 @@
 extern "C" {
 #endif
 
-struct Bvh2Tri {
-    float v0[3];
-    float nx;
-    float e1[3];
-    float ny;
-    float e2[3];
-    int id;
-};
-
 struct Bvh2BBox {
     float lo_x;
     float hi_x;
@@ -24,6 +15,15 @@ struct Bvh2BBox {
     float hi_z;
 };
 
+struct Bvh2Tri {
+    float v0[3];
+    float nx;
+    float e1[3];
+    float ny;
+    float e2[3];
+    int id;
+};
+
 struct Bvh2Node {
     struct Bvh2BBox left_bb;
     struct Bvh2BBox right_bb;
@@ -31,6 +31,11 @@ struct Bvh2Node {
     int right;
     int pad1;
     int pad2;
+};
+
+struct Bvh2 {
+    struct Bvh2Node* nodes;
+    struct Bvh2Tri* tris;
 };
 
 struct Bvh4Node {
@@ -52,11 +57,6 @@ struct Bvh4 {
     struct Bvh4Tri* tris;
 };
 
-struct Bvh2 {
-    struct Bvh2Node* nodes;
-    struct Bvh2Tri* tris;
-};
-
 struct HitAoS {
     int tri_id;
     float t;
@@ -71,8 +71,8 @@ struct RayAoS {
     float tmax;
 };
 
-void frontend_cpu_traverse_bvh(struct Bvh4* bvh, struct RayAoS* rays, struct HitAoS* hits, int ray_count);
-void frontend_gpu_traverse_bvh(struct Bvh2* bvh, struct RayAoS* rays, struct HitAoS* hits, int ray_count);
+void frontend_cpu_traverse_bvh4(struct Bvh4* bvh, struct RayAoS* rays, struct HitAoS* hits, int ray_count, int any_hit);
+void frontend_gpu_traverse_bvh2(struct Bvh2* bvh, struct RayAoS* rays, struct HitAoS* hits, int ray_count, int any_hit);
 
 #ifdef __cplusplus
 }

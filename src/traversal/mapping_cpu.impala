@@ -50,7 +50,7 @@ fn load_bvh4_tri(tri: &Bvh4Tri, i: int) -> Tri {
              vec3(tri. n(0)(i), tri. n(1)(i), tri. n(2)(i)))
 }
 
-fn cpu_traverse_bvh_packet(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_count: int) -> () {
+fn cpu_traverse_bvh4_packet(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_count: int, any_hit: bool) -> () {
     for i in range_step(0, ray_count, 8) {
         for j in vectorize(8, 32, 0, 8) {
             let (ray, tmin, tmax) = rays(i + j);
@@ -94,7 +94,8 @@ fn cpu_traverse_bvh_packet(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_cou
                 },
                 iterate_instances: |_, _, _| {},
                 transparency: |_, _| false,
-                hit_callback: |hit, continue, exit| -> ! continue(),
+                // TODO: Exit only if *all* the rays in the packet agree
+                hit_callback: |hit, continue, exit| -> ! if any_hit { exit() } else { continue() },
                 is_leaf: |node_ref| node_ref.node < 0,
                 intrinsics: cpu_intrinsics,
                 ray_box_intrinsics: ray_box_intrinsics_avx()
@@ -105,7 +106,7 @@ fn cpu_traverse_bvh_packet(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_cou
     }
 }
 
-fn cpu_traverse_bvh_single(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_count: int) -> () {
+fn cpu_traverse_bvh4_single(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_count: int, any_hit: bool) -> () {
     for i in range(0, ray_count) {
         let (ray, tmin, tmax) = rays(i);
 
@@ -157,13 +158,14 @@ fn cpu_traverse_bvh_single(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_cou
                     let mut tri_id = !leaf_ref.node;
                     while true {
                         let tri = bvh.tris(tri_id++);
+                        // TODO: Select the closest ray-triangle intersection within the intersector
                         @body(make_primitive(ray_tri_intersector(load_bvh4_tri(tri, j)), tri.id(j)));
                         if tri.id(0) < 0 { break() }
                     }
                 },
                 iterate_instances: |_, _, _| {},
                 transparency: |_, _| false,
-                hit_callback: |hit, continue, exit| -> ! continue(),
+                hit_callback: |hit, continue, exit| -> ! if any_hit { exit() } else { continue() },
                 is_leaf: |node_ref| node_ref.node < 0,
                 intrinsics: cpu_intrinsics,
                 ray_box_intrinsics: ray_box_intrinsics_avx()

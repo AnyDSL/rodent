@@ -23,6 +23,7 @@ struct BBox {
     max: fn () -> Vec3
 }
 
+// Intrinsics required to perform the ray-box test
 struct RayBoxIntrinsics {
     fmaxmaxf: fn (float, float, float) -> float,
     fminminf: fn (float, float, float) -> float,
@@ -34,6 +35,8 @@ struct RayBoxIntrinsics {
 
 type Intersector = fn (Intrinsics, Ray, float, float, fn (Hit) -> ()) -> ();
 
+// Constructs a set of intrinsics from min and max functions.
+// May not be the optimal intrinsics if the hardware provides a combined min/max instruction.
 fn ray_box_intrinsics(fminf: fn (float, float) -> float,
                       fmaxf: fn (float, float) -> float) -> RayBoxIntrinsics {
     RayBoxIntrinsics {
