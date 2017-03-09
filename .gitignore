@@ -1,0 +1,40 @@
+# Auto generated interface
+src/traversal/frontend/traversal.h
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Configuration file
+*.conf
+
+# Float buffers
+*.fbuf
+
+# Image files
+*.png
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
