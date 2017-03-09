@@ -94,8 +94,7 @@ fn cpu_traverse_bvh4_packet(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_co
                 },
                 iterate_instances: |_, _, _| {},
                 transparency: |_, _| false,
-                // TODO: Exit only if *all* the rays in the packet agree
-                hit_callback: |hit, continue, exit| -> ! if any_hit { exit() } else { continue() },
+                hit_callback: |hit, continue, exit| -> ! if any_hit && ballot(true) == 0xFF { exit() } else { continue() },
                 is_leaf: |node_ref| node_ref.node < 0,
                 intrinsics: cpu_intrinsics,
                 ray_box_intrinsics: ray_box_intrinsics_avx()
