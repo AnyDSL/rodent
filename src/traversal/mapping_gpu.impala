@@ -121,8 +121,8 @@ fn gpu_traverse_bvh2(bvh: &Bvh2, rays: RayStream, hits: HitStream, ray_count: in
                 }
             },
             iterate_instances: |_, _, _| {},
+            hit_callback: |hit, continue, exit| -> ! if any_hit && hit.prim_id() >= 0 { exit(hit) } else { continue() },
             transparency: |_, _| false,
-            hit_callback: |hit, continue, exit| -> ! if any_hit { exit() } else { continue() },
             is_leaf: |node_ref| node_ref.node < 0,
             intrinsics: nvvm_intrinsics,
             ray_box_intrinsics: ray_box_intrinsics_nvvm()

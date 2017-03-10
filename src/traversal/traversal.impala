@@ -4,8 +4,8 @@ struct TraversalMapping {
     iterate_children:   fn (NodeRef, float, Stack, fn (BBox, fn (float, float) -> ()) -> ()) -> (),
     iterate_primitives: fn (NodeRef, float, fn (Primitive) -> ()) -> (),
     iterate_instances:  fn (NodeRef, float, fn (Instance) -> ()) -> (),
+    hit_callback: fn (TraversalResult, fn () -> !, fn (TraversalResult) -> !) -> !,
     transparency: fn (int, Hit) -> bool,
-    hit_callback: fn (Hit, fn () -> !, fn () -> !) -> !,
     is_leaf: fn (NodeRef) -> bool,
     intrinsics: Intrinsics,
     ray_box_intrinsics: RayBoxIntrinsics
@@ -55,8 +55,8 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, 
     let mut n = vec3(0.0f, 0.0f, 0.0f);
     let mut uv = vec2(0.0f, 0.0f);
 
-    fn exit() -> ! {
-        return (TraversalResult {
+    fn hit() -> TraversalResult {
+        TraversalResult {
             hit: Hit {
                 distance:  || t,
                 normal:    || n,
@@ -64,7 +64,7 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, 
             },
             prim_id: || prim_id,
             inst_id: || inst_id
-        })
+        }
     }
 
     // The traversal loop should not be unrolled
@@ -72,33 +72,34 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, 
         let node = stack.top();
 
         // Intersect the bounding box of every child of this node
-        for bbox, hit in mapping.iterate_children(node, t, stack) {
+        for bbox, hit in mapping.iterate_children(node, t, stack) @{
             intersect_ray_box(mapping.ray_box_intrinsics, ray, bbox, tmin, t, hit);
         }
 
         // Process leaves
-        while mapping.is_leaf(stack.top()) {
+        while $mapping.is_leaf(stack.top()) @{
             let leaf = stack.top();
 
             // Process primitives, if any
-            for prim in mapping.iterate_primitives(leaf, t) {
-                with hit in prim.intersect(mapping.intrinsics, ray, tmin, t) {
-                    if !mapping.transparency(prim.id(), hit) {
+            for prim in mapping.iterate_primitives(leaf, t) @{
+                with hit in prim.intersect(mapping.intrinsics, ray, tmin, t) @{
+                    if !mapping.transparency(prim.id(), hit) @{
                         prim_id = prim.id();
                         t = hit.distance();
                         n = hit.normal();
                         uv = hit.uv_coords();
-                        mapping.hit_callback(hit, break, exit)
                     }
                 }
+
+                mapping.hit_callback(hit(), continue, return)
             }
 
             // Process instances, if any
-            for inst in mapping.iterate_instances(leaf, t) {
+            for inst in mapping.iterate_instances(leaf, t) @{
                 let new_dir = mat3x4_mul(inst.inverse(), vec3_to_4(ray.dir(), 0.0f));
                 let new_org = mat3x4_mul(inst.inverse(), vec3_to_4(ray.org(), 0.0f));
                 let result = inst.traverse(make_ray(new_org, new_dir), tmin, t);
-                if result.prim_id() >= 0 {
+                if result.prim_id() >= 0 @{
                     inst_id = inst.id();
                     prim_id = result.prim_id();
                     t = result.hit.distance();
@@ -111,5 +112,5 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, 
         }
     }
 
-    exit()
+    hit()
 }
