@@ -55,7 +55,7 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, 
     let mut n = vec3(0.0f, 0.0f, 0.0f);
     let mut uv = vec2(0.0f, 0.0f);
 
-    fn hit() -> TraversalResult {
+    fn result() -> TraversalResult {
         TraversalResult {
             hit: Hit {
                 distance:  || t,
@@ -72,7 +72,7 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, 
         let node = stack.top();
 
         // Intersect the bounding box of every child of this node
-        for bbox, hit in mapping.iterate_children(node, t, stack) @{
+        for bbox, hit in mapping.iterate_children(node, t, stack) {
             intersect_ray_box(mapping.ray_box_intrinsics, ray, bbox, tmin, t, hit);
         }
 
@@ -81,9 +81,9 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, 
             let leaf = stack.top();
 
             // Process primitives, if any
-            for prim in mapping.iterate_primitives(leaf, t) @{
-                with hit in prim.intersect(mapping.intrinsics, ray, tmin, t) @{
-                    if !mapping.transparency(prim.id(), hit) @{
+            for prim in mapping.iterate_primitives(leaf, t) {
+                with hit in prim.intersect(mapping.intrinsics, ray, tmin, t) {
+                    if !mapping.transparency(prim.id(), hit) {
                         prim_id = prim.id();
                         t = hit.distance();
                         n = hit.normal();
@@ -91,15 +91,15 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, 
                     }
                 }
 
-                mapping.hit_callback(hit(), continue, return)
+                mapping.hit_callback(result(), continue, return)
             }
 
             // Process instances, if any
-            for inst in mapping.iterate_instances(leaf, t) @{
+            for inst in mapping.iterate_instances(leaf, t) {
                 let new_dir = mat3x4_mul(inst.inverse(), vec3_to_4(ray.dir(), 0.0f));
                 let new_org = mat3x4_mul(inst.inverse(), vec3_to_4(ray.org(), 0.0f));
                 let result = inst.traverse(make_ray(new_org, new_dir), tmin, t);
-                if result.prim_id() >= 0 @{
+                if result.prim_id() >= 0 {
                     inst_id = inst.id();
                     prim_id = result.prim_id();
                     t = result.hit.distance();
@@ -112,5 +112,5 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, 
         }
     }
 
-    hit()
+    result()
 }
