@@ -15,13 +15,12 @@ enum class BvhType : uint32_t {
 struct BvhHeader {
     uint32_t node_count;
     uint32_t tri_count;
-    uint32_t reserved;
 };
 
 inline bool check_header(std::istream& is) {
     uint32_t magic;
     is.read((char*)&magic, sizeof(uint32_t));
-    return magic == 0x313F1A57;
+    return magic == 0x95CBED1F;
 }
 
 inline bool locate_block(std::istream& is, BvhType type) {
