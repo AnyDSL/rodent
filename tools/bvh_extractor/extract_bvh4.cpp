@@ -107,6 +107,7 @@ void extract_bvh4_node(BVH4::NodeRef node,
         new_node.max[2][c] = n->bounds(i).upper.z;
 
         if (n->child(i).isAlignedNode()) {
+            new_node.child[c] = first_child;
             extract_bvh4_node(n->child(i), first_child++, new_nodes, new_tris);
         } else {
             new_node.child[c] = ~new_tris.size();
@@ -121,7 +122,7 @@ void extract_bvh4_node(BVH4::NodeRef node,
         new_node.max[0][c] = 0.0f;
         new_node.max[1][c] = 0.0f;
         new_node.max[2][c] = 0.0f;
-        new_node.child[c] = 0;
+        new_node.child[c]  = 0;
     }
     new_nodes[index] = new_node;
 }
