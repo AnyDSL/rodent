@@ -74,7 +74,7 @@ fn make_bbox(min: Vec3, max: Vec3) -> BBox {
     }
 }
 
-fn intersect_ray_tri(math: Intrinsics, ray: Ray, tri: Tri, tmin: float, tmax: float, intr: fn (float, float, float) -> ()) -> () {
+fn intersect_ray_tri(math: Intrinsics, ray: Ray, tri: Tri, tmin: float, tmax: float, intr: fn (float, float, float) -> ()) -> () @{
     let (org, dir, n) = (ray.org(), ray.dir(), tri.n());
 
     let c = vec3_sub(tri.v0(), org);
@@ -86,16 +86,16 @@ fn intersect_ray_tri(math: Intrinsics, ray: Ray, tri: Tri, tmin: float, tmax: fl
     let v = prodsign(vec3_dot(r, tri.e1()), det);
     let w = abs_det - u - v;
 
-    if (u >= 0.0f) & (v >= 0.0f) & (w >= 0.0f) {
+    if (u >= 0.0f) & (v >= 0.0f) & (w >= 0.0f) @{
         let t = prodsign(vec3_dot(n, c), det);
-        if (t >= abs_det * tmin) & (t <= abs_det * tmax) & (det != 0.0f) {
+        if (t >= abs_det * tmin) & (t <= abs_det * tmax) & (det != 0.0f) @{
             let inv_det = 1.0f / abs_det;
             intr(t * inv_det, u * inv_det, v * inv_det)
         }
     }
 }
 
-fn intersect_ray_box(math: RayBoxIntrinsics, ray: Ray, bbox: BBox, tmin: float, tmax: float, intr: fn (float, float) -> ()) -> () {
+fn intersect_ray_box(math: RayBoxIntrinsics, ray: Ray, bbox: BBox, tmin: float, tmax: float, intr: fn (float, float) -> ()) -> () @{
     let (inv_dir, inv_org) = (ray.inv_dir(), ray.inv_org());
     let t0 = vec3_sub(vec3_mul(inv_dir, bbox.min()), inv_org);
     let t1 = vec3_sub(vec3_mul(inv_dir, bbox.max()), inv_org);
@@ -103,7 +103,7 @@ fn intersect_ray_box(math: RayBoxIntrinsics, ray: Ray, bbox: BBox, tmin: float, 
     let tentry = math.fmaxmaxf(math.fminf(t0.x, t1.x), math.fminf(t0.y, t1.y), math.fminmaxf(t0.z, t1.z, tmin));
     let texit  = math.fminminf(math.fmaxf(t0.x, t1.x), math.fmaxf(t0.y, t1.y), math.fmaxminf(t0.z, t1.z, tmax));
 
-    if tentry <= texit { intr(tentry, texit) }
+    if tentry <= texit @{ intr(tentry, texit) }
 }
 
 fn ray_tri_intersector(tri: Tri) -> Intersector {

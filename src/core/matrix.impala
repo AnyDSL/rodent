@@ -1,72 +1,60 @@
 struct Mat2x2 {
     row: fn (int) -> Vec2,
-    col: fn (int) -> Vec2,
-
-    cols: [Vec2 * 2]
+    col: [Vec2 * 2]
 }
 
 struct Mat3x3 {
     row: fn (int) -> Vec3,
-    col: fn (int) -> Vec3,
-
-    cols: [Vec3 * 3]
+    col: [Vec3 * 3]
 }
 
 struct Mat3x4 {
     row: fn (int) -> Vec4,
-    col: fn (int) -> Vec3,
-
-    cols: [Vec3 * 4]
+    col: [Vec3 * 4]
 }
 
 struct Mat4x4 {
     row: fn (int) -> Vec4,
-    col: fn (int) -> Vec4,
-
-    cols: [Vec4 * 4]
+    col: [Vec4 * 4]
 }
 
 fn mat2x2(c0: Vec2, c1: Vec2) -> Mat2x2 {
     let c = [c0, c1];
     Mat2x2 {
-        col: |i| { c(i) },
         row: |i| { [vec2(c(0).x, c(1).x),
                     vec2(c(0).y, c(1).y)](i) },
-        cols: c
+        col: c
     }
 }
 
 fn mat3x3(c0: Vec3, c1: Vec3, c2: Vec3) -> Mat3x3 {
     let c = [c0, c1, c2];
     Mat3x3 {
-        col: |i| { c(i) },
         row: |i| { [vec3(c(0).x, c(1).x, c(2).x),
                     vec3(c(0).y, c(1).y, c(2).y),
                     vec3(c(0).z, c(1).z, c(2).z)](i) },
-        cols: c
+        col: c
     }
 }
 
 fn mat3x4(c0: Vec3, c1: Vec3, c2: Vec3, c3: Vec3) -> Mat3x4 {
     let c = [c0, c1, c2, c3];
     Mat3x4 {
-        col: |i| { c(i) },
         row: |i| { [vec4(c(0).x, c(1).x, c(2).x, c(3).x),
                     vec4(c(0).y, c(1).y, c(2).y, c(3).y),
                     vec4(c(0).z, c(1).z, c(2).z, c(3).z)](i) },
-        cols: c
+        col: c
     }
 }
 
 fn mat4x4(c0: Vec4, c1: Vec4, c2: Vec4, c3: Vec4) -> Mat4x4 {
     let c = [c0, c1, c2, c3];
     Mat4x4 {
-        col: |i| { c(i) },
         row: |i| { [vec4(c(0).x, c(1).x, c(2).x, c(3).x),
                     vec4(c(0).y, c(1).y, c(2).y, c(3).y),
                     vec4(c(0).z, c(1).z, c(2).z, c(3).z),
                     vec4(c(0).w, c(1).w, c(2).w, c(3).w)](i) },
-        cols: c
+        col: c
     }
 }
 

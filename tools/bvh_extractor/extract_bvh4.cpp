@@ -64,10 +64,10 @@ void extract_bvh4_leaf(BVH4::NodeRef leaf, std::vector<Bvh4Tri>& new_tris) {
             new_tri.e2[0][j] = 0.0f;
             new_tri.e2[1][j] = 0.0f;
             new_tri.e2[2][j] = 0.0f;
-            new_tri.n[0][j] = 0.0f;
-            new_tri.n[1][j] = 0.0f;
-            new_tri.n[2][j] = 0.0f;
-            new_tri.id[j] = 0x80000000;
+            new_tri.n[0][j]  = 0.0f;
+            new_tri.n[1][j]  = 0.0f;
+            new_tri.n[2][j]  = 0.0f;
+            new_tri.id[j]    = 0x80000000;
         }
 
         new_tris.push_back(new_tri);
