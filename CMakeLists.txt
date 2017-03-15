@@ -10,7 +10,7 @@ find_package(AnyDSL-runtime REQUIRED)
 include(${ANYDSL_RUNTIME_CMAKE_DIR}/Runtime.cmake)
 include_directories(${ANYDSL_RUNTIME_DIR}/src)
 
-set(CLANG_FLAGS -mavx2 -mavx -mfma -ffast-math CACHE ON "clang compilation options")
+set(CLANG_FLAGS -mavx2 -mavx -mfma -ffast-math CACHE STRING "Clang compilation options")
 
 add_subdirectory(src)
 add_subdirectory(tools)

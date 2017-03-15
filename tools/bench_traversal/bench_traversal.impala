@@ -48,12 +48,12 @@ fn gpu_write_hits_aos(hits: &mut [HitAoS]) -> HitStream {
     }
 }
 
-extern fn frontend_cpu_traverse_bvh4(bvh: &Bvh4, rays: &[RayAoS], hits: &mut [HitAoS], ray_count: int, any_hit: bool) -> () {
-    if any_hit {
+extern fn frontend_cpu_traverse_bvh4(bvh: &Bvh4, rays: &[RayAoS], hits: &mut [HitAoS], ray_count: int, any_hit: bool) -> () @{
+    /*if any_hit {
         @cpu_traverse_bvh4_packet(bvh, cpu_read_rays_aos(rays), cpu_write_hits_aos(hits), ray_count, true);
-    } else {
-        @cpu_traverse_bvh4_packet(bvh, cpu_read_rays_aos(rays), cpu_write_hits_aos(hits), ray_count, false);
-    }
+    } else {*/
+        cpu_traverse_bvh4_packet(bvh, cpu_read_rays_aos(rays), cpu_write_hits_aos(hits), ray_count, false);
+    //}
 }
 
 extern fn frontend_gpu_traverse_bvh2(bvh: &Bvh2, rays: &[RayAoS], hits: &mut [HitAoS], ray_count: int, any_hit: bool) -> () {

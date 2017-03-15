@@ -34,11 +34,11 @@ fn ray_box_intrinsics_avx2() -> RayBoxIntrinsics {
     // AVX2 intrinsics: use integer min/max instead of floating point min/max
     let fminf = |x, y| {
         let (x_, y_) = (bitcast[int](x), bitcast[int](y));
-        bitcast[float](if x < y { x } else { y })
+        bitcast[float](if x_ < y_ { x_ } else { y_ })
     };
     let fmaxf = |x, y| {
         let (x_, y_) = (bitcast[int](x), bitcast[int](y));
-        bitcast[float](if x > y { x } else { y })
+        bitcast[float](if x_ > y_ { x_ } else { y_ })
     };
     ray_box_intrinsics(fminf, fmaxf)
 }
