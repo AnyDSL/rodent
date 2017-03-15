@@ -1,6 +1,6 @@
 #include <fstream>
 
-#include "../../src/traversal/frontend/traversal.h"
+#include "traversal.h"
 #include "sbvh_builder.h"
 
 static void fill_dummy_parent(Bvh2Node& node, const BBox& leaf_bb, int index) {

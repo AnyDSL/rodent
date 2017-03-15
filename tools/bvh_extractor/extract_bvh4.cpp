@@ -6,7 +6,7 @@
 
 #include <fstream>
 
-#include "../../src/traversal/frontend/traversal.h"
+#include "traversal.h"
 #include "tri.h"
 
 using namespace embree;

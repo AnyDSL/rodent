@@ -2,7 +2,10 @@
 #define LOAD_RAYS_H
 
 #include <fstream>
+
 #include <anydsl_runtime.hpp>
+
+#include "traversal.h"
 
 inline bool load_rays(const std::string& filename,
                       anydsl::Array<RayAoS>& rays,

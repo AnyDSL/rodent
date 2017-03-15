@@ -1,0 +1,12 @@
+add_executable(bench_embree
+    bench_embree.cpp
+    ../common/load_obj.cpp
+    ../common/load_obj.h
+    ../common/file_path.h
+    ../common/float2.h
+    ../common/float3.h
+    ../common/tri.h
+    ../common/bbox.h)
+target_include_directories(bench_embree PUBLIC ../common ${EMBREE_ROOT_DIR}/include ${EMBREE_ROOT_DIR} ${EMBREE_LIBRARY_DIR})
+target_compile_definitions(bench_embree PUBLIC ${EMBREE_DEFINITIONS})
+target_link_libraries(bench_embree ${EMBREE_DEPENDENCIES} ${ANYDSL_RUNTIME_LIBRARY} ${ANYDSL_RUNTIME_LIBRARIES})

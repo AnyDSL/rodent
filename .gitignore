@@ -1,5 +1,5 @@
 # Auto generated interface
-src/traversal/frontend/traversal.h
+tools/common/traversal.h
 
 # Compiled Object files
 *.slo

@@ -16,7 +16,7 @@ inline void check_argument(int i, int argc, char** argv) {
 }
 
 inline void usage() {
-    std::cout << "Usage: traversal_frontend [options]\n"
+    std::cout << "Usage: bench_traversal [options]\n"
                  "Available options:\n"
                  "  -bvh     --bvh-file        Sets the BVH file to use\n"
                  "  -ray     --ray-file        Sets the ray file to use\n"
@@ -46,7 +46,7 @@ static double bench_gpu(Bvh2* bvh2, RayAoS* rays, HitAoS* hits, size_t n, bool a
 int main(int argc, char** argv) {
     std::string ray_file;
     std::string bvh_file;
-    std::string output;
+    std::string out_file;
     float tmin = 0.0f, tmax = 1e9f;
     int iters = 1;
     int warmup = 0;
@@ -83,7 +83,7 @@ int main(int argc, char** argv) {
                 any_hit = true;
             } else if (!strcmp(arg, "-o") || !strcmp(arg, "--output")) {
                 check_argument(i, argc, argv);
-                output = argv[++i];
+                out_file = argv[++i];
             } else {
                 std::cerr << "Unknown option '" << arg << "'" << std::endl;
                 return 1;
@@ -157,8 +157,8 @@ int main(int argc, char** argv) {
     size_t intr = 0;
     for (auto& hit: host_hits)
         intr += (hit.tri_id >= 0);
-    if (output != "") {
-        std::ofstream of(output, std::ofstream::binary);
+    if (out_file != "") {
+        std::ofstream of(out_file, std::ofstream::binary);
         for (auto& hit: host_hits)
             of.write((char*)&hit.t, sizeof(float));
     }
@@ -168,11 +168,11 @@ int main(int argc, char** argv) {
     auto avg = sum / timings.size();
     auto med = timings[timings.size() / 2];
     auto min = *std::min_element(timings.begin(), timings.end());
-    std::cout << sum << "ms for " << iters << " iteration(s)." << std::endl;
-    std::cout << rays.size() * iters / (1000.0 * sum) << " Mrays/sec." << std::endl;
+    std::cout << sum << "ms for " << iters << " iteration(s)" << std::endl;
+    std::cout << rays.size() * iters / (1000.0 * sum) << " Mrays/sec" << std::endl;
     std::cout << "# Average: " << avg << " ms" << std::endl;
     std::cout << "# Median: " << med  << " ms" << std::endl;
     std::cout << "# Min: " << min << " ms" << std::endl;
-    std::cout << intr << " intersection(s)." << std::endl;
+    std::cout << intr << " intersection(s)" << std::endl;
     return 0;
 }
