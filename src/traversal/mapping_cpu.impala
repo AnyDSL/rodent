@@ -24,6 +24,8 @@ extern "C" {
     fn "rv_ballot"  ballot(bool) -> int;
     fn "rv_extract" extractf(float, int) -> float;
     fn "rv_extract" extracti(int, int) -> int;
+    fn "rv_extract" extractv3(Vec3, int) -> Vec3;
+    fn "rv_extract" extractv2(Vec2, int) -> Vec3;
 }
 
 fn ray_box_intrinsics_avx() -> RayBoxIntrinsics {
@@ -162,7 +164,27 @@ fn cpu_traverse_bvh4_single(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_co
 
                     let mut tri_id = !leaf_ref.node;
                     while true {
-                        let tri = bvh.tris(tri_id++);
+                        let tri = &bvh.tris(tri_id++);
+                        /*let closest_intr = |math, ray, tmin, tmax, intr| {
+                            let mut found = false;
+                            let mut t  = flt_max;
+                            let mut n  = vec3(0.0f, 0.0f, 0.0f);
+                            let mut uv = vec2(0.0f, 0.0f);
+
+                            ray_tri_intersector(load_bvh4_tri(tri, j))
+                                (math, ray, tmin, tmax, |hit| {
+                                    n  = hit.normal();
+                                    uv = hit.uv();
+                                    t  = hit.distance();
+                                    found = true;
+                                });
+
+                            if any(found) {
+                                let mut id = 0;
+                                if extractf(t, 1) < extractf(t, 0) { id = 1; }
+                                if extractf(t, 2) < extractf(t, 3) { id = 2; }
+                            }
+                        };*/
                         // TODO: Select the closest ray-triangle intersection within the intersector
                         @body(make_primitive(ray_tri_intersector(load_bvh4_tri(tri, j)), tri.id(j) & 0x7FFFFFFF));
                         if (tri.id(3) & bitcast[i32](0x80000000u)) != 0 { break() }
@@ -174,7 +196,7 @@ fn cpu_traverse_bvh4_single(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_co
                 transparency: |_, _| false,
                 is_leaf: |node_ref| node_ref.node < 0,
                 intrinsics: cpu_intrinsics,
-                ray_box_intrinsics: ray_box_intrinsics_avx()
+                ray_box_intrinsics: ray_box_intrinsics_avx2()
             };
 
             hits(i, @traverse_bvh(mapping, stack, ray, tmin, tmax));
