@@ -14,14 +14,14 @@ struct BorderHandling {
 type ImageFilter = fn (Intrinsics, Image, Vec2) -> Color;
 type Texture = fn (Vec2) -> Color;
 
-fn clamp_border() -> BorderHandling {
+fn make_clamp_border() -> BorderHandling {
     BorderHandling {
         lower: |_, _| 0.0f,
         upper: |_, _| 1.0f
     }
 }
 
-fn repeat_border() -> BorderHandling {
+fn make_repeat_border() -> BorderHandling {
     let repeat = |math, x| x - math.floorf(x);
     BorderHandling {
         lower: repeat,
@@ -29,14 +29,14 @@ fn repeat_border() -> BorderHandling {
     }
 }
 
-fn nearest_filter() -> ImageFilter {
+fn make_nearest_filter() -> ImageFilter {
     |img, uv| {
         img.pixels(math.max((u.x * img.width())  as int, img.width()  - 1),
                    math.min((u.y * img.height()) as int, img.height() - 1))
     }
 }
 
-fn bilinear_filter() -> ImageFilter {
+fn make_bilinear_filter() -> ImageFilter {
     |img, uv| {
         let u = uv.x * img.width();
         let v = uv.y * img.height();

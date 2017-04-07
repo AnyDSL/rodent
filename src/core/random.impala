@@ -1,10 +1,63 @@
-type RndGen = fn () -> (float, RndGen);
+// Change these variables to use another random number generator
+type RndState = u64;
+type RndGen = fn (RndState) -> (RndState, float);
+static randf = mwc64x;
 
-fn mwc64x(seed: u64) -> RndGen {
-    || {
-        let c = seed >> 32u64;
-        let x = seed & 0xFFFFFFFFu64;
-        let new_seed = x * 4294883355u64 + c;
-        (((x^c) as float) / (0xFFFFFFFFu32 as float), $mwc64x(new_seed))
+// MWC64X: http://cas.ee.ic.ac.uk/people/dt10/research/rngs-gpu-mwc64x.html
+fn mwc64x(seed: u64) -> (u64, float) {
+    let c = seed >> 32u64;
+    let x = seed & 0xFFFFFFFFu64;
+    let new_seed = x * 4294883355u64 + c;
+    (new_seed, ((x^c) as float) / (0xFFFFFFFFu32 as float))
+}
+
+// Result of sampling a direction
+struct DirSample {
+    dir: Vec3,
+    pdf: float
+}
+
+fn make_dir_sample(math: Intrinsics, m: Mat3x3, c: float, s: float, phi: float, pdf: float) -> DirSample {
+    let x = s * math.cosf(phi);
+    let y = s * math.sinf(phi);
+    let z = c;
+    DirSample {
+        dir: mat3x3_mul(m, make_vec3(x, y, z)),
+        pdf: pdf
     }
+}
+
+// Probability density function for uniform sphere sampling
+fn uniform_sphere_pdf() -> float { 1.0f / (4.0f * flt_pi) }
+
+// Samples a direction uniformly on a sphere
+fn sample_uniform_sphere(math: Intrinsics, m: Mat3x3, u: float, v: float) -> DirSample {
+    let c = 2.0f * v - 1.0f;
+    let s = math.sqrtf(1.0f - c * c);
+    let phi = 2.0f * flt_pi * u;
+    make_dir_sample(math, m, c, s, phi, uniform_sphere_pdf())
+}
+
+// Probability density function for cosine weighted hemisphere sampling
+fn cosine_hemisphere_pdf(c: float) -> float { c / flt_pi }
+
+// Samples a direction on a hemisphere proportionally to the cosine with the surface normal
+fn sample_cosine_hemisphere(math: Intrinsics, m: Mat3x3, u: float, v: float) -> DirSample {
+    let c = math.sqrtf(1.0f - v);
+    let s = math.sqrtf(v);
+    let phi = 2.0f * flt_pi * u;
+    make_dir_sample(math, m, c, s, phi, cosine_hemisphere_pdf(c))
+}
+
+// Probability density function for cosine-power weighted hemisphere sampling
+fn cosine_power_hemisphere_pdf(math: Intrinsics, c: float, k: float) -> float {
+    math.powf(c, k) * (k + 1.0f) / (2.0f * flt_pi)
+}
+
+// Samples a direction on a hemisphere proportionally to the power of the cosine with the surface normal
+fn sample_cosine_power_hemisphere(math: Intrinsics, m: Mat3x3, k: float, u: float, v: float) -> DirSample {
+    let c = math.powf(v, 1.0f / (k + 1.0f));
+    let s = math.sqrtf(1.0f - c * c);
+    let phi = 2.0f * flt_pi * u;
+    make_dir_sample(math, m, c, s, phi, cosine_power_hemisphere_pdf(math, c, k))
 }

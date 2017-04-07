@@ -27,7 +27,7 @@ struct Bvh2Node {
     pad2:  int
 }
 
-fn ray_box_intrinsics_nvvm() -> RayBoxIntrinsics {
+fn make_ray_box_intrinsics_nvvm() -> RayBoxIntrinsics {
     // Use video instructions to speed-up the ray-box test
     RayBoxIntrinsics {
         fminf: nvvm_fminf,
@@ -45,15 +45,15 @@ fn gpu_traverse_bvh2(bvh: &Bvh2, rays: RayStream, hits: HitStream, ray_count: in
     let block_size = 64;
     let grid  = (ray_count, 1, 1);
     let block = (block_size, 1, 1);
-    let acc = nvvm_accelerator;
+    let acc   = nvvm_accelerator(0);
 
-    with acc.exec(acc.dev(), grid, block) @{
+    with acc.exec(grid, block) @{
         let i = acc.tidx() + acc.bidx() * acc.bdimx();
         if i >= ray_count { break() }
 
         let (ray, tmin, tmax) = rays(i);
 
-        let stack = alloc_stack();
+        let stack = make_stack();
         stack.push(0, 0.0f);
 
         let mapping = TraversalMapping {
@@ -64,10 +64,10 @@ fn gpu_traverse_bvh2(bvh: &Bvh2, rays: RayStream, hits: HitStream, ray_count: in
                 let bb2 = nvvm_ldg4_f32(&node_ptr(2));
                 let mut children = nvvm_ldg4_i32(&node_ptr(3) as &[1]simd[int * 4]);
 
-                let box1 = make_bbox(vec3(bb0(0), bb0(2), bb1(0)),
-                                     vec3(bb0(1), bb0(3), bb1(1)));
-                let box2 = make_bbox(vec3(bb1(2), bb2(0), bb2(2)),
-                                     vec3(bb1(3), bb2(1), bb2(3)));
+                let box1 = make_bbox(make_vec3(bb0(0), bb0(2), bb1(0)),
+                                     make_vec3(bb0(1), bb0(3), bb1(1)));
+                let box2 = make_bbox(make_vec3(bb1(2), bb2(0), bb2(2)),
+                                     make_vec3(bb1(3), bb2(1), bb2(3)));
 
                 let intersect_child = |box| -> (bool, float) {
                     body(box, |tentry, _, _| -> ! { return(true, tentry) });
@@ -102,12 +102,12 @@ fn gpu_traverse_bvh2(bvh: &Bvh2, rays: RayStream, hits: HitStream, ray_count: in
                     let tri2 = nvvm_ldg4_f32(&tri_ptr(2));
 
                     let id = bitcast[uint](tri2(3));
-                    let v0 = vec3(tri0(0), tri0(1), tri0(2));
-                    let e1 = vec3(tri1(0), tri1(1), tri1(2));
-                    let e2 = vec3(tri2(0), tri2(1), tri2(2));
-                    let  n = vec3(tri0(3), tri1(3), vec3_cross(e1, e2).z);
+                    let v0 = make_vec3(tri0(0), tri0(1), tri0(2));
+                    let e1 = make_vec3(tri1(0), tri1(1), tri1(2));
+                    let e2 = make_vec3(tri2(0), tri2(1), tri2(2));
+                    let  n = make_vec3(tri0(3), tri1(3), vec3_cross(e1, e2).z);
 
-                    @body(make_primitive(ray_tri_intersector(make_tri(v0, e1, e2, n)), (id & 0x7FFFFFFFu) as int));
+                    @body(make_primitive(make_ray_tri_intersector(make_tri(v0, e1, e2, n)), (id & 0x7FFFFFFFu) as int));
 
                     if (id & 0x80000000u) != 0u { break() }
                     tri_id++;
@@ -119,7 +119,7 @@ fn gpu_traverse_bvh2(bvh: &Bvh2, rays: RayStream, hits: HitStream, ray_count: in
             transparency: |_, _| false,
             is_leaf: |node_ref| node_ref.node < 0,
             intrinsics: nvvm_intrinsics,
-            ray_box_intrinsics: ray_box_intrinsics_nvvm()
+            ray_box_intrinsics: make_ray_box_intrinsics_nvvm()
         };
 
         hits(i, @traverse_bvh(mapping, stack, ray, tmin, tmax))

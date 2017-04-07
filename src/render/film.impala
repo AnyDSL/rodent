@@ -1,0 +1,23 @@
+struct Film {
+    // Accumulate a sample on a film
+    accumulate: fn (float, float, Color) -> ()
+}
+
+fn make_film(dev: Device, width: int, height: int) -> Film {
+    let math   = device.intrinsics();
+    let atomic = device.atomic_intrinsics();
+    let acc    = device.accelerator();
+    let buffer = acc.alloc(0, sizeof[float]() * 4 * width * height);
+    let pixel  = |x, y| bitcast[&mut [float]](bitcast[&mut [float]](buffer.data)(y * width + x));
+
+    Film {
+        accumulate: |u, v, c| {
+            let p = pixel(math.min(u * width,  width - 1),
+                          math.min(v * height, height - 1));
+            atomic.add_float(&mut pixel(0), c.r);
+            atomic.add_float(&mut pixel(1), c.g);
+            atomic.add_float(&mut pixel(2), c.b);
+            atomic.add_float(&mut pixel(3), 1.0f);
+        }
+    }
+}

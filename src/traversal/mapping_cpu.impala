@@ -28,11 +28,11 @@ extern "C" {
     fn "rv_extract" extractv2(Vec2, int) -> Vec3;
 }
 
-fn ray_box_intrinsics_avx() -> RayBoxIntrinsics {
-    ray_box_intrinsics(cpu_intrinsics.fminf, cpu_intrinsics.fmaxf)
+fn make_ray_box_intrinsics_avx() -> RayBoxIntrinsics {
+    make_ray_box_intrinsics(cpu_intrinsics.fminf, cpu_intrinsics.fmaxf)
 }
 
-fn ray_box_intrinsics_avx2() -> RayBoxIntrinsics {
+fn make_ray_box_intrinsics_avx2() -> RayBoxIntrinsics {
     // AVX2 intrinsics: use integer min/max instead of floating point min/max
     let fminf = |x, y| {
         let (x_, y_) = (bitcast[int](x), bitcast[int](y));
@@ -42,21 +42,21 @@ fn ray_box_intrinsics_avx2() -> RayBoxIntrinsics {
         let (x_, y_) = (bitcast[int](x), bitcast[int](y));
         bitcast[float](if x_ > y_ { x_ } else { y_ })
     };
-    ray_box_intrinsics(fminf, fmaxf)
+    make_ray_box_intrinsics(fminf, fmaxf)
 }
 
 fn load_bvh4_tri(tri: &Bvh4Tri, i: int) -> Tri @{
-    make_tri(vec3(tri.v0(0)(i), tri.v0(1)(i), tri.v0(2)(i)),
-             vec3(tri.e1(0)(i), tri.e1(1)(i), tri.e1(2)(i)),
-             vec3(tri.e2(0)(i), tri.e2(1)(i), tri.e2(2)(i)),
-             vec3(tri. n(0)(i), tri. n(1)(i), tri. n(2)(i)))
+    make_tri(make_vec3(tri.v0(0)(i), tri.v0(1)(i), tri.v0(2)(i)),
+             make_vec3(tri.e1(0)(i), tri.e1(1)(i), tri.e1(2)(i)),
+             make_vec3(tri.e2(0)(i), tri.e2(1)(i), tri.e2(2)(i)),
+             make_vec3(tri. n(0)(i), tri. n(1)(i), tri. n(2)(i)))
 }
 
 fn cpu_traverse_bvh4_packet(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_count: int, any_hit: bool) -> () {
     for i in $range_step(0, ray_count, 8) {
         for j in vectorize(8, 32, 0, 8) @{
             let (ray, tmin, tmax) = rays(i + j);
-            let stack = alloc_stack();
+            let stack = make_stack();
 
             stack.push(0, tmin);
 
@@ -70,8 +70,8 @@ fn cpu_traverse_bvh4_packet(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_co
                     for k in @range(0, 4) @{
                         if node.child(k) == 0 { break() }
 
-                        let bbox = make_bbox(vec3(node.min(0)(k), node.min(1)(k), node.min(2)(k)),
-                                             vec3(node.max(0)(k), node.max(1)(k), node.max(2)(k)));
+                        let bbox = make_bbox(make_vec3(node.min(0)(k), node.min(1)(k), node.min(2)(k)),
+                                             make_vec3(node.max(0)(k), node.max(1)(k), node.max(2)(k)));
                         let intersect_child = |box| -> (bool, float) {
                             @body(box, |tentry, _, _| -> ! { return(true, tentry) });
                             (false, 0.0f)
@@ -94,7 +94,7 @@ fn cpu_traverse_bvh4_packet(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_co
                     while true @{
                         let tri = &bvh.tris(tri_id++);
                         for k in @range(0, 4) {
-                            @body(make_primitive(ray_tri_intersector(load_bvh4_tri(tri, k)), tri.id(k) & 0x7FFFFFFF));
+                            @body(make_primitive(make_ray_tri_intersector(load_bvh4_tri(tri, k)), tri.id(k) & 0x7FFFFFFF));
                         }
                         if (tri.id(3) & bitcast[i32](0x80000000u)) != 0 { break() }
                     }
@@ -105,7 +105,7 @@ fn cpu_traverse_bvh4_packet(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_co
                 transparency: |_, _| false,
                 is_leaf: |node_ref| node_ref.node < 0,
                 intrinsics: cpu_intrinsics,
-                ray_box_intrinsics: ray_box_intrinsics_avx2()
+                ray_box_intrinsics: make_ray_box_intrinsics_avx2()
             };
 
             hits(i + j, @traverse_bvh(mapping, stack, ray, tmin, tmax));
@@ -118,7 +118,7 @@ fn cpu_traverse_bvh4_single(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_co
         let (ray, tmin, tmax) = rays(i);
 
         for j in vectorize(4, 16, 0, 4) {
-            let stack = alloc_stack();
+            let stack = make_stack();
 
             stack.push(0, tmin);
 
@@ -128,9 +128,9 @@ fn cpu_traverse_bvh4_single(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_co
 
                     if node_ref.tmin > tmax { exit() }
 
-                    let node = bvh.nodes(node_ref.node);
-                    let bbox = make_bbox(vec3(node.min(0)(j), node.min(1)(j), node.min(2)(j)),
-                                         vec3(node.max(0)(j), node.max(1)(j), node.max(2)(j)));
+                    let node = &bvh.nodes(node_ref.node);
+                    let bbox = make_bbox(make_vec3(node.min(0)(j), node.min(1)(j), node.min(2)(j)),
+                                         make_vec3(node.max(0)(j), node.max(1)(j), node.max(2)(j)));
 
                     let mut child = -1;
                     let mut tentry : float;
@@ -171,7 +171,7 @@ fn cpu_traverse_bvh4_single(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_co
                             let mut n  = vec3(0.0f, 0.0f, 0.0f);
                             let mut uv = vec2(0.0f, 0.0f);
 
-                            ray_tri_intersector(load_bvh4_tri(tri, j))
+                            make_ray_tri_intersector(load_bvh4_tri(tri, j))
                                 (math, ray, tmin, tmax, |hit| {
                                     n  = hit.normal();
                                     uv = hit.uv();
@@ -186,7 +186,7 @@ fn cpu_traverse_bvh4_single(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_co
                             }
                         };*/
                         // TODO: Select the closest ray-triangle intersection within the intersector
-                        @body(make_primitive(ray_tri_intersector(load_bvh4_tri(tri, j)), tri.id(j) & 0x7FFFFFFF));
+                        @body(make_primitive(make_ray_tri_intersector(load_bvh4_tri(tri, j)), tri.id(j) & 0x7FFFFFFF));
                         if (tri.id(3) & bitcast[i32](0x80000000u)) != 0 { break() }
                     }
                 },
@@ -196,7 +196,7 @@ fn cpu_traverse_bvh4_single(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_co
                 transparency: |_, _| false,
                 is_leaf: |node_ref| node_ref.node < 0,
                 intrinsics: cpu_intrinsics,
-                ray_box_intrinsics: ray_box_intrinsics_avx2()
+                ray_box_intrinsics: make_ray_box_intrinsics_avx2()
             };
 
             hits(i, @traverse_bvh(mapping, stack, ray, tmin, tmax));

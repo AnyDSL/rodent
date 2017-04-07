@@ -1,78 +1,176 @@
+// Opaque description of a point on a surface
 struct SurfaceElement {
-    entering:    fn () -> bool,  // True if the path enters the surface
-    point:       fn () -> Vec3,  // Point on the surface
-    face_normal: fn () -> Vec3,  // Geometric normal at the surface point
-    uv_coords:   fn () -> Vec2,  // UV coordinates on the triangle
-    local:       fn () -> Mat3   // Local coordinate system at the surface point
+    entering:    fn () -> bool,    // True if the path enters the surface
+    point:       fn () -> Vec3,    // Point on the surface
+    face_normal: fn () -> Vec3,    // Geometric normal at the surface point
+    uv_coords:   fn () -> Vec2,    // UV coordinates on the triangle
+    local:       fn () -> Mat3x3   // Local coordinate system at the surface point
 }
 
 type SurfaceColor = fn (SurfaceElement) -> Color;       // Surface-dependent color
 type SurfaceValue = fn (SurfaceElement) -> float;       // Surface-dependent value
 
+// Result of sampling a material
 struct MaterialSample {
     in_dir: fn () -> Vec3,  // Incoming direction
     pdf:    fn () -> float, // Weight of the sample
     color:  fn () -> Color  // Color of the sample
 }
 
+// Opaque material structure
 struct Material {
-    eval:        fn (Vec3, SurfaceElement, Vec3) -> Color,
-    pdf:         fn (Vec3, SurfaceElement, Vec3) -> float,
-    sample:      fn (RndGen, SurfaceElement, Vec3) -> (RndGen, MaterialSample),
-    emission:    fn (SurfaceElement) -> Color,
-    is_emissive: fn () -> bool
+    // Evaluates the reflectance of the material for the given set of directions at the given point on a surface
+    eval: fn (Intrinsics, Vec3, SurfaceElement, Vec3) -> Color,
+    // Evaluates the sampling probability density for a given direction and point on a surface
+    pdf: fn (Intrinsics, Vec3, SurfaceElement, Vec3) -> float,
+    // Samples a direction at the given point on a surface
+    sample: fn (Intrinsics, RndState, SurfaceElement, Vec3, bool) -> (RndState, MaterialSample),
+    // Returns the amount of light emitted by the material at the given point on a surface
+    emission: fn (Intrinsics, SurfaceElement) -> Color,
+    // Returns true if the material emits light
+    is_emissive: fn () -> bool,
+    // Returns true if the material is purely specular
+    is_specular: fn () -> bool
 }
 
+// Evaluates the fresnel factor for a dielectric
 fn fresnel_factor(n1: float, n2: float, cos_i: float, cos_t: float) -> float {
     let R_s = (n1 * cos_i - n2 * cos_t) / (n1 * cos_i + n2 * cos_t);
     let R_p = (n2 * cos_i - n1 * cos_t) / (n2 * cos_i + n1 * cos_t);
     (R_s * R_s + R_p * R_p) * 0.5f
 }
 
+// Returns max(0.0, dot(a, b))
 fn positive_cos(a: Vec3, b: Vec3) -> float {
     let cos = vec3_dot(a, b);
     if cos >= 0.0f { cos } else { 0.0f }
 }
 
-fn material_sample(surf: SurfaceElement, in_dir: Vec3, pdf: float, color: Color, inverted: bool) -> MaterialSample {
+fn make_const_value(v: float) -> SurfaceValue { |surf| v }
+fn make_const_color(c: Color) -> SurfaceColor { |surf| c }
+
+fn make_material_sample(surf: SurfaceElement, in_dir: Vec3, pdf: float, color: Color, inverted: bool) -> MaterialSample {
     // Checks that the sample is above the surface (or under it if inverted is true)
-    if pdf > 0.0f && (inverted ^ (vec3_dot(in_dir, surf.face_normal()) > 0.0f)) {
-        MaterialSample(in_dir, pdf, color)
-    } else {
-        MaterialSample(in_dir, 1.0f, rgb(0.0f));
+    let valid = pdf > 0.0f && (inverted ^ (vec3_dot(in_dir, surf.face_normal()) > 0.0f));
+    MaterialSample {
+        in_dir: || in_dir,
+        pdf: || pdf,
+        color: || if valid { color } else { black }
     }
 }
 
-fn emissive_material(ke: SurfaceColor) -> Material {
+// Creates a purely emissive material
+fn make_emissive_material(ke: SurfaceColor) -> Material {
     Material {
-        eval: |in_dir, surf, out_dir| { color(0.0f, 0.0f, 0.0f, 0.0f) },
-        pdf: |in_dir, surf, out_dir| { 0.0f },
-        sample: |rnd, surf, out_dir| {
-            MaterialSample {
-                in_dir: || vec3(0.0f, 0.0f, 0.0f),
+        eval: |math, in_dir, surf, out_dir| black,
+        pdf: |math, in_dir, surf, out_dir| 0.0f,
+        sample: |math, rnd, surf, out_dir, _| {
+            let sample = MaterialSample {
+                in_dir: || make_vec3(0.0f, 0.0f, 0.0f),
                 pdf: || 0.0f,
-                color: || color(0.0f, 0.0f, 0.0f, 0.0f)
-            }
+                color: || black
+            };
+            (rnd, sample)
         },
-        emission: |surf| ke(surf),
-        is_emissive: || true
+        emission: |math, surf| ke(surf),
+        is_emissive: || true,
+        is_specular: || false
     }
 }
 
-fn diffuse_material(kd: SurfaceColor) -> Material {
+// Creates a purely diffuse material
+fn make_diffuse_material(kd: SurfaceColor) -> Material {
     Material {
-        eval: |in_dir, surf, out_dir| {
+        eval: |math, in_dir, surf, out_dir| {
             color_mulf(kd(surf), 1.0f / flt_pi)
         },
-        pdf: |in_dir, surf, out_dir| {
-            cosine_hemisphere_pdf(vec3_dot(in_dir, surf.coords().col(2)))
+        pdf: |math, in_dir, surf, out_dir| {
+            cosine_hemisphere_pdf(vec3_dot(in_dir, surf.local().col(2)))
         },
-        sample: |rnd, surf, out_dir| {
-            let (rnd_, in_dir, pdf) = sample_cosine_hemisphere(rnd, surf.coords());
-            let color = color_mulf(kd(surf), positive_cos(in_dir, surf.coords().col(2)) * (1.0f / flt_pi));
-            material_sample(surf, in_dir, pdf, color, false)
+        sample: |math, rnd1, surf, out_dir, _| {
+            let (rnd2, u) = randf(rnd1);
+            let (rnd3, v) = randf(rnd2);
+            let sample = sample_cosine_hemisphere(math, surf.local(), u, v);
+            let color = color_mulf(kd(surf), positive_cos(sample.dir, surf.local().col(2)) * (1.0f / flt_pi));
+            (rnd3, make_material_sample(surf, sample.dir, sample.pdf, color, false))
         },
-        emission: |surf| color(0.0f, 0.0f, 0.0f, 0.0f),
-        is_emissive: || false
+        emission: |math, surf| black,
+        is_emissive: || false,
+        is_specular: || false
+    }
+}
+
+// Creates a perfect mirror material
+fn make_mirror_material(ks: SurfaceColor) -> Material {
+    Material {
+        eval: |math, in_dir, surf, out_dir| black,
+        pdf: |math, in_dir, surf, out_dir| 0.0f,
+        sample: |math, rnd, surf, out_dir, _| {
+            (rnd, make_material_sample(surf, vec3_reflect(out_dir, surf.local().col(2)), 1.0f, ks(surf), false))
+        },
+        emission: |math, surf| black,
+        is_emissive: || false,
+        is_specular: || true
+    }
+}
+
+// Creates a perfect glass material
+fn make_glass_material(n1: SurfaceValue, n2: SurfaceValue, ks: SurfaceColor) -> Material {
+    Material {
+        eval: |math, in_dir, surf, out_dir| black,
+        pdf: |math, in_dir, surf, out_dir| 0.0f,
+        sample: |math, rnd1, surf, out_dir, adjoint| {
+            let (k1, k2) = if surf.entering() { (n1(surf), n2(surf)) } else { (n2(surf), n1(surf)) };
+            let k = k1 / k2;
+            let n = surf.local().col(2);
+            let cos_i = vec3_dot(out_dir, n);
+            let cos2_t = 1.0f - k * k * (1.0f - cos_i * cos_i);
+            let surf_col = ks(surf);
+            let rnd2 = if cos2_t > 0.0f {
+                // Refraction
+                let (rnd2, u) = randf(rnd1);
+                let cos_t = math.sqrtf(cos2_t);
+                let F = fresnel_factor(k1, k2, cos_i, cos_t);
+                if (u > F) {
+                    let t = vec3_sub(vec3_mulf(n, k * cos_i - cos_t), vec3_mulf(out_dir, k));
+                    let adjoint_term = if adjoint { k * k } else { 1.0f };
+                    return(rnd2, make_material_sample(surf, t, 1.0f, color_mulf(surf_col, adjoint_term), true))
+                }
+                rnd2
+            } else { rnd1 };
+            // Reflection
+            (rnd2, make_material_sample(surf, vec3_reflect(out_dir, n), 1.0f, surf_col, false))
+        },
+        emission: |math, surf| black,
+        is_emissive: || false,
+        is_specular: || true
+    }
+}
+
+// Creates a material that interpolates between two other materials
+fn make_mix_material(mat1: Material, mat2: Material, k: SurfaceValue) -> Material {
+    Material {
+        eval: |math, in_dir, surf, out_dir|
+            color_lerp(mat1.eval(math, in_dir, surf, out_dir),
+                       mat2.eval(math, in_dir, surf, out_dir),
+                       k(surf)),
+        pdf: |math, in_dir, surf, out_dir|
+            lerp(mat1.pdf(math, in_dir, surf, out_dir),
+                 mat2.pdf(math, in_dir, surf, out_dir),
+                 k(surf)),
+        sample: |math, rnd1, surf, out_dir, adjoint| {
+            let (rnd2, u) = randf(rnd1);
+            if u < k(surf) {
+                mat1.sample(math, rnd2, surf, out_dir, adjoint)
+            } else {
+                mat2.sample(math, rnd2, surf, out_dir, adjoint)
+            }
+        },
+        emission: |math, surf|
+            color_lerp(mat1.emission(math, surf),
+                       mat2.emission(math, surf),
+                       k(surf)),
+        is_emissive: || mat1.is_emissive() || mat2.is_emissive(),
+        is_specular: || mat1.is_specular() && mat2.is_specular()
     }
 }

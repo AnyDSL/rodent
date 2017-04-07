@@ -1,0 +1,26 @@
+struct Color {
+    r: float,
+    g: float,
+    b: float
+}
+
+fn make_color(r: float, g: float, b: float) -> Color {
+    Color {
+        r: r,
+        g: g,
+        b: b
+    }
+}
+
+fn color_mulf(c: Color, f: float) -> Color {
+    make_color(c.r * f, c.g * f, c.b * f)
+}
+
+fn color_lerp(a: Color, b: Color, t: float) -> Color {
+    make_color((1.0f - t) * a.r + t * b.r,
+               (1.0f - t) * a.g + t * b.g,
+               (1.0f - t) * a.b + t * b.b)
+}
+
+static black = Color { r: 0.0f, g: 0.0f, b: 0.0f };
+static white = Color { r: 1.0f, g: 1.0f, b: 1.0f };

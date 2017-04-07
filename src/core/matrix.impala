@@ -18,84 +18,84 @@ struct Mat4x4 {
     col: [Vec4 * 4]
 }
 
-fn mat2x2(c0: Vec2, c1: Vec2) -> Mat2x2 {
+fn make_mat2x2(c0: Vec2, c1: Vec2) -> Mat2x2 {
     let c = [c0, c1];
     Mat2x2 {
-        row: |i| { [vec2(c(0).x, c(1).x),
-                    vec2(c(0).y, c(1).y)](i) },
+        row: |i| { [make_vec2(c(0).x, c(1).x),
+                    make_vec2(c(0).y, c(1).y)](i) },
         col: c
     }
 }
 
-fn mat3x3(c0: Vec3, c1: Vec3, c2: Vec3) -> Mat3x3 {
+fn make_mat3x3(c0: Vec3, c1: Vec3, c2: Vec3) -> Mat3x3 {
     let c = [c0, c1, c2];
     Mat3x3 {
-        row: |i| { [vec3(c(0).x, c(1).x, c(2).x),
-                    vec3(c(0).y, c(1).y, c(2).y),
-                    vec3(c(0).z, c(1).z, c(2).z)](i) },
+        row: |i| { [make_vec3(c(0).x, c(1).x, c(2).x),
+                    make_vec3(c(0).y, c(1).y, c(2).y),
+                    make_vec3(c(0).z, c(1).z, c(2).z)](i) },
         col: c
     }
 }
 
-fn mat3x4(c0: Vec3, c1: Vec3, c2: Vec3, c3: Vec3) -> Mat3x4 {
+fn make_mat3x4(c0: Vec3, c1: Vec3, c2: Vec3, c3: Vec3) -> Mat3x4 {
     let c = [c0, c1, c2, c3];
     Mat3x4 {
-        row: |i| { [vec4(c(0).x, c(1).x, c(2).x, c(3).x),
-                    vec4(c(0).y, c(1).y, c(2).y, c(3).y),
-                    vec4(c(0).z, c(1).z, c(2).z, c(3).z)](i) },
+        row: |i| { [make_vec4(c(0).x, c(1).x, c(2).x, c(3).x),
+                    make_vec4(c(0).y, c(1).y, c(2).y, c(3).y),
+                    make_vec4(c(0).z, c(1).z, c(2).z, c(3).z)](i) },
         col: c
     }
 }
 
-fn mat4x4(c0: Vec4, c1: Vec4, c2: Vec4, c3: Vec4) -> Mat4x4 {
+fn make_mat4x4(c0: Vec4, c1: Vec4, c2: Vec4, c3: Vec4) -> Mat4x4 {
     let c = [c0, c1, c2, c3];
     Mat4x4 {
-        row: |i| { [vec4(c(0).x, c(1).x, c(2).x, c(3).x),
-                    vec4(c(0).y, c(1).y, c(2).y, c(3).y),
-                    vec4(c(0).z, c(1).z, c(2).z, c(3).z),
-                    vec4(c(0).w, c(1).w, c(2).w, c(3).w)](i) },
+        row: |i| { [make_vec4(c(0).x, c(1).x, c(2).x, c(3).x),
+                    make_vec4(c(0).y, c(1).y, c(2).y, c(3).y),
+                    make_vec4(c(0).z, c(1).z, c(2).z, c(3).z),
+                    make_vec4(c(0).w, c(1).w, c(2).w, c(3).w)](i) },
         col: c
     }
 }
 
 fn mat2x2_mul(m: Mat2x2, v: Vec2) -> Vec2 {
-    vec2(vec2_dot(m.row(0), v),
-         vec2_dot(m.row(1), v))
+    make_vec2(vec2_dot(m.row(0), v),
+              vec2_dot(m.row(1), v))
 }
 
 fn mat3x3_mul(m: Mat3x3, v: Vec3) -> Vec3 {
-    vec3(vec3_dot(m.row(0), v),
-         vec3_dot(m.row(1), v),
-         vec3_dot(m.row(2), v))
+    make_vec3(vec3_dot(m.row(0), v),
+              vec3_dot(m.row(1), v),
+              vec3_dot(m.row(2), v))
 }
 
 fn mat3x4_mul(m: Mat3x4, v: Vec4) -> Vec3 {
-    vec3(vec4_dot(m.row(0), v),
-         vec4_dot(m.row(1), v),
-         vec4_dot(m.row(2), v))
+    make_vec3(vec4_dot(m.row(0), v),
+              vec4_dot(m.row(1), v),
+              vec4_dot(m.row(2), v))
 }
 
 fn mat4x4_mul(m: Mat4x4, v: Vec4) -> Vec4 {
-    vec4(vec4_dot(m.row(0), v),
-         vec4_dot(m.row(1), v),
-         vec4_dot(m.row(2), v),
-         vec4_dot(m.row(3), v))
+    make_vec4(vec4_dot(m.row(0), v),
+              vec4_dot(m.row(1), v),
+              vec4_dot(m.row(2), v),
+              vec4_dot(m.row(3), v))
 }
 
 fn mat2x2_matmul(a: Mat2x2, b: Mat2x2) -> Mat2x2 {
-    mat2x2(mat2x2_mul(a, b.col(0)),
-           mat2x2_mul(a, b.col(1)))
+    make_mat2x2(mat2x2_mul(a, b.col(0)),
+                mat2x2_mul(a, b.col(1)))
 }
 
 fn mat3x3_matmul(a: Mat3x3, b: Mat3x3) -> Mat3x3 {
-    mat3x3(mat3x3_mul(a, b.col(0)),
-           mat3x3_mul(a, b.col(1)),
-           mat3x3_mul(a, b.col(2)))
+    make_mat3x3(mat3x3_mul(a, b.col(0)),
+                mat3x3_mul(a, b.col(1)),
+                mat3x3_mul(a, b.col(2)))
 }
 
 fn mat4x4_matmul(a: Mat4x4, b: Mat4x4) -> Mat4x4 {
-    mat4x4(mat4x4_mul(a, b.col(0)),
-           mat4x4_mul(a, b.col(1)),
-           mat4x4_mul(a, b.col(2)),
-           mat4x4_mul(a, b.col(3)))
+    make_mat4x4(mat4x4_mul(a, b.col(0)),
+                mat4x4_mul(a, b.col(1)),
+                mat4x4_mul(a, b.col(2)),
+                mat4x4_mul(a, b.col(3)))
 }

@@ -1,14 +1,16 @@
 // Structure containing the mapping of the traversal algorithm
 // for a particular device and/or use case.
 struct TraversalMapping {
+    intrinsics:         Intrinsics,
+    ray_box_intrinsics: RayBoxIntrinsics,
+
     iterate_children:   fn (NodeRef, float, Stack, fn (BBox, fn (float, float) -> ()) -> ()) -> (),
     iterate_primitives: fn (NodeRef, float, fn (Primitive) -> ()) -> (),
     iterate_instances:  fn (NodeRef, float, fn (Instance) -> ()) -> (),
+
     hit_callback: fn (TraversalResult, fn () -> !, fn (TraversalResult) -> !) -> !,
     transparency: fn (int, Hit) -> bool,
-    is_leaf: fn (NodeRef) -> bool,
-    intrinsics: Intrinsics,
-    ray_box_intrinsics: RayBoxIntrinsics
+    is_leaf:      fn (NodeRef) -> bool
 }
 
 // Result of a call to the traversal algorithm
@@ -27,33 +29,15 @@ struct Instance {
     traverse: fn (Ray, float, float) -> TraversalResult
 }
 
-struct Ray {
-    org:     fn () -> Vec3,     // Origin of the ray
-    dir:     fn () -> Vec3,     // Direction of the ray
-    inv_dir: fn () -> Vec3,     // Inverse of the direction
-    inv_org: fn () -> Vec3      // Origin multiplied by the inverse of the direction
-}
-
 type RayStream = fn (int) -> (Ray, float, float);
 type HitStream = fn (int, TraversalResult) -> ();
-
-fn make_ray(org: Vec3, dir: Vec3) -> Ray {
-    let inv_dir = vec3(safe_rcp(dir.x), safe_rcp(dir.y), safe_rcp(dir.z));
-    let inv_org = vec3_mul(org, inv_dir);
-    Ray {
-        org: || org,
-        dir: || dir,
-        inv_dir: || inv_dir,
-        inv_org: || inv_org
-    }
-}
 
 fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, tmax: float) -> TraversalResult @{
     let mut inst_id = -1;
     let mut prim_id = -1;
     let mut t = tmax;
-    let mut n = vec3(0.0f, 0.0f, 0.0f);
-    let mut uv = vec2(0.0f, 0.0f);
+    let mut n = make_vec3(0.0f, 0.0f, 0.0f);
+    let mut uv = make_vec2(0.0f, 0.0f);
 
     let make_result = || {
         TraversalResult {
@@ -91,7 +75,7 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, 
                     }
                 }
 
-                @mapping.hit_callback(make_result(), continue, |res| -> ! return(res))
+                @mapping.hit_callback(make_result(), continue, return)
             }
 
             // Process instances, if any

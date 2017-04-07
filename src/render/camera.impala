@@ -1,8 +1,32 @@
+// Opaque camera object
 struct Camera {
-    generate_ray: fn (float, float, RndGen) -> (Ray, RndGen)
+    // Generates a ray for a point on the image plane
+    generate_ray: fn (Intrinsics, float, float) -> Ray,
+    // Projects a 3D point on the image plane
+    project: fn (Intrinsics, Vec3) -> Vec3,
+    // Unprojects a point on the image plane
+    unproject: fn (Intrinsics, Vec3) -> Vec3,
+    // Computes the local camera geometry for a point on the image plane
+    geometry: fn (Intrinsics, float, float) -> CameraGeometry
 }
 
-fn perspective_camera(eye: Vec3, mut dir: Vec3, up: Vec3, fov: float, ratio: float) -> Camera {
+// Local geometry of the camera lens
+struct CameraGeometry {
+    cos_dir: fn () -> float,    // Cosine between the ray direction and the camera normal
+    dist:    fn () -> float,    // Distance between the camera origin and the point on the image plane
+    area:    fn () -> float     // Local pixel area (relative to total lens area)
+}
+
+fn make_camera_geometry(cos_dir: float, dist: float, area: float) -> CameraGeometry {
+    CameraGeometry {
+        cos_dir: || cos_dir,
+        dist: || dist,
+        area: || area
+    }
+}
+
+// Creates a perspective camera
+fn make_perspective_camera(eye: Vec3, mut dir: Vec3, up: Vec3, fov: float, ratio: float) -> Camera {
     dir = vec3_norm(dir);
 
     let w = math.tanf(fov * flt_pi / 360.0f);
@@ -15,12 +39,23 @@ fn perspective_camera(eye: Vec3, mut dir: Vec3, up: Vec3, fov: float, ratio: flo
     let ky = vec3_mulf(up,    h);
 
     Camera {
-        generate_ray: |x, y, gen1| {
-            let (rx, gen2) = gen1();
-            let (ry, gen3) = gen2();
-            let dir = vec3_add(dir, vec3_add(vec3_mulf(kx, x + rx - 0.5f), vec3_mulf(ky, y + ry - 0.5f)));
-            let ray = ray(eye, dir);
-            (ray, gen3)
+        generate_ray: |math, x, y| {
+            let dir = vec3_normalize(math,
+                vec3_add(dir,
+                    vec3_add(vec3_mulf(kx, x - 0.5f),
+                             vec3_mulf(ky, y - 0.5f))));
+            make_ray(eye, dir)
+        },
+        project: |math, p| {
+            let d = vec3_normalize(math, vec3_sub(p, eye));
+            make_vec3(vec3_dot(d, right) / (w * w),
+                    vec3_dot(d, up) / (h * h),
+                    vec3_dot(d, dir))
+        },
+        unproject: |math, p| eye,
+        geometry: |math, x, y| {
+            let d = math.sqrtf(1.0f + x * x * w * w + y * y * h * h);
+            make_camera_geometry(1.0f / d, d, 1.0f / (4.0f * w * h));
         }
     }
 }
