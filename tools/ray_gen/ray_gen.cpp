@@ -60,7 +60,7 @@ private:
 class ShadowRayGen : public RayGen {
 public:
     ShadowRayGen(const float3& light,
-                 const anydsl::Array<RayAoS>& rays,
+                 const anydsl::Array<Ray1AoS>& rays,
                  const std::vector<float>& float_buffer)
         : light_(light)
         , rays_(rays)
@@ -80,7 +80,7 @@ public:
 
 private:
     float3 light_;
-    const anydsl::Array<RayAoS>& rays_;
+    const anydsl::Array<Ray1AoS>& rays_;
     const std::vector<float>& float_buffer_;
 };
 
@@ -178,7 +178,7 @@ int main(int argc, char** argv) {
         auto height = strtol(argv[8], nullptr, 10);
         output = argv[9];
 
-        anydsl::Array<RayAoS> rays;
+        anydsl::Array<Ray1AoS> rays;
         if (!load_rays(ray_file, rays, 0.0f, 1.0f, false)) {
             std::cerr << "Cannot load rays" << std::endl;
             return 1;

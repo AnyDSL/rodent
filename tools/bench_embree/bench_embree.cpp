@@ -57,15 +57,14 @@ static void create_triangles(const obj::File& obj_file, std::vector<Tri>& tris) 
 
 template <typename F>
 double intersect_scene(RTCScene scene,
-                       const anydsl::Array<RayAoS>& rays,
-                       anydsl::Array<HitAoS>& hits,
+                       const anydsl::Array<Ray1AoS>& rays,
+                       anydsl::Array<Hit1AoS>& hits,
                        F f) {
     using namespace std::chrono;
-    auto t0 = high_resolution_clock::now();
+    
+    std::unique_ptr<RTCRay8[]> embree_rays(new RTCRay8[rays.size() / 8]);
     for (int i = 0; i < rays.size(); i += 8) {
-        RTCRay8 ray;
-        int valid[8] = { -1, -1, -1, -1, -1, -1, -1, -1 };
-
+        RTCRay8& ray = embree_rays[i / 8];
         for (int j = 0; j < 8; j++) {
             ray.orgx[j] = rays[i + j].org[0];
             ray.orgy[j] = rays[i + j].org[1];
@@ -81,9 +80,18 @@ double intersect_scene(RTCScene scene,
             ray.mask[j] = 0xFFFFFFFF;
             ray.time[j] = 0.0f;
         }
+    }
 
+    auto t0 = high_resolution_clock::now();
+    for (int i = 0; i < rays.size(); i += 8) {
+        RTCRay8 ray = embree_rays[i / 8];
+        int valid[8] = { -1, -1, -1, -1, -1, -1, -1, -1 };
         f(valid, scene, ray);
+    }
+    auto t1 = high_resolution_clock::now();
 
+    for (int i = 0; i < rays.size(); i += 8) {
+        const RTCRay8& ray = embree_rays[i / 8];
         for (int j = 0; j < 8; j++) {
             hits[i + j].tri_id = ray.primID[j];
             hits[i + j].t = ray.tfar[j];
@@ -91,7 +99,7 @@ double intersect_scene(RTCScene scene,
             hits[i + j].v = ray.v[j];
         }
     }
-    auto t1 = high_resolution_clock::now();
+
     return duration_cast<microseconds>(t1 - t0).count() * 1.0e-3;
 }
 
@@ -116,7 +124,10 @@ void error_handler(const RTCError code, const char* str) {
     exit(1);
 }
 
-void bench(const std::vector<Tri>& tris, const anydsl::Array<RayAoS>& rays, anydsl::Array<HitAoS>& hits, bool any_hit, int iters, int warmup) {
+void bench(const std::vector<Tri>& tris,
+           const anydsl::Array<Ray1AoS>& rays,
+           anydsl::Array<Hit1AoS>& hits,
+           bool any_hit, int iters, int warmup) {
     using namespace embree;
 
     auto device = rtcNewDevice("tri_accel=bvh4.triangle4");
@@ -239,13 +250,15 @@ int main(int argc, char** argv) {
     std::vector<Tri> tris;
     create_triangles(obj, tris);
 
-    anydsl::Array<RayAoS> rays;
+    anydsl::Array<Ray1AoS> rays;
     if (!load_rays(ray_file, rays, tmin, tmax, false)) {
         std::cerr << "Cannot load BVH file" << std::endl;
         return 1;
     }
 
-    anydsl::Array<HitAoS> hits(rays.size());
+    std::cout << rays.size() << " ray(s) in the distribution file." << std::endl;
+
+    anydsl::Array<Hit1AoS> hits(rays.size());
     bench(tris, rays, hits, any_hit, iters, warmup);
 
     if (out_file != "") {

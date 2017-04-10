@@ -29,21 +29,16 @@ struct Instance {
     traverse: fn (Ray, float, float) -> TraversalResult
 }
 
-type RayStream = fn (int) -> (Ray, float, float);
-type HitStream = fn (int, TraversalResult) -> ();
-
 fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, tmax: float) -> TraversalResult @{
     let mut inst_id = -1;
     let mut prim_id = -1;
     let mut t = tmax;
-    let mut n = make_vec3(0.0f, 0.0f, 0.0f);
     let mut uv = make_vec2(0.0f, 0.0f);
 
     let make_result = || {
         TraversalResult {
             hit: Hit {
                 distance:  || t,
-                normal:    || n,
                 uv_coords: || uv
             },
             prim_id: || prim_id,
@@ -70,7 +65,6 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, 
                     if !@mapping.transparency(prim.id(), hit) {
                         prim_id = prim.id();
                         t = hit.distance();
-                        n = hit.normal();
                         uv = hit.uv_coords();
                     }
                 }
@@ -87,7 +81,6 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, 
                     inst_id = inst.id();
                     prim_id = result.prim_id();
                     t = result.hit.distance();
-                    n = result.hit.normal();
                     uv = result.hit.uv_coords();
                 }
             }

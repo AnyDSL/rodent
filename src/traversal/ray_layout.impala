@@ -1,0 +1,50 @@
+struct Ray1AoS {
+    org: [float * 3],
+    tmin: float,
+    dir: [float * 3],
+    tmax: float
+}
+
+struct Ray4SoA {
+    org: [[float * 4] * 3],
+    dir: [[float * 4] * 3],
+    tmin: [float * 4],
+    tmax: [float * 4]
+}
+
+struct Ray8SoA {
+    org: [[float * 8] * 3],
+    dir: [[float * 8] * 3],
+    tmin: [float * 8],
+    tmax: [float * 8]
+}
+
+struct Hit1AoS {
+    tri_id: int,
+    t: float,
+    u: float,
+    v: float
+}
+
+struct Hit4SoA {
+    tri_id: [int * 4],
+    t: [float * 4],
+    u: [float * 4],
+    v: [float * 4]
+}
+
+struct Hit8SoA {
+    tri_id: [int * 8],
+    t: [float * 8],
+    u: [float * 8],
+    v: [float * 8]
+}
+
+type TraversalInput  = fn (int, int) -> (Ray, float, float);
+type TraversalOutput = fn (int, int, TraversalResult) -> ();
+
+struct RayLayout {
+    increment: fn () -> int,
+    input:  TraversalInput,
+    output: TraversalOutput
+}

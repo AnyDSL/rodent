@@ -52,10 +52,68 @@ fn load_bvh4_tri(tri: &Bvh4Tri, i: int) -> Tri @{
              make_vec3(tri. n(0)(i), tri. n(1)(i), tri. n(2)(i)))
 }
 
-fn cpu_traverse_bvh4_packet(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_count: int, any_hit: bool) -> () {
-    for i in $range_step(0, ray_count, 8) {
-        for j in vectorize(8, 32, 0, 8) @{
-            let (ray, tmin, tmax) = rays(i + j);
+fn make_cpu_ray1_layout(rays: &[Ray1AoS], hits: &mut [Hit1AoS]) -> RayLayout {
+    RayLayout {
+        increment: || 1,
+        input: |i, j| {
+            let ray = &rays(i + j);
+            (make_ray(make_vec3(ray.org(0), ray.org(1), ray.org(2)),
+                      make_vec3(ray.dir(0), ray.dir(1), ray.dir(2))),
+                      ray.tmin, ray.tmax)
+        },
+        output: |i, j, result| {
+            let hit = &mut hits(i + j);
+            hit.tri_id = result.prim_id();
+            hit.t = result.hit.distance();
+            hit.u = result.hit.uv_coords().x;
+            hit.v = result.hit.uv_coords().y;
+        }
+    }
+}
+
+fn make_cpu_ray4_layout(rays: &[Ray4SoA], hits: &mut [Hit4SoA]) -> RayLayout {
+    RayLayout {
+        increment: || 4,
+        input: |i, j| {
+            let ray = &rays(i);
+            (make_ray(make_vec3(ray.org(0)(j), ray.org(1)(j), ray.org(2)(j)),
+                      make_vec3(ray.dir(0)(j), ray.dir(1)(j), ray.dir(2)(j))),
+                      ray.tmin(j), ray.tmax(j))
+        },
+        output: |i, j, result| {
+            let hit = &mut hits(i);
+            hit.tri_id(j) = result.prim_id();
+            hit.t(j) = result.hit.distance();
+            hit.u(j) = result.hit.uv_coords().x;
+            hit.v(j) = result.hit.uv_coords().y;
+        }
+    }
+}
+
+fn make_cpu_ray8_layout(rays: &[Ray8SoA], hits: &mut [Hit8SoA]) -> RayLayout {
+    RayLayout {
+        increment: || 8,
+        input: |i, j| {
+            let ray = &rays(i);
+            (make_ray(make_vec3(ray.org(0)(j), ray.org(1)(j), ray.org(2)(j)),
+                      make_vec3(ray.dir(0)(j), ray.dir(1)(j), ray.dir(2)(j))),
+                      ray.tmin(j), ray.tmax(j))
+        },
+        output: |i, j, result| {
+            let hit = &mut hits(i);
+            hit.tri_id(j) = result.prim_id();
+            hit.t(j) = result.hit.distance();
+            hit.u(j) = result.hit.uv_coords().x;
+            hit.v(j) = result.hit.uv_coords().y;
+        }
+    }
+}
+
+fn cpu_traverse_bvh4_packet(bvh: &Bvh4, ray_layout: RayLayout, ray_count: int, any_hit: bool) -> () {
+    let inc = ray_layout.increment();
+    for i in $range(0, ray_count / inc) {
+        for j in vectorize(inc, 32, 0, inc) @{
+            let (ray, tmin, tmax) = ray_layout.input(i, j);
             let stack = make_stack();
 
             stack.push(0, tmin);
@@ -108,98 +166,100 @@ fn cpu_traverse_bvh4_packet(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_co
                 ray_box_intrinsics: make_ray_box_intrinsics_avx2()
             };
 
-            hits(i + j, @traverse_bvh(mapping, stack, ray, tmin, tmax));
+            ray_layout.output(i, j, @traverse_bvh(mapping, stack, ray, tmin, tmax));
         }
     }
 }
 
-fn cpu_traverse_bvh4_single(bvh: &Bvh4, rays: RayStream, hits: HitStream, ray_count: int, any_hit: bool) -> () {
-    for i in range(0, ray_count) {
-        let (ray, tmin, tmax) = rays(i);
+fn cpu_traverse_bvh4_single(bvh: &Bvh4, ray_layout: RayLayout, ray_count: int, any_hit: bool) -> () {
+    let inc = ray_layout.increment();
+    for i in $range_step(0, ray_count, inc) @{
+        for j in range(0, inc) {
+            let (ray, tmin, tmax) = ray_layout.input(i, j);
+            for k in vectorize(4, 16, 0, 4) {
+                let stack = make_stack();
 
-        for j in vectorize(4, 16, 0, 4) {
-            let stack = make_stack();
+                stack.push(0, tmin);
 
-            stack.push(0, tmin);
+                let mapping = TraversalMapping {
+                    iterate_children: |node_ref, tmax, stack, body, exit| -> ! {
+                        stack.pop();
 
-            let mapping = TraversalMapping {
-                iterate_children: |node_ref, tmax, stack, body, exit| -> ! {
-                    stack.pop();
+                        if node_ref.tmin > tmax { exit() }
 
-                    if node_ref.tmin > tmax { exit() }
+                        let node = &bvh.nodes(node_ref.node);
+                        let bbox = make_bbox(make_vec3(node.min(0)(k), node.min(1)(k), node.min(2)(k)),
+                                             make_vec3(node.max(0)(k), node.max(1)(k), node.max(2)(k)));
 
-                    let node = &bvh.nodes(node_ref.node);
-                    let bbox = make_bbox(make_vec3(node.min(0)(j), node.min(1)(j), node.min(2)(j)),
-                                         make_vec3(node.max(0)(j), node.max(1)(j), node.max(2)(j)));
+                        let mut child = -1;
+                        let mut tentry : float;
+                        body(bbox, |t, _| {
+                            tentry = t;
+                            child = node.child(j);
+                        });
 
-                    let mut child = -1;
-                    let mut tentry : float;
-                    body(bbox, |t, _| {
-                        tentry = t;
-                        child = node.child(j);
-                    });
-
-                    // Push intersected nodes on the stack
-                    let mut count = 0;
-                    for k in @range(0, 4) {
-                        let c = extracti(child, k);
-                        if c >= 0 {
-                            stack.push(c, extractf(tentry, k));
-                            count++;
-                        }
-                    }
-
-                    // Sort the nodes on the stack, based on their distance
-                    if count < 2 { exit() }
-                    if count == 2 {
-                        @stack.sort_n(2);
-                    } else if count == 3 {
-                        @stack.sort_n(3);
-                    } else if count == 4 {
-                        @stack.sort_n(4);
-                    }
-                },
-                iterate_primitives: |leaf_ref, tmax, body, exit| -> ! {
-                    if leaf_ref.tmin > tmax { exit() }
-
-                    let mut tri_id = !leaf_ref.node;
-                    while true {
-                        let tri = &bvh.tris(tri_id++);
-                        /*let closest_intr = |math, ray, tmin, tmax, intr| {
-                            let mut found = false;
-                            let mut t  = flt_max;
-                            let mut n  = vec3(0.0f, 0.0f, 0.0f);
-                            let mut uv = vec2(0.0f, 0.0f);
-
-                            make_ray_tri_intersector(load_bvh4_tri(tri, j))
-                                (math, ray, tmin, tmax, |hit| {
-                                    n  = hit.normal();
-                                    uv = hit.uv();
-                                    t  = hit.distance();
-                                    found = true;
-                                });
-
-                            if any(found) {
-                                let mut id = 0;
-                                if extractf(t, 1) < extractf(t, 0) { id = 1; }
-                                if extractf(t, 2) < extractf(t, 3) { id = 2; }
+                        // Push intersected nodes on the stack
+                        let mut count = 0;
+                        for lane in @range(0, 4) {
+                            let c = extracti(child, lane);
+                            if c >= 0 {
+                                stack.push(c, extractf(tentry, lane));
+                                count++;
                             }
-                        };*/
-                        // TODO: Select the closest ray-triangle intersection within the intersector
-                        @body(make_primitive(make_ray_tri_intersector(load_bvh4_tri(tri, j)), tri.id(j) & 0x7FFFFFFF));
-                        if (tri.id(3) & bitcast[i32](0x80000000u)) != 0 { break() }
-                    }
-                },
-                iterate_instances: |_, _, _| {},
-                hit_callback: |hit, continue, terminate| -> !
-                    if any_hit && hit.prim_id() >= 0 { terminate(hit) } else { continue() },
-                transparency: |_, _| false,
-                is_leaf: |node_ref| node_ref.node < 0,
-                intrinsics: cpu_intrinsics,
-                ray_box_intrinsics: make_ray_box_intrinsics_avx2()
-            };
+                        }
 
-            hits(i, @traverse_bvh(mapping, stack, ray, tmin, tmax));
+                        // Sort the nodes on the stack, based on their distance
+                        if count < 2 { exit() }
+                        if count == 2 {
+                            @stack.sort_n(2);
+                        } else if count == 3 {
+                            @stack.sort_n(3);
+                        } else if count == 4 {
+                            @stack.sort_n(4);
+                        }
+                    },
+                    iterate_primitives: |leaf_ref, tmax, body, exit| -> ! {
+                        if leaf_ref.tmin > tmax { exit() }
+
+                        let mut tri_id = !leaf_ref.node;
+                        while true {
+                            let tri = &bvh.tris(tri_id++);
+                            /*let closest_intr = |math, ray, tmin, tmax, intr| {
+                                let mut found = false;
+                                let mut t  = flt_max;
+                                let mut n  = vec3(0.0f, 0.0f, 0.0f);
+                                let mut uv = vec2(0.0f, 0.0f);
+
+                                make_ray_tri_intersector(load_bvh4_tri(tri, j))
+                                    (math, ray, tmin, tmax, |hit| {
+                                        n  = hit.normal();
+                                        uv = hit.uv();
+                                        t  = hit.distance();
+                                        found = true;
+                                    });
+
+                                if any(found) {
+                                    let mut id = 0;
+                                    if extractf(t, 1) < extractf(t, 0) { id = 1; }
+                                    if extractf(t, 2) < extractf(t, 3) { id = 2; }
+                                }
+                            };*/
+                            // TODO: Select the closest ray-triangle intersection within the intersector
+                            @body(make_primitive(make_ray_tri_intersector(load_bvh4_tri(tri, k)), tri.id(k) & 0x7FFFFFFF));
+                            if (tri.id(3) & bitcast[i32](0x80000000u)) != 0 { break() }
+                        }
+                    },
+                    iterate_instances: |_, _, _| {},
+                    hit_callback: |hit, continue, terminate| -> !
+                        if any_hit && hit.prim_id() >= 0 { terminate(hit) } else { continue() },
+                    transparency: |_, _| false,
+                    is_leaf: |node_ref| node_ref.node < 0,
+                    intrinsics: cpu_intrinsics,
+                    ray_box_intrinsics: make_ray_box_intrinsics_avx2()
+                };
+
+                ray_layout.output(i, j, @traverse_bvh(mapping, stack, ray, tmin, tmax));
+            }
         }
     }
 }

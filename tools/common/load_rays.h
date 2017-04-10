@@ -2,13 +2,50 @@
 #define LOAD_RAYS_H
 
 #include <fstream>
-
 #include <anydsl_runtime.hpp>
 
-#include "traversal.h"
+template <typename Ray>
+struct RayTraits {};
 
+struct Ray1AoS;
+struct Hit1AoS;
+template <>
+struct RayTraits<Ray1AoS> {
+    enum { RayPerPacket = 1 };
+    typedef Hit1AoS HitType;
+    static void write_ray(const float* org_dir, float tmin, float tmax, int j, Ray1AoS& ray) {
+        ray.org[0] = org_dir[0];
+        ray.org[1] = org_dir[1];
+        ray.org[2] = org_dir[2];
+        ray.dir[0] = org_dir[3];
+        ray.dir[1] = org_dir[4];
+        ray.dir[2] = org_dir[5];
+        ray.tmin = tmin;
+        ray.tmax = tmax;
+    }
+};
+
+struct Ray8SoA;
+struct Hit8SoA;
+template <>
+struct RayTraits<Ray8SoA> {
+    enum { RayPerPacket = 8 };
+    typedef Hit8SoA HitType;
+    static void write_ray(const float* org_dir, float tmin, float tmax, int j, Ray8SoA& ray) {
+        ray.org[0][j] = org_dir[0];
+        ray.org[1][j] = org_dir[1];
+        ray.org[2][j] = org_dir[2];
+        ray.dir[0][j] = org_dir[3];
+        ray.dir[1][j] = org_dir[4];
+        ray.dir[2][j] = org_dir[5];
+        ray.tmin[j] = tmin;
+        ray.tmax[j] = tmax;
+    }
+};
+
+template <typename Ray>
 inline bool load_rays(const std::string& filename,
-                      anydsl::Array<RayAoS>& rays,
+                      anydsl::Array<Ray>& rays,
                       float tmin, float tmax,
                       bool use_gpu) {
     std::ifstream in(filename, std::ifstream::binary);
@@ -20,22 +57,20 @@ inline bool load_rays(const std::string& filename,
 
     if (size % (sizeof(float) * 6) != 0) return false;
 
-    auto host_rays = std::move(anydsl::Array<RayAoS>(size / (sizeof(float) * 6)));
-    for (size_t i = 0; i < host_rays.size(); i++) {
-        float ray[6];
-        in.read((char*)ray, sizeof(float) * 6);
-        host_rays[i].org[0] = ray[0];
-        host_rays[i].org[1] = ray[1];
-        host_rays[i].org[2] = ray[2];
-        host_rays[i].dir[0] = ray[3];
-        host_rays[i].dir[1] = ray[4];
-        host_rays[i].dir[2] = ray[5];
-        host_rays[i].tmin = tmin;
-        host_rays[i].tmax = tmax;
+    auto rays_per_packet = RayTraits<Ray>::RayPerPacket;
+    auto ray_count = size / (rays_per_packet * sizeof(float) * 6);
+    auto host_rays = std::move(anydsl::Array<Ray>(ray_count));
+
+    for (size_t i = 0; i < ray_count; i++) {
+        for (int j = 0; j < rays_per_packet; j++) {
+            float org_dir[6];
+            in.read((char*)org_dir, sizeof(float) * 6);
+            RayTraits<Ray>::write_ray(org_dir, tmin, tmax, j, host_rays[i]);
+        }
     }
 
     if (use_gpu) {
-        rays = std::move(anydsl::Array<RayAoS>(anydsl::Platform::Cuda, anydsl::Device(0), host_rays.size()));
+        rays = std::move(anydsl::Array<Ray>(anydsl::Platform::Cuda, anydsl::Device(0), ray_count));
         anydsl::copy(host_rays, rays);
     } else {
         rays = std::move(host_rays);
