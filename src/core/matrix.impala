@@ -99,3 +99,13 @@ fn mat4x4_matmul(a: Mat4x4, b: Mat4x4) -> Mat4x4 {
                 mat4x4_mul(a, b.col(2)),
                 mat4x4_mul(a, b.col(3)))
 }
+
+fn make_local_coords(math: Intrinsics, n: Vec3) -> Mat3x3 {
+    let t = if n.x != 0.0f || n.y != 0.0f {
+        vec3_normalize(math, vec3_cross(n, make_vec3(0.0f, 0.0f, 1.0f)))
+    } else {
+        make_vec3(1.0f, 0.0f, 0.0f)
+    };
+    let bt = vec3_cross(n, t);
+    make_mat3x3(t, bt, n)
+}

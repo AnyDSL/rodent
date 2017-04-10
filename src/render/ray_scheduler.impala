@@ -1,0 +1,56 @@
+type PrimaryRayShader = fn (Ray, State, Hit) -> ();
+type ShadowRayShader  = fn (Ray, State, Hit) -> ();
+
+struct RayScheduler {
+    run_iteration: fn (RayGenerator, PrimaryRayShader, ShadowRayShader)
+}
+
+struct QueueArray {
+    find_tagged: fn (QueueTag, QueueTag, fn (Queue) -> ()) -> bool,
+    queue: fn (int) -> Queue
+}
+
+// Queue tags
+type QueueTag = i32;
+static QUEUE_EMPTY = 0;
+static QUEUE_READY_FOR_TRAVERSAL = 1;
+static QUEUE_READY_FOR_PRIMARY = 2;
+static QUEUE_READY_FOR_SHADOW = 3;
+
+fn make_queue_scheduler(dev: Device, n_p_queues: int, n_s_queues: int) {
+    let p_queues = dev.allocate_queues(n_p_queues);
+    let s_queues = dev.allocate_queues(n_s_queues);
+    let task_manager = dev.task_manager();
+
+    RayScheduler {
+        run_iteration: |scene, ray_gen, primary, shadow| {
+            while !ray_gen.is_empty() && !task_manager.is_empty() {
+                let mut idle = true;
+
+                p_queues.find_tagged(QUEUE_READY_FOR_TRAVERSAL,
+                                     QUEUE_READY_FOR_PRIMARY,
+                                     |q| { idle = false; task.enqueue(|| q.intersect(false)) });
+                s_queues.find_tagged(QUEUE_READY_FOR_TRAVERSAL,
+                                     QUEUE_READY_FOR_SHADOW,
+                                     |q| { idle = false; task.enqueue(|| q.intersect(true)) });
+                p_queues.find_tagged(QUEUE_READY_FOR_PRIMARY,
+                                     QUEUE_EMPTY,
+                                     |q| { idle = false; task.enqueue(|| q.process(primary)) });
+                s_queues.find_tagged(QUEUE_READY_FOR_SHADOW,
+                                     QUEUE_EMPTY,
+                                     |q| { idle = false; task.enqueue(|| q.process(shadow)) });
+
+                // Generate rays for empty queues
+                while !ray_gen.is_empty() {
+                    if !p_queues.find_tagged(QUEUE_EMPTY,
+                                             QUEUE_READY_FOR_TRAVERSAL,
+                                             |q| { idle = false; ray_gen.fill_queue(p) }) {
+                        break()
+                    }
+                }
+
+                if idle { task_manager.wait_one() }
+            }
+        }
+    }
+}

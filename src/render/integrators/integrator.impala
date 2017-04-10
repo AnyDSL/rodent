@@ -1,0 +1,43 @@
+struct Integrator {
+    render: fn () -> (),
+    preprocess: fn () -> (),
+    reset: fn () -> ()
+}
+
+struct State {
+    rnd:     RndState,
+    mis:     float,
+    contrib: Color
+}
+
+fn make_ray_state(rnd: RndState, mis: float, contrib: Color) -> RayState {
+    RayState {
+        rnd: rnd,
+        mis: mis,
+        contrib: contrib
+    }
+}
+
+fn path_tracing(scene: Scene, sched: QueueScheduler, film: Film) -> Integrator {
+    let mut cur_sample = 0;
+
+    fn process_primary(ray: Ray, state: State, hit: Hit) {
+        // TODO: Process primary rays
+    }
+
+    fn process_shadow(ray: Ray, state: State, hit: Hit) {
+        // TODO: Process shadow rays
+    }
+
+    let ray_gen = make_camera_ray_gen(math,
+        |rnd| make_ray_state(rnd, 0, black),
+        scene.camera,
+        scene.viewport.width(),
+        scene.viewport.height());
+
+    Integrator {
+        render: || sched.run_iteration(ray_gen, process_primary, process_shadow),
+        preprocess: || {},
+        reset: || cur_sample = 0
+    }
+}

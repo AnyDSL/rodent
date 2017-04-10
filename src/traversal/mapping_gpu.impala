@@ -73,7 +73,7 @@ fn gpu_traverse_bvh2(bvh: &Bvh2, ray_layout: RayLayout, ray_count: int, any_hit:
 
         let (ray, tmin, tmax) = ray_layout.input(i, j);
 
-        let stack = make_stack();
+        let stack = allocate_stack();
         stack.push(0, 0.0f);
 
         let mapping = TraversalMapping {

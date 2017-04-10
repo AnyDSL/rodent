@@ -13,7 +13,7 @@ struct Stack {
     is_empty:   fn () -> bool
 }
 
-fn make_stack() -> Stack {
+fn allocate_stack() -> Stack {
     let sentinel = 0x7FFFFFFF;
     let mut nodes : [int * 64];
     let mut tmins : [float * 64];

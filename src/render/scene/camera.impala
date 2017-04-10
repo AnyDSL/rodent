@@ -1,13 +1,13 @@
 // Opaque camera object
 struct Camera {
     // Generates a ray for a point on the image plane
-    generate_ray: fn (Intrinsics, float, float) -> Ray,
+    generate_ray: fn (Device, float, float) -> Ray,
     // Projects a 3D point on the image plane
-    project: fn (Intrinsics, Vec3) -> Vec3,
+    project: fn (Device, Vec3) -> Vec3,
     // Unprojects a point on the image plane
-    unproject: fn (Intrinsics, Vec3) -> Vec3,
+    unproject: fn (Device, Vec3) -> Vec3,
     // Computes the local camera geometry for a point on the image plane
-    geometry: fn (Intrinsics, float, float) -> CameraGeometry
+    geometry: fn (Device, float, float) -> CameraGeometry
 }
 
 // Local geometry of the camera lens
@@ -39,22 +39,22 @@ fn make_perspective_camera(eye: Vec3, mut dir: Vec3, up: Vec3, fov: float, ratio
     let ky = vec3_mulf(up,    h);
 
     Camera {
-        generate_ray: |math, x, y| {
-            let dir = vec3_normalize(math,
+        generate_ray: |dev, x, y| {
+            let dir = vec3_normalize(dev.math,
                 vec3_add(dir,
                     vec3_add(vec3_mulf(kx, x - 0.5f),
                              vec3_mulf(ky, y - 0.5f))));
             make_ray(eye, dir)
         },
-        project: |math, p| {
-            let d = vec3_normalize(math, vec3_sub(p, eye));
+        project: |dev, p| {
+            let d = vec3_normalize(dev.math, vec3_sub(p, eye));
             make_vec3(vec3_dot(d, right) / (w * w),
                     vec3_dot(d, up) / (h * h),
                     vec3_dot(d, dir))
         },
-        unproject: |math, p| eye,
-        geometry: |math, x, y| {
-            let d = math.sqrtf(1.0f + x * x * w * w + y * y * h * h);
+        unproject: |dev, p| eye,
+        geometry: |dev, x, y| {
+            let d = dev.math.sqrtf(1.0f + x * x * w * w + y * y * h * h);
             make_camera_geometry(1.0f / d, d, 1.0f / (4.0f * w * h));
         }
     }

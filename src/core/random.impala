@@ -1,14 +1,18 @@
 // Change these variables to use another random number generator
 type RndState = u64;
 type RndGen = fn (RndState) -> (RndState, float);
-static randf = mwc64x;
+static randi = mwc64x;
+fn randf(rnd1: RndState) -> (RndState, float) {
+    let (rnd2, i) = randi(rnd1);
+    (rnd2, (i as float) / (0xFFFFFFFFu32 as float))
+}
 
 // MWC64X: http://cas.ee.ic.ac.uk/people/dt10/research/rngs-gpu-mwc64x.html
 fn mwc64x(seed: u64) -> (u64, float) {
     let c = seed >> 32u64;
     let x = seed & 0xFFFFFFFFu64;
     let new_seed = x * 4294883355u64 + c;
-    (new_seed, ((x^c) as float) / (0xFFFFFFFFu32 as float))
+    (new_seed, x^c)
 }
 
 // Result of sampling a direction
@@ -60,4 +64,28 @@ fn sample_cosine_power_hemisphere(math: Intrinsics, m: Mat3x3, k: float, u: floa
     let s = math.sqrtf(1.0f - c * c);
     let phi = 2.0f * flt_pi * u;
     make_dir_sample(math, m, c, s, phi, cosine_power_hemisphere_pdf(math, c, k))
+}
+
+// Initializer for Bernstein's hash function
+fn bernstein_init() -> u32 { 5381u32 }
+
+// Bernstein's hash function
+fn bernstein_hash(h: u32, d: u32) -> u32 {
+    h = (h * 33u32) ^ ( d           & 0xFFu32);
+    h = (h * 33u32) ^ ((d >>  8u32) & 0xFFu32);
+    h = (h * 33u32) ^ ((d >> 16u32) & 0xFFu32);
+    h = (h * 33u32) ^ ((d >> 24u32) & 0xFFu32);
+    h
+}
+
+// Initializer for the FNV hash function
+fn fnv_init() { 0x811C9DC5u32 }
+
+// FNV hash function
+fn fnv_hash(h: u32, d: u32) -> u32 {
+    h = (h * 16777619u32) ^ ( d           & 0xFFu32);
+    h = (h * 16777619u32) ^ ((d >>  8u32) & 0xFFu32);
+    h = (h * 16777619u32) ^ ((d >> 16u32) & 0xFFu32);
+    h = (h * 16777619u32) ^ ((d >> 24u32) & 0xFFu32);
+    h
 }

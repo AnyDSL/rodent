@@ -1,0 +1,50 @@
+// A ray generator object, used to fill a ray queue
+struct RayGenerator {
+    // Fills the given queue with new rays, until either:
+    // - the queue capacity is reached, or 
+    // - the generator is empty
+    fill_queue: fn (RayQueue) -> (),
+    // Returns true if there are no more rays to generate
+    is_empty: fn () -> bool
+}
+
+// A ray queue that sits on a device
+struct RayQueue {
+    // Fills the queue with the given stream of rays and associated states
+    fill: fn (int, fn (int) -> (Ray, State)) -> (),
+    // Intersects the rays in the queue with the given scene
+    traverse: fn (bool) -> (),
+    // Process the data present in the queue
+    process: fn (fn (Ray, State, Hit) -> ()) -> (),
+    // Returns the capacity of the queue, in number of rays
+    capacity: fn () -> int,
+    // Returns the size of the queue, in number of rays (must be less than capacity())
+    size: fn () -> int
+}
+
+fn make_camera_ray_gen(math: Intrinsics, init_state: fn (RndState) -> State, cam: Camera, width: int, height: int, spp: int) -> RayGenerator {
+    let mut cur = 0;
+    let mut total = width * height * spp;
+    RayGenerator {
+        fill_queue: |q| {
+            let n = math.min(total, q.capacity() - q.size());
+            q.fill(n, |i| {
+                let j = i + cur;
+                let x = j % width;
+                let y = (j / width) % height;
+                // Use FNV and the current pixel index to derive a random number generator state
+                let rnd1 = fnv_hash(fnv_init(), j as u32) as RndState;
+                let (rnd2, u) = randf(rnd1);
+                let (rnd3, v) = randf(rnd2);
+                let state = init_state(rnd3);
+                let camera.generate_ray(math,
+                    ((x as float) + (0.5f + 0.5f * u)) / (width  as float),
+                    ((y as float) + (0.5f + 0.5f * v)) / (height as float));
+                (ray, state)
+            });
+            cur += n;
+            total -= n;
+        },
+        is_empty: || { total == 0 }
+    }
+}

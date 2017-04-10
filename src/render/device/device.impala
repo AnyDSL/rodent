@@ -1,0 +1,8 @@
+// Rendering device
+struct Device {
+    accelerator:       fn () -> Accelerator,        // The accelerator on which computations should run
+    intrinsics:        fn () -> Intrinsics,         // The set of intrinsics to use
+    atomic_intrinsics: fn () -> AtomicIntrinsics,   // The set of atomic operations to use
+    traversal:         fn (&[u8]) -> Traversal      // The traversal algorithm to use
+}
+

@@ -1,0 +1,23 @@
+// Compile-time scene data
+struct Scene {
+    num_materials:  int,
+    num_lights:     int,
+    num_geometries: int,
+
+    materials: fn (int) -> Material,
+    lights:    fn (int) -> Light,
+    geometry:  fn (int) -> Geometry,
+    texture:   fn (int) -> Texture,
+    camera:    fn () -> Camera,
+}
+
+struct Texture {
+    name:   &[u8],      // File name
+    width:  int,        // Texture width
+    height: int         // Texture height
+}
+
+struct Geometry {
+    name:   &[u8],      // File name
+    matrix: Mat3x4      // Affine transformation
+}
