@@ -50,11 +50,11 @@ fn make_gpu_ray_layout(rays: &[Ray1AoS], hits: &mut[Hit1AoS]) -> RayLayout {
                       make_vec3(ray1(0), ray1(1), ray1(2))),
              ray0(3), ray1(3))
         },
-        output: |i, j, result| {
-            let hit = result.hit;
-            let uv = hit.uv_coords();
+        output: |i, j, hit| {
+            let intr = hit.intr;
+            let uv = intr.uv_coords();
             *(&hits(i + j) as &mut simd[float * 4]) =
-                simd[bitcast[float](result.prim_id()), hit.distance(), uv.x, uv.y];
+                simd[bitcast[float](hit.prim_id()), intr.distance(), uv.x, uv.y];
         }
     }
 }

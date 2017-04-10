@@ -5,7 +5,7 @@ struct Ray {
     inv_org: fn () -> Vec3      // Origin multiplied by the inverse of the direction
 }
 
-struct Hit {
+struct Intersection {
     distance:  fn () -> float,  // Distance to the intersection point
     uv_coords: fn () -> Vec2    // Surface coordinates
 }
@@ -39,7 +39,7 @@ struct RayBoxIntrinsics {
     fminf:    fn (float, float) -> float
 }
 
-type Intersector = fn (Intrinsics, Ray, float, float, fn (Hit) -> ()) -> ();
+type Intersector = fn (Intrinsics, Ray, float, float, fn (Intersection) -> ()) -> ();
 
 // Constructs a set of intrinsics from min and max functions.
 // May not be the optimal intrinsics if the hardware provides a combined min/max instruction.
@@ -127,7 +127,7 @@ fn intersect_ray_box(math: RayBoxIntrinsics, ray: Ray, bbox: BBox, tmin: float, 
 fn make_ray_tri_intersector(tri: Tri) -> Intersector {
     |math, ray, tmin, tmax, intr| {
         intersect_ray_tri(math, ray, tri, tmin, tmax, |t, u, v| {
-            intr(Hit {
+            intr(Intersection {
                 distance:  || t,
                 uv_coords: || make_vec2(u, v)
             })

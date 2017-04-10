@@ -64,9 +64,9 @@ fn make_cpu_ray1_layout(rays: &[Ray1AoS], hits: &mut [Hit1AoS]) -> RayLayout {
         output: |i, j, result| {
             let hit = &mut hits(i + j);
             hit.tri_id = result.prim_id();
-            hit.t = result.hit.distance();
-            hit.u = result.hit.uv_coords().x;
-            hit.v = result.hit.uv_coords().y;
+            hit.t = result.intr.distance();
+            hit.u = result.intr.uv_coords().x;
+            hit.v = result.intr.uv_coords().y;
         }
     }
 }
@@ -83,9 +83,9 @@ fn make_cpu_ray4_layout(rays: &[Ray4SoA], hits: &mut [Hit4SoA]) -> RayLayout {
         output: |i, j, result| {
             let hit = &mut hits(i);
             hit.tri_id(j) = result.prim_id();
-            hit.t(j) = result.hit.distance();
-            hit.u(j) = result.hit.uv_coords().x;
-            hit.v(j) = result.hit.uv_coords().y;
+            hit.t(j) = result.intr.distance();
+            hit.u(j) = result.intr.uv_coords().x;
+            hit.v(j) = result.intr.uv_coords().y;
         }
     }
 }
@@ -102,9 +102,9 @@ fn make_cpu_ray8_layout(rays: &[Ray8SoA], hits: &mut [Hit8SoA]) -> RayLayout {
         output: |i, j, result| {
             let hit = &mut hits(i);
             hit.tri_id(j) = result.prim_id();
-            hit.t(j) = result.hit.distance();
-            hit.u(j) = result.hit.uv_coords().x;
-            hit.v(j) = result.hit.uv_coords().y;
+            hit.t(j) = result.intr.distance();
+            hit.u(j) = result.intr.uv_coords().x;
+            hit.v(j) = result.intr.uv_coords().y;
         }
     }
 }

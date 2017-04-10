@@ -41,7 +41,7 @@ struct Hit8SoA {
 }
 
 type TraversalInput  = fn (int, int) -> (Ray, float, float);
-type TraversalOutput = fn (int, int, TraversalResult) -> ();
+type TraversalOutput = fn (int, int, Hit) -> ();
 
 struct RayLayout {
     increment: fn () -> int,

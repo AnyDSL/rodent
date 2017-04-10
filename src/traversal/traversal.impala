@@ -8,14 +8,14 @@ struct TraversalMapping {
     iterate_primitives: fn (NodeRef, float, fn (Primitive) -> ()) -> (),
     iterate_instances:  fn (NodeRef, float, fn (Instance) -> ()) -> (),
 
-    hit_callback: fn (TraversalResult, fn () -> !, fn (TraversalResult) -> !) -> !,
-    transparency: fn (int, Hit) -> bool,
+    hit_callback: fn (Hit, fn () -> !, fn (Hit) -> !) -> !,
+    transparency: fn (int, Intersection) -> bool,
     is_leaf:      fn (NodeRef) -> bool
 }
 
 // Result of a call to the traversal algorithm
-struct TraversalResult {
-    hit: Hit,                   // Hit information
+struct Hit {
+    intr: Intersection,         // Intersection information
     prim_id: fn () -> int,      // Primitive identifier, or -1 (no intersection found)
     inst_id: fn () -> int       // Instance identifier, or -1 (no instance found)
 }
@@ -26,18 +26,18 @@ struct Instance {
     inverse:  fn () -> Mat3x4,  // Inverse matrix
 
     // Associated traversal algorithm for the object
-    traverse: fn (Ray, float, float) -> TraversalResult
+    traverse: fn (Ray, float, float) -> Hit
 }
 
-fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, tmax: float) -> TraversalResult @{
+fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, tmax: float) -> Hit @{
     let mut inst_id = -1;
     let mut prim_id = -1;
     let mut t = tmax;
     let mut uv = make_vec2(0.0f, 0.0f);
 
-    let make_result = || {
-        TraversalResult {
-            hit: Hit {
+    let make_hit = || {
+        Hit {
+            intr: Intersection {
                 distance:  || t,
                 uv_coords: || uv
             },
@@ -61,27 +61,27 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, 
 
             // Process primitives, if any
             for prim in @mapping.iterate_primitives(leaf, t) {
-                with hit in prim.intersect(mapping.intrinsics, ray, tmin, t) {
-                    if !@mapping.transparency(prim.id(), hit) {
+                with intr in prim.intersect(mapping.intrinsics, ray, tmin, t) {
+                    if !@mapping.transparency(prim.id(), intr) {
                         prim_id = prim.id();
-                        t = hit.distance();
-                        uv = hit.uv_coords();
+                        t  = intr.distance();
+                        uv = intr.uv_coords();
                     }
                 }
 
-                @mapping.hit_callback(make_result(), continue, return)
+                @mapping.hit_callback(make_hit(), continue, return)
             }
 
             // Process instances, if any
             for inst in @mapping.iterate_instances(leaf, t) {
                 let new_dir = mat3x4_mul(inst.inverse(), vec3_to_4(ray.dir(), 0.0f));
                 let new_org = mat3x4_mul(inst.inverse(), vec3_to_4(ray.org(), 0.0f));
-                let result = inst.traverse(make_ray(new_org, new_dir), tmin, t);
-                if result.prim_id() >= 0 @{
+                let hit = inst.traverse(make_ray(new_org, new_dir), tmin, t);
+                if hit.prim_id() >= 0 @{
                     inst_id = inst.id();
-                    prim_id = result.prim_id();
-                    t = result.hit.distance();
-                    uv = result.hit.uv_coords();
+                    prim_id = hit.prim_id();
+                    t  = hit.intr.distance();
+                    uv = hit.intr.uv_coords();
                 }
             }
 
@@ -89,5 +89,5 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, 
         }
     }
 
-    return(make_result())
+    return(make_hit())
 }
