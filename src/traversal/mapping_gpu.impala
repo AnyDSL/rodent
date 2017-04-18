@@ -52,9 +52,8 @@ fn make_gpu_ray_layout(rays: &[Ray1AoS], hits: &mut[Hit1AoS]) -> RayLayout {
         },
         output: |i, j, hit| {
             let intr = hit.intr;
-            let uv = intr.uv_coords();
             *(&hits(i + j) as &mut simd[float * 4]) =
-                simd[bitcast[float](hit.prim_id()), intr.distance(), uv.x, uv.y];
+                simd[bitcast[float](hit.prim_id), intr.distance, intr.uv_coords.x, intr.uv_coords.y];
         }
     }
 }
@@ -135,7 +134,7 @@ fn gpu_traverse_bvh2(bvh: &Bvh2, ray_layout: RayLayout, ray_count: int, any_hit:
             },
             iterate_instances: |_, _, _| {},
             hit_callback: |hit, continue, terminate| -> !
-                if any_hit && hit.prim_id() >= 0 { terminate(hit) } else { continue() },
+                if any_hit && hit.prim_id >= 0 { terminate(hit) } else { continue() },
             transparency: |_, _| false,
             is_leaf: |node_ref| node_ref.node < 0,
             intrinsics: nvvm_intrinsics,

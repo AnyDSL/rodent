@@ -1,18 +1,17 @@
 // Change these variables to use another random number generator
 type RndState = u64;
-type RndGen = fn (RndState) -> (RndState, float);
 static randi = mwc64x;
-fn randf(rnd1: RndState) -> (RndState, float) {
-    let (rnd2, i) = randi(rnd1);
-    (rnd2, (i as float) / (0xFFFFFFFFu32 as float))
+fn randf(rnd: &mut RndState) -> float {
+    let i = randi(rnd);
+    (i as float) / (0xFFFFFFFFu32 as float)
 }
 
 // MWC64X: http://cas.ee.ic.ac.uk/people/dt10/research/rngs-gpu-mwc64x.html
-fn mwc64x(seed: u64) -> (u64, float) {
+fn mwc64x(seed: &mut u64) -> float {
     let c = seed >> 32u64;
     let x = seed & 0xFFFFFFFFu64;
-    let new_seed = x * 4294883355u64 + c;
-    (new_seed, x^c)
+    *seed = x * 4294883355u64 + c;
+    x^c
 }
 
 // Result of sampling a direction

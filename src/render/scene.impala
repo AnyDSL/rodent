@@ -1,0 +1,30 @@
+// Compile-time scene data
+struct Scene {
+    num_materials:  int,
+    num_lights:     int,
+
+    materials: fn (Device, SurfaceElement, int) -> Material,
+    lights:    fn (Device, int) -> Light,
+    camera:    fn (Device) -> Camera,
+    viewport:  fn (Device) -> Viewport,
+    film:      fn (Device) -> Film
+}
+
+// Film resulting from a light simulation
+struct Film {
+    // Accumulate a sample on the film
+    accumulate: fn (float, float, Color) -> ()
+}
+
+// Viewport dimensions
+struct Viewport {
+    width:  int,
+    height: int
+}
+
+fn make_viewport(w: int, h: int) -> Viewport {
+    Viewport {
+        width:  w,
+        height: h
+    }
+}

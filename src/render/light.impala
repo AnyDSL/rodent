@@ -17,24 +17,24 @@ struct DirectLightSample {
     cos: float          // Cosine between the direction and the light source geometry
 }
 
+// Emission properties of a light source
+struct EmissionValue {
+    intensity: Color,   // Intensity along the direction
+    pdf_area: float,    // Probability to sample the direction using emission sampling
+    pdf_dir: float      // Probability to sample the point on the light
+};
+
 // Opaque light structure
 struct Light {
     // Samples direct illumination from this light source at the given point on a surface
-    sample_direct: fn (Device, RndState, Vec3) -> (RndState, DirectLightSample),
+    sample_direct: fn (Intrinsics, &mut RndState, Vec3) -> DirectLightSample,
     // Samples the emitting surface of the light
-    sample_emission: fn (Device, RndState) -> (RndState, EmissionSample),
-    // Samples the surface of the light
-    sample_surface: fn (Device, RndState) -> (RndState, Vec3),
-    // Returns the probability of sampling a point on the light source
-    surface_pdf: fn (Device, Vec3) -> float,
+    sample_emission: fn (Intrinsics, &mut RndState) -> EmissionSample),
+    // Returns the emission properties of the light at a given point on its surface
+    emission: fn (Intrinsics, Vec3, Vec2) -> EmissionValue,
     // Returns true if the light has an area (can be hit by a ray)
     has_area: bool
 }
-
-type DeviceColor = fn (Device) -> Color;
-type DeviceVec2  = fn (Device) -> Vec2;
-type DeviceVec3  = fn (Device) -> Vec3;
-type DeviceVec4  = fn (Device) -> Vec4;
 
 fn make_emission_sample(pos: Vec3, dir: Vec3, intensity: Color, pdf_area: float, pdf_dir: float, cos: float) -> EmissionSample {
     if pdf_area > 0 && pdf_dir > 0 && cos > 0 {
@@ -78,61 +78,69 @@ fn make_direct_sample(pos: Vec3, intensity: Color, pdf_area: float, pdf_dir: flo
     }
 }
 
-fn make_point_light(pos: DeviceVec3, color: DeviceColor) -> Light {
+fn make_emission_value(intensity: Color, pdf_area: float, pdf_dir: float) -> EmissionValue {
+    if pdf_dir > 0 {
+        EmissionValue {
+            intensity: intensity,
+            pdf_area: pdf_area,
+            pdf_dir: pdf_dir
+        }
+    } else {
+        EmissionValue {
+            intensity: black,
+            pdf_area: 1.0f,
+            pdf_dir: 1.0f
+        }
+    }
+}
+
+fn make_point_light(pos: Vec3, color: Color) -> Light {
     Light {
-        sample_direct: |dev, rnd, from| {
-            let intensity = color_mulf(color(dev), 1.0f / (4.0f * flt_pi));
-            (rnd, make_direct_sample(pos(dev), intensity, 1.0f, uniform_sphere_pdf(), 1.0f))
+        sample_direct: |math, rnd, from| {
+            let intensity = color_mulf(color, 1.0f / (4.0f * flt_pi));
+            make_direct_sample(pos, intensity, 1.0f, uniform_sphere_pdf(), 1.0f)
         },
-        sample_emission: |dev, rnd1| {
-            let (rnd2, u) = randf(rnd1);
-            let (rnd3, v) = randf(rnd2);
+        sample_emission: |math, rnd| {
+            let u = randf(rnd);
+            let v = randf(rnd);
             let sample = sample_uniform_sphere(u, v);
-            let intensity = color_mulf(color(dev), 1.0f / (4.0f * flt_pi));
-            (rnd, make_emission_sample(pos(dev), sample.dir, intensity, 1.0f, sample.pdf, 1.0f))
+            let intensity = color_mulf(color, 1.0f / (4.0f * flt_pi));
+            make_emission_sample(pos, sample.dir, intensity, 1.0f, sample.pdf, 1.0f)
         },
-        sample_surface: |dev, rnd| (rnd, pos(dev)),
-        surface_pdf: |dev, surf_pos| 1.0f,
+        emission: |math, dir, surf_pos| make_emission_value(black, 1.0f, 1.0f),
         has_area: false
     }
 }
 
-fn make_triangle_light(v0: DeviceVec3, v1: DeviceVec3, v2: DeviceVec3, color: DeviceColor) -> Light {
-    fn sample_surface(dev: Device, rnd1: RndState) -> (RndState, Vec3) {
-        let (rnd2, u) = randf(rnd1);
-        let (rnd3, v) = randf(rnd2);
+fn make_triangle_light(v0: Vec3, v1: Vec3, v2: Vec3, n: Vec3, inv_area: float, color: Color) -> Light {
+    fn sample_surface(math: Intrinsics, rnd: &mut RndState) -> Vec3 {
+        let u = randf(rnd);
+        let v = randf(rnd);
         if (u + v > 1.0f) {
             u = 1.0f - u;
             v = 1.0f - v;
         }
-        (rnd3, vec3_add(
+        vec3_add(
             vec3_add(vec3_mulf(v0, 1.0f - v - u),
                      vec3_mulf(v1, u)),
                      vec3_mulf(v2, v)))
     }
 
-    fn surface_pdf(dev: Device) -> float {
-        let e1 = vec3_sub(v1(dev), v0(dev));
-        let e2 = vec3_sub(v2(dev), v0(dev));
-        2.0f / vec3_length(dev.math, vec3_cross(e1, e2))
-    }
-
     Light {
-        sample_direct: |dev, rnd1, from| {
-            let (rnd2, pos) = sample_surface(dev, rnd1);
+        sample_direct: |math, rnd, from| {
+            let pos = sample_surface(math, rnd);
             let dir = vec3_sub(from, pos);
-            let cos = vec3_dot(dir, n) / vec3_length(dev.math, dir);
-            (rnd2, make_direct_sample(pos, color(dev), surface_pdf(dev), cosine_hemisphere_pdf(cos), cos))
+            let cos = vec3_dot(dir, n) / vec3_length(math, dir);
+            make_direct_sample(pos, color, inv_area, cosine_hemisphere_pdf(cos), cos)
         },
-        sample_emission: |dev, rnd1| {
-            let (rnd2, pos) = sample_surface(dev, rnd1);
-            let (rnd3, u) = randf(rnd2);
-            let (rnd4, v) = randf(rnd3);
-            let sample = sample_cosine_hemisphere(dev.math, make_local_coords(), u, v);
-            (rnd4, make_emission_sample(pos, sample.dir, color(dev), surface_pdf(dev), sample.pdf, vec3_dot(sample.dir, n)))
+        sample_emission: |math, rnd| {
+            let pos = sample_surface(math, rnd);
+            let u = randf(rnd);
+            let v = randf(rnd);
+            let sample = sample_cosine_hemisphere(math, make_local_coords(), u, v);
+            make_emission_sample(pos, sample.dir, color, inv_area, sample.pdf, vec3_dot(sample.dir, n))
         },
-        sample_surface: sample_surface,
-        surface_pdf: |dev, surf_pos| surface_pdf(dev),
+        emission: |math, dir, surf_pos| make_emission_value(black, inv_area, cosine_hemisphere_pdf(vec3_dot(n, dir)))
         has_area: true
     }
 }

@@ -63,10 +63,10 @@ fn make_cpu_ray1_layout(rays: &[Ray1AoS], hits: &mut [Hit1AoS]) -> RayLayout {
         },
         output: |i, j, result| {
             let hit = &mut hits(i + j);
-            hit.tri_id = result.prim_id();
-            hit.t = result.intr.distance();
-            hit.u = result.intr.uv_coords().x;
-            hit.v = result.intr.uv_coords().y;
+            hit.tri_id = result.prim_id;
+            hit.t = result.intr.distance;
+            hit.u = result.intr.uv_coords.x;
+            hit.v = result.intr.uv_coords.y;
         }
     }
 }
@@ -82,10 +82,10 @@ fn make_cpu_ray4_layout(rays: &[Ray4SoA], hits: &mut [Hit4SoA]) -> RayLayout {
         },
         output: |i, j, result| {
             let hit = &mut hits(i);
-            hit.tri_id(j) = result.prim_id();
-            hit.t(j) = result.intr.distance();
-            hit.u(j) = result.intr.uv_coords().x;
-            hit.v(j) = result.intr.uv_coords().y;
+            hit.tri_id(j) = result.prim_id;
+            hit.t(j) = result.intr.distance;
+            hit.u(j) = result.intr.uv_coords.x;
+            hit.v(j) = result.intr.uv_coords.y;
         }
     }
 }
@@ -101,10 +101,10 @@ fn make_cpu_ray8_layout(rays: &[Ray8SoA], hits: &mut [Hit8SoA]) -> RayLayout {
         },
         output: |i, j, result| {
             let hit = &mut hits(i);
-            hit.tri_id(j) = result.prim_id();
-            hit.t(j) = result.intr.distance();
-            hit.u(j) = result.intr.uv_coords().x;
-            hit.v(j) = result.intr.uv_coords().y;
+            hit.tri_id(j) = result.prim_id;
+            hit.t(j) = result.intr.distance;
+            hit.u(j) = result.intr.uv_coords.x;
+            hit.v(j) = result.intr.uv_coords.y;
         }
     }
 }
@@ -159,7 +159,7 @@ fn cpu_traverse_bvh4_packet(bvh: &Bvh4, ray_layout: RayLayout, ray_count: int, a
                 },
                 iterate_instances: |_, _, _| {},
                 hit_callback: |hit, continue, terminate| -> !
-                    if any_hit && all(hit.prim_id() >= 0) { @terminate(hit) } else { continue() },
+                    if any_hit && all(hit.prim_id >= 0) { @terminate(hit) } else { continue() },
                 transparency: |_, _| false,
                 is_leaf: |node_ref| node_ref.node < 0,
                 intrinsics: cpu_intrinsics,
@@ -251,7 +251,7 @@ fn cpu_traverse_bvh4_single(bvh: &Bvh4, ray_layout: RayLayout, ray_count: int, a
                     },
                     iterate_instances: |_, _, _| {},
                     hit_callback: |hit, continue, terminate| -> !
-                        if any_hit && hit.prim_id() >= 0 { terminate(hit) } else { continue() },
+                        if any_hit && hit.prim_id >= 0 { terminate(hit) } else { continue() },
                     transparency: |_, _| false,
                     is_leaf: |node_ref| node_ref.node < 0,
                     intrinsics: cpu_intrinsics,

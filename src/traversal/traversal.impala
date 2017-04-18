@@ -15,15 +15,15 @@ struct TraversalMapping {
 
 // Result of a call to the traversal algorithm
 struct Hit {
-    intr: Intersection,         // Intersection information
-    prim_id: fn () -> int,      // Primitive identifier, or -1 (no intersection found)
-    inst_id: fn () -> int       // Instance identifier, or -1 (no instance found)
+    intr: Intersection, // Intersection information
+    prim_id: int,       // Primitive identifier, or -1 (no intersection found)
+    inst_id: int        // Instance identifier, or -1 (no instance found)
 }
 
 // Instance of an object in the scene
 struct Instance {
-    id:       fn () -> int,     // Instance identifier
-    inverse:  fn () -> Mat3x4,  // Inverse matrix
+    id:       int,     // Instance identifier
+    inverse:  Mat3x4,  // Inverse matrix
 
     // Associated traversal algorithm for the object
     traverse: fn (Ray, float, float) -> Hit
@@ -38,11 +38,11 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, 
     let make_hit = || {
         Hit {
             intr: Intersection {
-                distance:  || t,
-                uv_coords: || uv
+                distance:  t,
+                uv_coords: uv
             },
-            prim_id: || prim_id,
-            inst_id: || inst_id
+            prim_id: prim_id,
+            inst_id: inst_id
         }
     };
 
@@ -62,10 +62,10 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, 
             // Process primitives, if any
             for prim in @mapping.iterate_primitives(leaf, t) {
                 with intr in prim.intersect(mapping.intrinsics, ray, tmin, t) {
-                    if !@mapping.transparency(prim.id(), intr) {
-                        prim_id = prim.id();
-                        t  = intr.distance();
-                        uv = intr.uv_coords();
+                    if !@mapping.transparency(prim.id, intr) {
+                        prim_id = prim.id;
+                        t  = intr.distance;
+                        uv = intr.uv_coords;
                     }
                 }
 
@@ -74,14 +74,14 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, 
 
             // Process instances, if any
             for inst in @mapping.iterate_instances(leaf, t) {
-                let new_dir = mat3x4_mul(inst.inverse(), vec3_to_4(ray.dir(), 0.0f));
-                let new_org = mat3x4_mul(inst.inverse(), vec3_to_4(ray.org(), 0.0f));
+                let new_dir = mat3x4_mul(inst.inverse, vec3_to_4(ray.dir, 0.0f));
+                let new_org = mat3x4_mul(inst.inverse, vec3_to_4(ray.org, 0.0f));
                 let hit = inst.traverse(make_ray(new_org, new_dir), tmin, t);
-                if hit.prim_id() >= 0 @{
-                    inst_id = inst.id();
-                    prim_id = hit.prim_id();
-                    t  = hit.intr.distance();
-                    uv = hit.intr.uv_coords();
+                if hit.prim_id >= 0 @{
+                    inst_id = inst.id;
+                    prim_id = hit.prim_id;
+                    t  = hit.intr.distance;
+                    uv = hit.intr.uv_coords;
                 }
             }
 

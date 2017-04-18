@@ -1,32 +1,32 @@
 struct Ray {
-    org:     fn () -> Vec3,     // Origin of the ray
-    dir:     fn () -> Vec3,     // Direction of the ray
-    inv_dir: fn () -> Vec3,     // Inverse of the direction
-    inv_org: fn () -> Vec3      // Origin multiplied by the inverse of the direction
+    org:     Vec3,     // Origin of the ray
+    dir:     Vec3,     // Direction of the ray
+    inv_dir: Vec3,     // Inverse of the direction
+    inv_org: Vec3      // Origin multiplied by the inverse of the direction
 }
 
 struct Intersection {
-    distance:  fn () -> float,  // Distance to the intersection point
-    uv_coords: fn () -> Vec2    // Surface coordinates
+    distance:  float,  // Distance to the intersection point
+    uv_coords: Vec2    // Surface coordinates
 }
 
 struct Primitive {
     intersect: Intersector,     // Primitive intersection function
-    id: fn () -> int            // Primitive identifier
+    id: int                     // Primitive identifier
 }
 
 struct Tri {
-    v0: fn () -> Vec3,          // First vertex
-    v1: fn () -> Vec3,          // Second vertex
-    v2: fn () -> Vec3,          // Third vertex
-    e1: fn () -> Vec3,          // First edge (= v0 - v1)
-    e2: fn () -> Vec3,          // Second edge (= v2 - v0)
-    n:  fn () -> Vec3           // Geometric normal (= cross(e1, e2))
+    v0: Vec3,          // First vertex
+    v1: Vec3,          // Second vertex
+    v2: Vec3,          // Third vertex
+    e1: Vec3,          // First edge (= v0 - v1)
+    e2: Vec3,          // Second edge (= v2 - v0)
+    n:  Vec3           // Geometric normal (= cross(e1, e2))
 }
 
 struct BBox {
-    min: fn () -> Vec3,         // Minimum corner
-    max: fn () -> Vec3          // Maximum corner
+    min: Vec3,         // Minimum corner
+    max: Vec3          // Maximum corner
 }
 
 // Intrinsics required to perform the ray-box test
@@ -59,52 +59,50 @@ fn make_ray(org: Vec3, dir: Vec3) -> Ray {
     let inv_dir = make_vec3(safe_rcp(dir.x), safe_rcp(dir.y), safe_rcp(dir.z));
     let inv_org = vec3_mul(org, inv_dir);
     Ray {
-        org: || org,
-        dir: || dir,
-        inv_dir: || inv_dir,
-        inv_org: || inv_org
+        org: org,
+        dir: dir,
+        inv_dir: inv_dir,
+        inv_org: inv_org
     }
 }
 
 fn make_primitive(intersect: Intersector, id: int) -> Primitive {
     Primitive {
         intersect: intersect,
-        id: || id
+        id: id
     }
 }
 
 fn make_tri(v0: Vec3, e1: Vec3, e2: Vec3, n: Vec3) -> Tri {
     Tri {
-        v0: || v0,
-        v1: || vec3_sub(v0, e1),
-        v2: || vec3_add(v0, e2),
-        e1: || e1,
-        e2: || e2,
-        n:  || n
+        v0: v0,
+        v1: vec3_sub(v0, e1),
+        v2: vec3_add(v0, e2),
+        e1: e1,
+        e2: e2,
+        n:  n
     }
 }
 
 fn make_bbox(min: Vec3, max: Vec3) -> BBox {
     BBox {
-        min: || min,
-        max: || max
+        min: min,
+        max: max
     }
 }
 
 fn intersect_ray_tri(math: Intrinsics, ray: Ray, tri: Tri, tmin: float, tmax: float, intr: fn (float, float, float) -> ()) -> () @{
-    let (org, dir, n) = (ray.org(), ray.dir(), tri.n());
-
-    let c = vec3_sub(tri.v0(), org);
-    let r = vec3_cross(dir, c);
-    let det = vec3_dot(n, dir);
+    let c = vec3_sub(tri.v0, ray.org);
+    let r = vec3_cross(ray.dir, c);
+    let det = vec3_dot(tri.n, ray.dir);
     let abs_det = math.fabsf(det);
 
-    let u = prodsign(vec3_dot(r, tri.e2()), det);
-    let v = prodsign(vec3_dot(r, tri.e1()), det);
+    let u = prodsign(vec3_dot(r, tri.e2), det);
+    let v = prodsign(vec3_dot(r, tri.e1), det);
     let w = abs_det - u - v;
 
     if any((u >= 0.0f) & (v >= 0.0f) & (w >= 0.0f)) @{
-        let t = prodsign(vec3_dot(n, c), det);
+        let t = prodsign(vec3_dot(tri.n, c), det);
         if (t >= abs_det * tmin) & (t <= abs_det * tmax) & (det != 0.0f) @{
             let inv_det = 1.0f / abs_det;
             intr(t * inv_det, u * inv_det, v * inv_det)
@@ -113,9 +111,8 @@ fn intersect_ray_tri(math: Intrinsics, ray: Ray, tri: Tri, tmin: float, tmax: fl
 }
 
 fn intersect_ray_box(math: RayBoxIntrinsics, ray: Ray, bbox: BBox, tmin: float, tmax: float, intr: fn (float, float) -> ()) -> () @{
-    let (inv_dir, inv_org) = (ray.inv_dir(), ray.inv_org());
-    let t0 = vec3_sub(vec3_mul(inv_dir, bbox.min()), inv_org);
-    let t1 = vec3_sub(vec3_mul(inv_dir, bbox.max()), inv_org);
+    let t0 = vec3_sub(vec3_mul(ray.inv_dir, bbox.min), ray.inv_org);
+    let t1 = vec3_sub(vec3_mul(ray.inv_dir, bbox.max), ray.inv_org);
 
     let tentry = math.fmaxmaxf(math.fminf(t0.x, t1.x), math.fminf(t0.y, t1.y), math.fminmaxf(t0.z, t1.z, tmin));
     let texit  = math.fminminf(math.fmaxf(t0.x, t1.x), math.fmaxf(t0.y, t1.y), math.fmaxminf(t0.z, t1.z, tmax));
@@ -128,8 +125,8 @@ fn make_ray_tri_intersector(tri: Tri) -> Intersector {
     |math, ray, tmin, tmax, intr| {
         intersect_ray_tri(math, ray, tri, tmin, tmax, |t, u, v| {
             intr(Intersection {
-                distance:  || t,
-                uv_coords: || make_vec2(u, v)
+                distance:  t,
+                uv_coords: make_vec2(u, v)
             })
         })
     }
