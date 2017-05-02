@@ -14,12 +14,12 @@ anydsl_runtime_wrap(TRAVERSAL_OBJS
     NAME "bench_traversal"
     CLANG_FLAGS ${CLANG_FLAGS}
     FILES ${TRAVERSAL_SRCS}
-    INTERFACE ../common/traversal)
+    INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/../common/traversal)
 
 add_executable(bench_traversal
     ${TRAVERSAL_OBJS}
     bench_traversal.cpp
-    ../common/traversal.h)
+    ${CMAKE_CURRENT_SOURCE_DIR}/../common/traversal)
 target_include_directories(bench_traversal PUBLIC ../common)
 target_link_libraries(bench_traversal ${ANYDSL_RUNTIME_LIBRARY} ${ANYDSL_RUNTIME_LIBRARIES})
 add_custom_command(TARGET bench_traversal POST_BUILD COMMAND cp ${CMAKE_CURRENT_BINARY_DIR}/bench_traversal.nvvm.bc ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
