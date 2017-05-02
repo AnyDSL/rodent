@@ -11,10 +11,10 @@ set(TRAVERSAL_SRCS
     ../../src/core/vector.impala)
 
 anydsl_runtime_wrap(TRAVERSAL_OBJS
-                    NAME "bench_traversal"
-                    CLANG_FLAGS ${CLANG_FLAGS}
-                    FILES ${TRAVERSAL_SRCS}
-                    INTERFACE ../common/traversal)
+    NAME "bench_traversal"
+    CLANG_FLAGS ${CLANG_FLAGS}
+    FILES ${TRAVERSAL_SRCS}
+    INTERFACE ../common/traversal)
 
 add_executable(bench_traversal
     ${TRAVERSAL_OBJS}
