@@ -126,6 +126,7 @@ fn cpu_traverse_bvh4_packet(bvh: &Bvh4, ray_layout: RayLayout, ray_count: int, a
 
                     let node = &bvh.nodes(node_ref.node);
                     for k in @unroll(0, 4) @{
+                        pe_info("child", k);
                         if node.child(k) == 0 { break() }
 
                         let bbox = make_bbox(make_vec3(node.min(0)(k), node.min(1)(k), node.min(2)(k)),
