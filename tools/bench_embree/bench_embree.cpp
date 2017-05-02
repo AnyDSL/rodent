@@ -17,6 +17,27 @@
 #include "load_obj.h"
 #include "load_rays.h"
 #include "tri.h"
+
+template <>
+struct RayTraits<RTCRay8> {
+    enum { RayPerPacket = 8 };
+    static void write_ray(const float* org_dir, float tmin, float tmax, int j, RTCRay8& ray) {
+        ray.orgx[j] = org_dir[0];
+        ray.orgy[j] = org_dir[1];
+        ray.orgz[j] = org_dir[2];
+        ray.tnear[j] = tmin;
+        ray.dirx[j] = org_dir[3];
+        ray.diry[j] = org_dir[4];
+        ray.dirz[j] = org_dir[5];
+        ray.tfar[j] = tmax;
+        ray.geomID[j] = RTC_INVALID_GEOMETRY_ID;
+        ray.primID[j] = RTC_INVALID_GEOMETRY_ID;
+        ray.instID[j] = RTC_INVALID_GEOMETRY_ID;
+        ray.mask[j] = 0xFFFFFFFF;
+        ray.time[j] = 0.0f;
+    }
+};
+
     
 inline void check_argument(int i, int argc, char** argv) {
     if (i + 1 >= argc) {
@@ -55,50 +76,24 @@ static void create_triangles(const obj::File& obj_file, std::vector<Tri>& tris) 
     }
 }
 
+#include <unistd.h>
+
 template <typename F>
 double intersect_scene(RTCScene scene,
-                       const anydsl::Array<Ray1AoS>& rays,
-                       anydsl::Array<Hit1AoS>& hits,
+                       const anydsl::Array<RTCRay8>& rays,
+                       anydsl::Array<RTCRay8>& hits,
                        F f) {
     using namespace std::chrono;
-    
-    std::unique_ptr<RTCRay8[]> embree_rays(new RTCRay8[rays.size() / 8]);
-    for (int i = 0; i < rays.size(); i += 8) {
-        RTCRay8& ray = embree_rays[i / 8];
-        for (int j = 0; j < 8; j++) {
-            ray.orgx[j] = rays[i + j].org[0];
-            ray.orgy[j] = rays[i + j].org[1];
-            ray.orgz[j] = rays[i + j].org[2];
-            ray.tnear[j] = rays[i + j].tmin;
-            ray.dirx[j] = rays[i + j].dir[0];
-            ray.diry[j] = rays[i + j].dir[1];
-            ray.dirz[j] = rays[i + j].dir[2];
-            ray.tfar[j] = rays[i + j].tmax;
-            ray.geomID[j] = RTC_INVALID_GEOMETRY_ID;
-            ray.primID[j] = RTC_INVALID_GEOMETRY_ID;
-            ray.instID[j] = RTC_INVALID_GEOMETRY_ID;
-            ray.mask[j] = 0xFFFFFFFF;
-            ray.time[j] = 0.0f;
-        }
-    }
+
+    // Restore tnear, tfar and other fields that have been modified
+    anydsl::copy(rays, hits);
 
     auto t0 = high_resolution_clock::now();
-    for (int i = 0; i < rays.size(); i += 8) {
-        RTCRay8 ray = embree_rays[i / 8];
-        int valid[8] = { -1, -1, -1, -1, -1, -1, -1, -1 };
-        f(valid, scene, ray);
+    for (int i = 0; i < rays.size(); i++) {
+        const int valid[8] alignas(32) = { -1, -1, -1, -1, -1, -1, -1, -1 };
+        f(valid, scene, hits[i]);
     }
     auto t1 = high_resolution_clock::now();
-
-    for (int i = 0; i < rays.size(); i += 8) {
-        const RTCRay8& ray = embree_rays[i / 8];
-        for (int j = 0; j < 8; j++) {
-            hits[i + j].tri_id = ray.primID[j];
-            hits[i + j].t = ray.tfar[j];
-            hits[i + j].u = ray.u[j];
-            hits[i + j].v = ray.v[j];
-        }
-    }
 
     return duration_cast<microseconds>(t1 - t0).count() * 1.0e-3;
 }
@@ -125,8 +120,8 @@ void error_handler(const RTCError code, const char* str) {
 }
 
 void bench(const std::vector<Tri>& tris,
-           const anydsl::Array<Ray1AoS>& rays,
-           anydsl::Array<Hit1AoS>& hits,
+           const anydsl::Array<RTCRay8>& rays,
+           anydsl::Array<RTCRay8>& hits,
            bool any_hit, int iters, int warmup) {
     using namespace embree;
 
@@ -164,8 +159,9 @@ void bench(const std::vector<Tri>& tris,
     }
 
     size_t intr = 0;
-    for (auto& hit: hits)
-        intr += (hit.tri_id >= 0);
+    for (auto& hit : hits) {
+        for (int i = 0; i < 8; i++) intr += hit.primID[i] >= 0;
+    }
 
     std::sort(timings.begin(), timings.end());
     auto sum = std::accumulate(timings.begin(), timings.end(), 0.0);
@@ -173,7 +169,7 @@ void bench(const std::vector<Tri>& tris,
     auto med = timings[timings.size() / 2];
     auto min = *std::min_element(timings.begin(), timings.end());
     std::cout << sum << "ms for " << iters << " iteration(s)" << std::endl;
-    std::cout << rays.size() * iters / (1000.0 * sum) << " Mrays/sec" << std::endl;
+    std::cout << rays.size() * 8 * iters / (1000.0 * sum) << " Mrays/sec" << std::endl;
     std::cout << "# Average: " << avg << " ms" << std::endl;
     std::cout << "# Median: " << med  << " ms" << std::endl;
     std::cout << "# Min: " << min << " ms" << std::endl;
@@ -250,21 +246,23 @@ int main(int argc, char** argv) {
     std::vector<Tri> tris;
     create_triangles(obj, tris);
 
-    anydsl::Array<Ray1AoS> rays;
+    anydsl::Array<RTCRay8> rays;
     if (!load_rays(ray_file, rays, tmin, tmax, false)) {
-        std::cerr << "Cannot load BVH file" << std::endl;
+        std::cerr << "Cannot load rays" << std::endl;
         return 1;
     }
 
-    std::cout << rays.size() << " ray(s) in the distribution file." << std::endl;
+    std::cout << rays.size() * 8 << " ray(s) in the distribution file." << std::endl;
 
-    anydsl::Array<Hit1AoS> hits(rays.size());
+    anydsl::Array<RTCRay8> hits(rays.size());
     bench(tris, rays, hits, any_hit, iters, warmup);
 
     if (out_file != "") {
         std::ofstream of(out_file, std::ofstream::binary);
-        for (auto& hit: hits)
-            of.write((char*)&hit.t, sizeof(float));
+        for (auto& hit : hits) {
+            for (int i = 0; i < 8; i++)
+                of.write((char*)&hit.tfar[i], sizeof(float));
+        }
     }
 
     return 0;

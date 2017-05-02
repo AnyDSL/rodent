@@ -8,11 +8,9 @@ template <typename Ray>
 struct RayTraits {};
 
 struct Ray1AoS;
-struct Hit1AoS;
 template <>
 struct RayTraits<Ray1AoS> {
     enum { RayPerPacket = 1 };
-    typedef Hit1AoS HitType;
     static void write_ray(const float* org_dir, float tmin, float tmax, int j, Ray1AoS& ray) {
         ray.org[0] = org_dir[0];
         ray.org[1] = org_dir[1];
@@ -26,11 +24,9 @@ struct RayTraits<Ray1AoS> {
 };
 
 struct Ray8SoA;
-struct Hit8SoA;
 template <>
 struct RayTraits<Ray8SoA> {
     enum { RayPerPacket = 8 };
-    typedef Hit8SoA HitType;
     static void write_ray(const float* org_dir, float tmin, float tmax, int j, Ray8SoA& ray) {
         ray.org[0][j] = org_dir[0];
         ray.org[1][j] = org_dir[1];
@@ -59,7 +55,7 @@ inline bool load_rays(const std::string& filename,
 
     auto rays_per_packet = RayTraits<Ray>::RayPerPacket;
     auto ray_count = size / (rays_per_packet * sizeof(float) * 6);
-    auto host_rays = std::move(anydsl::Array<Ray>(ray_count));
+    anydsl::Array<Ray> host_rays(ray_count);
 
     for (size_t i = 0; i < ray_count; i++) {
         for (int j = 0; j < rays_per_packet; j++) {
