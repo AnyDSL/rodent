@@ -125,7 +125,7 @@ fn cpu_traverse_bvh4_packet(bvh: &Bvh4, ray_layout: RayLayout, ray_count: int, a
                     if all(node_ref.tmin > tmax) { exit() }
 
                     let node = &bvh.nodes(node_ref.node);
-                    for k in @range(0, 4) @{
+                    for k in @unroll(0, 4) @{
                         if node.child(k) == 0 { break() }
 
                         let bbox = make_bbox(make_vec3(node.min(0)(k), node.min(1)(k), node.min(2)(k)),
@@ -151,7 +151,7 @@ fn cpu_traverse_bvh4_packet(bvh: &Bvh4, ray_layout: RayLayout, ray_count: int, a
                     let mut tri_id = !leaf_ref.node;
                     while true @{
                         let tri = &bvh.tris(tri_id++);
-                        for k in @range(0, 4) {
+                        for k in @unroll(0, 4) {
                             @body(make_primitive(make_ray_tri_intersector(load_bvh4_tri(tri, k)), tri.id(k) & 0x7FFFFFFF));
                         }
                         if (tri.id(3) & bitcast[i32](0x80000000u)) != 0 { break() }

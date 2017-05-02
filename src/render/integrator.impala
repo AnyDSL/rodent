@@ -11,6 +11,10 @@ struct ShadowRayState {
 }
 
 fn path_trace(dev: Device, scene: Scene, spp: int) -> () {
+    let film = scene.film(dev);
+    let cam  = scene.camera(dev);
+    let view = scene.viewport(dev); 
+
     // Light sampling is done uniformly
     let pdf_lightpick = 1.0f / (scene.num_lights as float);
     let sample_light = |rnd| {
@@ -26,9 +30,7 @@ fn path_trace(dev: Device, scene: Scene, spp: int) -> () {
             mis: 0.0f,
             contrib: white
         },
-        scene.camera(dev),
-        scene.viewport(dev),
-        spp);
+        cam, view, spp);
 
     let process_primary = |surf, mat, ray, hit, shadow_ray, terminate_path, continue_path| {
         let out_dir = vec3_negate(ray.dir);
@@ -38,7 +40,7 @@ fn path_trace(dev: Device, scene: Scene, spp: int) -> () {
         if mat.is_emissive {
             let emit = mat.emission(dev.math, out_dir);
             let mis = 1.0f / (1.0f + state.mis * pdf_lightpick * emit.pdf_area);
-            dev.film.accumulate(state.pixel, color_mulf(color_mul(state.contrib, emit.intensity), mis))
+            film.accumulate(state.pixel, color_mulf(color_mul(state.contrib, emit.intensity), mis))
             terminate_path()
         }
 
@@ -94,7 +96,7 @@ fn path_trace(dev: Device, scene: Scene, spp: int) -> () {
     };
 
     let process_shadow = |ray, hit, state| {
-        dev.film.accumulate(state.pixel, state.contrib)
+        film.accumulate(state.pixel, state.contrib)
     }
 
     dev.scheduler(ray_gen, process_primary, process_shadow);

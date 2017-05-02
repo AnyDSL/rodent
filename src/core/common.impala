@@ -16,6 +16,13 @@ fn range(a: int, b: int, body: fn (int) -> ()) -> () {
     range_step(a, b, 1, body);
 }
 
+fn unroll(a: int, b: int, body: fn (int) -> ()) -> () {
+    if a < b @{
+        body(a);
+        unroll(a + 1, b, body, return)
+    }
+}
+
 fn prodsign(x: float, y: float) -> float {
     bitcast[float](bitcast[int](x) ^ (bitcast[int](y) & bitcast[int](0x80000000u)))
 }
