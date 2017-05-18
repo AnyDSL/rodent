@@ -46,8 +46,8 @@ fn make_gpu_ray_layout(rays: &[Ray1AoS], hits: &mut[Hit1AoS]) -> RayLayout {
             let ray_ptr = &rays(i + j) as &[1][simd[float * 4]];
             let ray0 = nvvm_ldg4_f32(&ray_ptr(0));
             let ray1 = nvvm_ldg4_f32(&ray_ptr(1));
-            (make_ray(make_vec3(ray0(0), ray0(1), ray0(2)),
-                      make_vec3(ray1(0), ray1(1), ray1(2))),
+            make_ray(make_vec3(ray0(0), ray0(1), ray0(2)),
+                     make_vec3(ray1(0), ray1(1), ray1(2)),
              ray0(3), ray1(3))
         },
         output: |i, j, hit| {
@@ -70,7 +70,7 @@ fn gpu_traverse_bvh2(bvh: &Bvh2, ray_layout: RayLayout, ray_count: int, any_hit:
         let (i, j) = (acc.tidx() + acc.bidx() * acc.bdimx(), acc.tidy());
         if (i + j) >= ray_count { break() }
 
-        let (ray, tmin, tmax) = ray_layout.input(i, j);
+        let ray = ray_layout.input(i, j);
 
         let stack = allocate_stack();
         stack.push(0, 0.0f);
@@ -141,6 +141,6 @@ fn gpu_traverse_bvh2(bvh: &Bvh2, ray_layout: RayLayout, ray_count: int, any_hit:
             ray_box_intrinsics: make_ray_box_intrinsics_nvvm()
         };
 
-        ray_layout.output(i, j, @traverse_bvh(mapping, stack, ray, tmin, tmax))
+        ray_layout.output(i, j, @traverse_bvh(mapping, stack, ray))
     }
 }

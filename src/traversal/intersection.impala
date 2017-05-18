@@ -1,8 +1,10 @@
 struct Ray {
-    org:     Vec3,     // Origin of the ray
-    dir:     Vec3,     // Direction of the ray
-    inv_dir: Vec3,     // Inverse of the direction
-    inv_org: Vec3      // Origin multiplied by the inverse of the direction
+    org: Vec3,     // Origin of the ray
+    dir: Vec3,     // Direction of the ray
+    inv_dir: Vec3, // Inverse of the direction
+    inv_org: Vec3, // Origin multiplied by the inverse of the direction
+    tmin: float,   // Minimum distance from the origin
+    tmax: float    // Maximum distance from the origin
 }
 
 struct Intersection {
@@ -39,7 +41,7 @@ struct RayBoxIntrinsics {
     fminf:    fn (float, float) -> float
 }
 
-type Intersector = fn (Intrinsics, Ray, float, float, fn (Intersection) -> ()) -> ();
+type Intersector = fn (Intrinsics, Ray, fn (Intersection) -> ()) -> ();
 
 // Constructs a set of intrinsics from min and max functions.
 // May not be the optimal intrinsics if the hardware provides a combined min/max instruction.
@@ -55,14 +57,16 @@ fn make_ray_box_intrinsics(fminf: fn (float, float) -> float,
     }
 }
 
-fn make_ray(org: Vec3, dir: Vec3) -> Ray {
+fn make_ray(org: Vec3, dir: Vec3, tmin: float, tmax: float) -> Ray {
     let inv_dir = make_vec3(safe_rcp(dir.x), safe_rcp(dir.y), safe_rcp(dir.z));
     let inv_org = vec3_mul(org, inv_dir);
     Ray {
         org: org,
         dir: dir,
         inv_dir: inv_dir,
-        inv_org: inv_org
+        inv_org: inv_org,
+        tmin: tmin,
+        tmax: tmax
     }
 }
 
@@ -91,7 +95,18 @@ fn make_bbox(min: Vec3, max: Vec3) -> BBox {
     }
 }
 
-fn intersect_ray_tri(math: Intrinsics, ray: Ray, tri: Tri, tmin: float, tmax: float, intr: fn (float, float, float) -> ()) -> () @{
+fn clip_ray(ray: Ray, tmin: float, tmax: float) -> Ray {
+    Ray {
+        org: ray.org,
+        dir: ray.dir,
+        inv_dir: ray.inv_dir,
+        inv_org: ray.inv_org,
+        tmin: tmin,
+        tmax: tmax
+    }
+}
+
+fn intersect_ray_tri(math: Intrinsics, ray: Ray, tri: Tri, intr: fn (float, float, float) -> ()) -> () @{
     let c = vec3_sub(tri.v0, ray.org);
     let r = vec3_cross(ray.dir, c);
     let det = vec3_dot(tri.n, ray.dir);
@@ -101,29 +116,30 @@ fn intersect_ray_tri(math: Intrinsics, ray: Ray, tri: Tri, tmin: float, tmax: fl
     let v = prodsign(vec3_dot(r, tri.e1), det);
     let w = abs_det - u - v;
 
-    if any((u >= 0.0f) & (v >= 0.0f) & (w >= 0.0f)) @{
+    let mask = (u >= 0.0f) & (v >= 0.0f) & (w >= 0.0f);
+    if any(mask) {
         let t = prodsign(vec3_dot(tri.n, c), det);
-        if (t >= abs_det * tmin) & (t <= abs_det * tmax) & (abs_det > 0.0f) @{
+        if mask & (t >= abs_det * ray.tmin) & (t <= abs_det * ray.tmax) & (abs_det > 0.0f) {
             let inv_det = 1.0f / abs_det;
             intr(t * inv_det, u * inv_det, v * inv_det)
         }
     }
 }
 
-fn intersect_ray_box(math: RayBoxIntrinsics, ray: Ray, bbox: BBox, tmin: float, tmax: float, intr: fn (float, float) -> ()) -> () @{
+fn intersect_ray_box(math: RayBoxIntrinsics, ray: Ray, bbox: BBox, intr: fn (float, float) -> ()) -> () @{
     let t0 = vec3_sub(vec3_mul(ray.inv_dir, bbox.min), ray.inv_org);
     let t1 = vec3_sub(vec3_mul(ray.inv_dir, bbox.max), ray.inv_org);
 
-    let tentry = math.fmaxmaxf(math.fminf(t0.x, t1.x), math.fminf(t0.y, t1.y), math.fminmaxf(t0.z, t1.z, tmin));
-    let texit  = math.fminminf(math.fmaxf(t0.x, t1.x), math.fmaxf(t0.y, t1.y), math.fmaxminf(t0.z, t1.z, tmax));
+    let tentry = math.fmaxmaxf(math.fminf(t0.x, t1.x), math.fminf(t0.y, t1.y), math.fminmaxf(t0.z, t1.z, ray.tmin));
+    let texit  = math.fminminf(math.fmaxf(t0.x, t1.x), math.fmaxf(t0.y, t1.y), math.fmaxminf(t0.z, t1.z, ray.tmax));
 
     if tentry <= texit @{ intr(tentry, texit) }
 }
 
 // Creates a ray-triangle intersector
 fn make_ray_tri_intersector(tri: Tri) -> Intersector {
-    |math, ray, tmin, tmax, intr| {
-        intersect_ray_tri(math, ray, tri, tmin, tmax, |t, u, v| {
+    |math, ray, intr| {
+        intersect_ray_tri(math, ray, tri, |t, u, v| {
             intr(Intersection {
                 distance:  t,
                 uv_coords: make_vec2(u, v)

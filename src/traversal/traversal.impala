@@ -26,13 +26,13 @@ struct Instance {
     inverse:  Mat3x4,  // Inverse matrix
 
     // Associated traversal algorithm for the object
-    traverse: fn (Ray, float, float) -> Hit
+    traverse: fn (Ray) -> Hit
 }
 
-fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, tmax: float) -> Hit @{
+fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray) -> Hit @{
     let mut inst_id = -1;
     let mut prim_id = -1;
-    let mut t = tmax;
+    let mut t = ray.tmax;
     let mut uv = make_vec2(0.0f, 0.0f);
 
     let make_hit = || {
@@ -52,7 +52,7 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, 
 
         // Intersect the bounding box of every child of this node
         for bbox, hit in mapping.iterate_children(node, t, stack) @{
-            intersect_ray_box(mapping.ray_box_intrinsics, ray, bbox, tmin, t, hit);
+            intersect_ray_box(mapping.ray_box_intrinsics, clip_ray(ray, ray.tmin, t), bbox, hit);
         }
 
         // Process leaves
@@ -60,8 +60,8 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, 
             let leaf = stack.top();
 
             // Process primitives, if any
-            for prim in @mapping.iterate_primitives(leaf, t) {
-                with intr in prim.intersect(mapping.intrinsics, ray, tmin, t) {
+            for prim in @mapping.iterate_primitives(leaf, t) @{
+                with intr in prim.intersect(mapping.intrinsics, clip_ray(ray, ray.tmin, t)) {
                     if !@mapping.transparency(prim.id, intr) {
                         prim_id = prim.id;
                         t  = intr.distance;
@@ -73,10 +73,10 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray, tmin: float, 
             }
 
             // Process instances, if any
-            for inst in @mapping.iterate_instances(leaf, t) {
+            for inst in @mapping.iterate_instances(leaf, t) @{
                 let new_dir = mat3x4_mul(inst.inverse, vec3_to_4(ray.dir, 0.0f));
                 let new_org = mat3x4_mul(inst.inverse, vec3_to_4(ray.org, 0.0f));
-                let hit = inst.traverse(make_ray(new_org, new_dir), tmin, t);
+                let hit = inst.traverse(make_ray(new_org, new_dir, ray.tmin, t));
                 if hit.prim_id >= 0 @{
                     inst_id = inst.id;
                     prim_id = hit.prim_id;

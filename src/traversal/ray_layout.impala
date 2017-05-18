@@ -40,7 +40,7 @@ struct Hit8SoA {
     v: [float * 8]
 }
 
-type TraversalInput  = fn (int, int) -> (Ray, float, float);
+type TraversalInput  = fn (int, int) -> Ray;
 type TraversalOutput = fn (int, int, Hit) -> ();
 
 struct RayLayout {
