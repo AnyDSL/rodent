@@ -1,16 +1,22 @@
-// Structure containing the mapping of the traversal algorithm
-// for a particular device and/or use case.
+// Structure containing the mapping of the traversal algorithm for a particular device.
 struct TraversalMapping {
     intrinsics:         Intrinsics,
     ray_box_intrinsics: RayBoxIntrinsics,
 
+    is_leaf: fn (NodeRef) -> bool,
+
     iterate_children:   fn (NodeRef, float, Stack, fn (BBox, fn (float, float) -> ()) -> ()) -> (),
     iterate_primitives: fn (NodeRef, float, fn (Primitive) -> ()) -> (),
-    iterate_instances:  fn (NodeRef, float, fn (Instance) -> ()) -> (),
+    iterate_instances:  fn (NodeRef, float, fn (Instance) -> ()) -> ()
+}
 
-    hit_callback: fn (Hit, fn () -> !, fn (Hit) -> !) -> !,
-    transparency: fn (int, Intersection) -> bool,
-    is_leaf:      fn (NodeRef) -> bool
+type HitCallback  = fn (Hit, fn () -> !, fn (Hit) -> !) -> !;
+type Transparency = fn (int, Intersection) -> bool;
+
+// Structure containing the configuration of the traversal algorithm for a particular use case.
+struct TraversalConfig {
+    hit_callback: HitCallback,
+    transparency: Transparency
 }
 
 // Result of a call to the traversal algorithm
@@ -29,22 +35,26 @@ struct Instance {
     traverse: fn (Ray) -> Hit
 }
 
-fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray) -> Hit @{
+static any_hit : HitCallback = |hit, continue, terminate| -> ! { if all(hit.prim_id >= 0) { terminate(hit) } else { continue() } };
+static closest_hit : HitCallback = |_, continue, _| -> ! { continue() };
+static opaque : Transparency = |_, _| { false };
+
+fn make_hit(inst_id: int, prim_id: int, t: float, uv: Vec2) -> Hit {
+    Hit {
+        intr: Intersection {
+            distance:  t,
+            uv_coords: uv
+        },
+        prim_id: prim_id,
+        inst_id: inst_id
+    }
+}
+
+fn traverse_bvh(mapping: TraversalMapping, config: TraversalConfig, stack: Stack, ray: Ray) -> Hit @{
     let mut inst_id = -1;
     let mut prim_id = -1;
     let mut t = ray.tmax;
     let mut uv = make_vec2(0.0f, 0.0f);
-
-    let make_hit = || {
-        Hit {
-            intr: Intersection {
-                distance:  t,
-                uv_coords: uv
-            },
-            prim_id: prim_id,
-            inst_id: inst_id
-        }
-    };
 
     // The traversal loop should not be unrolled
     while !$stack.is_empty() @{
@@ -62,14 +72,14 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray) -> Hit @{
             // Process primitives, if any
             for prim in @mapping.iterate_primitives(leaf, t) @{
                 with intr in prim.intersect(mapping.intrinsics, clip_ray(ray, ray.tmin, t)) {
-                    if !@mapping.transparency(prim.id, intr) {
+                    if !@config.transparency(prim.id, intr) {
                         prim_id = prim.id;
                         t  = intr.distance;
                         uv = intr.uv_coords;
                     }
                 }
 
-                @mapping.hit_callback(make_hit(), continue, return)
+                @config.hit_callback(make_hit(inst_id, prim_id, t, uv), continue, return)
             }
 
             // Process instances, if any
@@ -83,11 +93,13 @@ fn traverse_bvh(mapping: TraversalMapping, stack: Stack, ray: Ray) -> Hit @{
                     t  = hit.intr.distance;
                     uv = hit.intr.uv_coords;
                 }
+
+                @config.hit_callback(make_hit(inst_id, prim_id, t, uv), continue, return)
             }
 
             stack.pop()
         }
     }
 
-    return(make_hit())
+    return(make_hit(inst_id, prim_id, t, uv))
 }

@@ -1,15 +1,22 @@
-extern fn frontend_cpu_traverse_bvh4(bvh: &Bvh4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int, any_hit: bool) -> () {
-    /*if any_hit {
-        @cpu_traverse_bvh4_packet(bvh, cpu_read_rays_aos(rays), cpu_write_hits_aos(hits), ray_count, true);
-    } else {*/
-        @cpu_traverse_bvh4_packet(bvh, make_cpu_ray8_layout(rays, hits), ray_count, false);
-    //}
+fn frontend_config(any: bool) -> TraversalConfig {
+    TraversalConfig {
+        hit_callback: if any { any_hit } else { closest_hit },
+        transparency: opaque
+    }
 }
 
-extern fn frontend_gpu_traverse_bvh2(bvh: &Bvh2, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int, any_hit: bool) -> () {
-    if any_hit {
-        @gpu_traverse_bvh2(bvh, make_gpu_ray_layout(rays, hits), ray_count, true);
+extern fn frontend_cpu_traverse_bvh4(bvh: &Bvh4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int, any: bool) -> () {
+    if any {
+        @cpu_traverse_bvh4_packet(frontend_config(true), bvh, make_cpu_ray8_layout(rays, hits), ray_count);
     } else {
-        @gpu_traverse_bvh2(bvh, make_gpu_ray_layout(rays, hits), ray_count, false);
+        @cpu_traverse_bvh4_packet(frontend_config(false), bvh, make_cpu_ray8_layout(rays, hits), ray_count);
+    }
+}
+
+extern fn frontend_gpu_traverse_bvh2(bvh: &Bvh2, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int, any: bool) -> () {
+    if any {
+        @gpu_traverse_bvh2(frontend_config(true), bvh, make_gpu_ray_layout(rays, hits), ray_count);
+    } else {
+        @gpu_traverse_bvh2(frontend_config(false), bvh, make_gpu_ray_layout(rays, hits), ray_count);
     }
 }

@@ -109,7 +109,7 @@ fn make_cpu_ray8_layout(rays: &[Ray8SoA], hits: &mut [Hit8SoA]) -> RayLayout {
     }
 }
 
-fn cpu_traverse_bvh4_packet(bvh: &Bvh4, ray_layout: RayLayout, ray_count: int, any_hit: bool) -> () {
+fn cpu_traverse_bvh4_packet(config: TraversalConfig, bvh: &Bvh4, ray_layout: RayLayout, ray_count: int) -> () {
     let inc = ray_layout.packet_size;
     for i in $range(0, ray_count / inc) {
         for j in vectorize(inc, 32, 0, inc) @{
@@ -126,7 +126,6 @@ fn cpu_traverse_bvh4_packet(bvh: &Bvh4, ray_layout: RayLayout, ray_count: int, a
 
                     let node = &bvh.nodes(node_ref.node);
                     for k in @unroll(0, 4) @{
-                        pe_info("child", k);
                         let child_id = node.child(k);
                         if child_id == 0 { break() }
 
@@ -154,27 +153,23 @@ fn cpu_traverse_bvh4_packet(bvh: &Bvh4, ray_layout: RayLayout, ray_count: int, a
                     while true @{
                         let tri = &bvh.tris(tri_id++);
                         for k in @unroll(0, 4) @{
-                            pe_info("triangle", k);
                             body(make_primitive(make_ray_tri_intersector(load_bvh4_tri(tri, k)), tri.id(k) & 0x7FFFFFFF));
                         }
                         if (tri.id(3) & bitcast[i32](0x80000000u)) != 0 { break() }
                     }
                 },
                 iterate_instances: |_, _, _| {},
-                hit_callback: |hit, continue, terminate| -> !
-                    if any_hit && all(hit.prim_id >= 0) { @terminate(hit) } else { continue() },
-                transparency: |_, _| false,
                 is_leaf: |node_ref| node_ref.node < 0,
                 intrinsics: cpu_intrinsics,
                 ray_box_intrinsics: make_ray_box_intrinsics_avx2()
             };
 
-            @ray_layout.output(i, j, @traverse_bvh(mapping, stack, ray));
+            @ray_layout.output(i, j, @traverse_bvh(mapping, config, stack, ray));
         }
     }
 }
 
-fn cpu_traverse_bvh4_single(bvh: &Bvh4, ray_layout: RayLayout, ray_count: int, any_hit: bool) -> () {
+fn cpu_traverse_bvh4_single(config: TraversalConfig, bvh: &Bvh4, ray_layout: RayLayout, ray_count: int) -> () {
     let inc = ray_layout.packet_size;
     for i in $range_step(0, ray_count, inc) @{
         for j in range(0, inc) {
@@ -253,15 +248,12 @@ fn cpu_traverse_bvh4_single(bvh: &Bvh4, ray_layout: RayLayout, ray_count: int, a
                         }
                     },
                     iterate_instances: |_, _, _| {},
-                    hit_callback: |hit, continue, terminate| -> !
-                        if any_hit && hit.prim_id >= 0 { terminate(hit) } else { continue() },
-                    transparency: |_, _| false,
                     is_leaf: |node_ref| node_ref.node < 0,
                     intrinsics: cpu_intrinsics,
                     ray_box_intrinsics: make_ray_box_intrinsics_avx2()
                 };
 
-                ray_layout.output(i, j, @traverse_bvh(mapping, stack, ray));
+                ray_layout.output(i, j, @traverse_bvh(mapping, config, stack, ray));
             }
         }
     }
