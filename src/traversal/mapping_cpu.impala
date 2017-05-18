@@ -54,7 +54,7 @@ fn load_bvh4_tri(tri: &Bvh4Tri, i: int) -> Tri @{
 
 fn make_cpu_ray1_layout(rays: &[Ray1AoS], hits: &mut [Hit1AoS]) -> RayLayout {
     RayLayout {
-        increment: || 1,
+        packet_size: 1,
         input: |i, j| {
             let ray = &rays(i + j);
             make_ray(make_vec3(ray.org(0), ray.org(1), ray.org(2)),
@@ -73,7 +73,7 @@ fn make_cpu_ray1_layout(rays: &[Ray1AoS], hits: &mut [Hit1AoS]) -> RayLayout {
 
 fn make_cpu_ray4_layout(rays: &[Ray4SoA], hits: &mut [Hit4SoA]) -> RayLayout {
     RayLayout {
-        increment: || 4,
+        packet_size: 4,
         input: |i, j| {
             let ray = &rays(i);
             make_ray(make_vec3(ray.org(0)(j), ray.org(1)(j), ray.org(2)(j)),
@@ -92,7 +92,7 @@ fn make_cpu_ray4_layout(rays: &[Ray4SoA], hits: &mut [Hit4SoA]) -> RayLayout {
 
 fn make_cpu_ray8_layout(rays: &[Ray8SoA], hits: &mut [Hit8SoA]) -> RayLayout {
     RayLayout {
-        increment: || 8,
+        packet_size: 8,
         input: |i, j| {
             let ray = &rays(i);
             make_ray(make_vec3(ray.org(0)(j), ray.org(1)(j), ray.org(2)(j)),
@@ -110,7 +110,7 @@ fn make_cpu_ray8_layout(rays: &[Ray8SoA], hits: &mut [Hit8SoA]) -> RayLayout {
 }
 
 fn cpu_traverse_bvh4_packet(bvh: &Bvh4, ray_layout: RayLayout, ray_count: int, any_hit: bool) -> () {
-    let inc = ray_layout.increment();
+    let inc = ray_layout.packet_size;
     for i in $range(0, ray_count / inc) {
         for j in vectorize(inc, 32, 0, inc) @{
             let ray = ray_layout.input(i, j);
@@ -175,7 +175,7 @@ fn cpu_traverse_bvh4_packet(bvh: &Bvh4, ray_layout: RayLayout, ray_count: int, a
 }
 
 fn cpu_traverse_bvh4_single(bvh: &Bvh4, ray_layout: RayLayout, ray_count: int, any_hit: bool) -> () {
-    let inc = ray_layout.increment();
+    let inc = ray_layout.packet_size;
     for i in $range_step(0, ray_count, inc) @{
         for j in range(0, inc) {
             let ray = ray_layout.input(i, j);

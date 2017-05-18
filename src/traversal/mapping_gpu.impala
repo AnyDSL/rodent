@@ -41,7 +41,7 @@ fn make_ray_box_intrinsics_nvvm() -> RayBoxIntrinsics {
 
 fn make_gpu_ray_layout(rays: &[Ray1AoS], hits: &mut[Hit1AoS]) -> RayLayout {
     RayLayout {
-        increment: || 1,
+        packet_size: 1,
         input: |i, j| {
             let ray_ptr = &rays(i + j) as &[1][simd[float * 4]];
             let ray0 = nvvm_ldg4_f32(&ray_ptr(0));
@@ -62,8 +62,8 @@ fn gpu_traverse_bvh2(bvh: &Bvh2, ray_layout: RayLayout, ray_count: int, any_hit:
     let (nodes, tris) = (bvh.nodes, bvh.tris);
 
     let block_size = 64;
-    let grid  = (ray_count, ray_layout.increment(), 1);
-    let block = (block_size, ray_layout.increment(), 1);
+    let grid  = (ray_count, ray_layout.packet_size, 1);
+    let block = (block_size, ray_layout.packet_size, 1);
     let acc   = nvvm_accelerator(0);
 
     with acc.exec(grid, block) @{

@@ -44,7 +44,7 @@ type TraversalInput  = fn (int, int) -> Ray;
 type TraversalOutput = fn (int, int, Hit) -> ();
 
 struct RayLayout {
-    increment: fn () -> int,
+    packet_size: int,
     input:  TraversalInput,
     output: TraversalOutput
 }
