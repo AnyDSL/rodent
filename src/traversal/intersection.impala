@@ -103,7 +103,7 @@ fn intersect_ray_tri(math: Intrinsics, ray: Ray, tri: Tri, tmin: float, tmax: fl
 
     if any((u >= 0.0f) & (v >= 0.0f) & (w >= 0.0f)) @{
         let t = prodsign(vec3_dot(tri.n, c), det);
-        if (t >= abs_det * tmin) & (t <= abs_det * tmax) & (det != 0.0f) @{
+        if (t >= abs_det * tmin) & (t <= abs_det * tmax) & (abs_det > 0.0f) @{
             let inv_det = 1.0f / abs_det;
             intr(t * inv_det, u * inv_det, v * inv_det)
         }
