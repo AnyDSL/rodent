@@ -40,7 +40,7 @@ fn make_ray_box_intrinsics_avx2() -> RayBoxIntrinsics {
     };
     let fmaxf = |x, y| {
         let (x_, y_) = (bitcast[int](x), bitcast[int](y));
-        bitcast[float](select(x_ < y_, x_, y_))
+        bitcast[float](select(x_ > y_, x_, y_))
     };
     make_ray_box_intrinsics(fminf, fmaxf)
 }
