@@ -129,8 +129,8 @@ fn cpu_traverse_bvh4_packet(bvh: &Bvh4, ray_layout: RayLayout, ray_count: int, a
                         pe_info("child", k);
                         if node.child(k) == 0 { break() }
 
-                        let bbox = make_bbox(make_vec3(node.min(0)(k), node.min(1)(k), node.min(2)(k)),
-                                             make_vec3(node.max(0)(k), node.max(1)(k), node.max(2)(k)));
+                        let bbox = @make_bbox(make_vec3(node.min(0)(k), node.min(1)(k), node.min(2)(k)),
+                                              make_vec3(node.max(0)(k), node.max(1)(k), node.max(2)(k)));
                         let intersect_child = |box| -> (bool, float) {
                             @body(box, |tentry, _, _| -> ! { return(true, tentry) });
                             (false, 0.0f)
@@ -152,8 +152,9 @@ fn cpu_traverse_bvh4_packet(bvh: &Bvh4, ray_layout: RayLayout, ray_count: int, a
                     let mut tri_id = !leaf_ref.node;
                     while true @{
                         let tri = &bvh.tris(tri_id++);
-                        for k in @unroll(0, 4) {
-                            @body(make_primitive(make_ray_tri_intersector(load_bvh4_tri(tri, k)), tri.id(k) & 0x7FFFFFFF));
+                        for k in @unroll(0, 4) @{
+                            pe_info("triangle", k);
+                            body(make_primitive(make_ray_tri_intersector(load_bvh4_tri(tri, k)), tri.id(k) & 0x7FFFFFFF));
                         }
                         if (tri.id(3) & bitcast[i32](0x80000000u)) != 0 { break() }
                     }
@@ -167,7 +168,7 @@ fn cpu_traverse_bvh4_packet(bvh: &Bvh4, ray_layout: RayLayout, ray_count: int, a
                 ray_box_intrinsics: make_ray_box_intrinsics_avx2()
             };
 
-            ray_layout.output(i, j, @traverse_bvh(mapping, stack, ray, tmin, tmax));
+            @ray_layout.output(i, j, @traverse_bvh(mapping, stack, ray, tmin, tmax));
         }
     }
 }

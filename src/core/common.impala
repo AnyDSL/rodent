@@ -17,9 +17,9 @@ fn range(a: int, b: int, body: fn (int) -> ()) -> () {
 }
 
 fn unroll(a: int, b: int, body: fn (int) -> ()) -> () {
-    if a < b @{
+    if a < b {
         body(a);
-        unroll(a + 1, b, body, return)
+        @unroll(a + 1, b, body, return)
     }
 }
 
