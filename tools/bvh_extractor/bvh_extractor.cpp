@@ -7,8 +7,8 @@
 #include "file_path.h"
 #include "tri.h"
 
-bool build_bvh4(std::ofstream&, const std::vector<Tri>&);
-bool build_bvh2(std::ofstream&, const std::vector<Tri>&);
+int build_bvh4(std::ofstream&, const std::vector<Tri>&);
+int build_bvh2(std::ofstream&, const std::vector<Tri>&);
 
 inline void check_argument(int i, int argc, char** argv) {
     if (i + 1 >= argc) {
@@ -94,19 +94,21 @@ int main(int argc, char** argv) {
     uint32_t magic = 0x95CBED1F;
     out.write((char*)&magic, sizeof(uint32_t));
 
-    if (!build_bvh4(out, tris)) {
+    int bvh4_nodes = build_bvh4(out, tris);
+    if (!bvh4_nodes) {
         std::cerr << "Cannot build a BVH4 using Embree" << std::endl;
         return 1;
     }
 
-    std::cout << "BVH4 successfully built" << std::endl;
+    std::cout << "BVH4 successfully built (" << bvh4_nodes << " nodes)" << std::endl;
 
-    if (!build_bvh2(out, tris)) {
+    int bvh2_nodes = build_bvh2(out, tris);
+    if (!bvh4_nodes) {
         std::cerr << "Cannot build a BVH2" << std::endl;
         return 1;
     }
 
-    std::cout << "BVH2 successfully built" << std::endl;
+    std::cout << "BVH2 successfully built (" << bvh2_nodes << " nodes)" << std::endl;
 
     return 0;
 }

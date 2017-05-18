@@ -127,7 +127,8 @@ fn cpu_traverse_bvh4_packet(bvh: &Bvh4, ray_layout: RayLayout, ray_count: int, a
                     let node = &bvh.nodes(node_ref.node);
                     for k in @unroll(0, 4) @{
                         pe_info("child", k);
-                        if node.child(k) == 0 { break() }
+                        let child_id = node.child(k);
+                        if child_id == 0 { break() }
 
                         let bbox = @make_bbox(make_vec3(node.min(0)(k), node.min(1)(k), node.min(2)(k)),
                                               make_vec3(node.max(0)(k), node.max(1)(k), node.max(2)(k)));
@@ -139,9 +140,9 @@ fn cpu_traverse_bvh4_packet(bvh: &Bvh4, ray_layout: RayLayout, ray_count: int, a
 
                         if any(hit) {
                             if any(stack.top().tmin > tentry) {
-                                stack.push(node.child(k), tentry);
+                                stack.push(child_id, tentry);
                             } else {
-                                stack.push_after(node.child(k), tentry);
+                                stack.push_after(child_id, tentry);
                             }
                         }
                     }

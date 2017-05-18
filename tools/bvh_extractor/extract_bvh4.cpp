@@ -127,7 +127,7 @@ void extract_bvh4_node(BVH4::NodeRef node,
     new_nodes[index] = new_node;
 }
 
-bool build_bvh4(std::ofstream& out, const std::vector<Tri>& tris) {
+int build_bvh4(std::ofstream& out, const std::vector<Tri>& tris) {
     auto device = rtcNewDevice("tri_accel=bvh4.triangle4v");
     error_handler(rtcDeviceGetError(device), "");
     rtcDeviceSetErrorFunction(device, error_handler);
@@ -158,7 +158,7 @@ bool build_bvh4(std::ofstream& out, const std::vector<Tri>& tris) {
     if (accel->type == AccelData::TY_BVH4) 
         bvh4 = (BVH4*)accel;
     else
-        return false;
+        return 0;
 
     std::vector<Bvh4Node> new_nodes;
     std::vector<Bvh4Tri>  new_tris;
@@ -182,5 +182,5 @@ bool build_bvh4(std::ofstream& out, const std::vector<Tri>& tris) {
     rtcDeleteScene(scene);
     rtcDeleteDevice(device);
 
-    return true;
+    return new_nodes.size();
 }

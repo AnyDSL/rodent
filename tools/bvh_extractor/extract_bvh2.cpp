@@ -142,7 +142,7 @@ private:
     std::vector<Bvh2Tri>& tris_;
 };
 
-bool build_bvh2(std::ofstream& out, const std::vector<Tri>& tris) {
+int build_bvh2(std::ofstream& out, const std::vector<Tri>& tris) {
     std::vector<Bvh2Node> new_nodes;
     std::vector<Bvh2Tri>  new_tris;
     Bvh2Builder builder(new_nodes, new_tris);
@@ -163,5 +163,5 @@ bool build_bvh2(std::ofstream& out, const std::vector<Tri>& tris) {
     out.write((char*)new_nodes.data(), sizeof(Bvh2Node) * new_nodes.size());
     out.write((char*)new_tris.data(),  sizeof(Bvh2Tri)  * new_tris.size());
 
-    return true;
+    return new_nodes.size();
 }
