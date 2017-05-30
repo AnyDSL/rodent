@@ -6,11 +6,11 @@ fn frontend_config(any: bool) -> TraversalConfig {
 }
 
 extern fn frontend_cpu_traverse_bvh4(bvh: &Bvh4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int, any: bool) -> () {
-    if any {
-        @cpu_traverse_bvh4_packet(frontend_config(true), bvh, make_cpu_ray8_layout(rays, hits), ray_count);
-    } else {
-        @cpu_traverse_bvh4_packet(frontend_config(false), bvh, make_cpu_ray8_layout(rays, hits), ray_count);
-    }
+    /*if any {
+        @cpu_traverse_bvh4_packet(@frontend_config(true), bvh, make_cpu_ray8_layout(rays, hits), ray_count);
+    } else {*/
+        @cpu_traverse_bvh4_single(@frontend_config(false), bvh, make_cpu_ray8_layout(rays, hits), ray_count);
+    //}
 }
 
 extern fn frontend_gpu_traverse_bvh2(bvh: &Bvh2, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int, any: bool) -> () {

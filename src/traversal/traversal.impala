@@ -35,9 +35,9 @@ struct Instance {
     traverse: fn (Ray) -> Hit
 }
 
-static any_hit : HitCallback = |hit, continue, terminate| -> ! { if all(hit.prim_id >= 0) { terminate(hit) } else { continue() } };
-static closest_hit : HitCallback = |_, continue, _| -> ! { continue() };
-static opaque : Transparency = |_, _| { false };
+static any_hit : HitCallback = |hit, continue, terminate| -> ! { if any(hit.prim_id < 0) { @continue() } else { @terminate(hit) } };
+static closest_hit : HitCallback = |_, continue, _| -> ! @{ continue() };
+static opaque : Transparency = |_, _| @{ false };
 
 fn make_hit(inst_id: int, prim_id: int, t: float, uv: Vec2) -> Hit {
     Hit {
@@ -79,7 +79,7 @@ fn traverse_bvh(mapping: TraversalMapping, config: TraversalConfig, stack: Stack
                     }
                 }
 
-                @config.hit_callback(make_hit(inst_id, prim_id, t, uv), continue, return)
+                @config.hit_callback(@make_hit(inst_id, prim_id, t, uv), continue, return)
             }
 
             // Process instances, if any
@@ -94,7 +94,7 @@ fn traverse_bvh(mapping: TraversalMapping, config: TraversalConfig, stack: Stack
                     uv = hit.intr.uv_coords;
                 }
 
-                @config.hit_callback(make_hit(inst_id, prim_id, t, uv), continue, return)
+                @config.hit_callback(@make_hit(inst_id, prim_id, t, uv), continue, return)
             }
 
             stack.pop()

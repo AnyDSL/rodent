@@ -23,9 +23,10 @@ extern "C" {
     fn "rv_all"     all(bool) -> bool;
     fn "rv_ballot"  ballot(bool) -> int;
     fn "rv_extract" extractf(float, int) -> float;
-    fn "rv_extract" extracti(int, int) -> int;
-    fn "rv_extract" extractv3(Vec3, int) -> Vec3;
-    fn "rv_extract" extractv2(Vec2, int) -> Vec3;
+}
+
+fn extracti(v: int, i: int) -> int {
+    bitcast[int](extractf(bitcast[float](v), i))
 }
 
 fn make_ray_box_intrinsics_avx() -> RayBoxIntrinsics {
@@ -198,7 +199,7 @@ fn cpu_traverse_bvh4_single(config: TraversalConfig, bvh: &Bvh4, ray_layout: Ray
 
                         // Push intersected nodes on the stack
                         let mut count = 0;
-                        for lane in @range(0, 4) {
+                        for lane in @unroll(0, 4) {
                             let c = extracti(child, lane);
                             if c >= 0 {
                                 stack.push(c, extractf(tentry, lane));
