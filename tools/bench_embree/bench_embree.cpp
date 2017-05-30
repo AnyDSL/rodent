@@ -160,7 +160,7 @@ void bench(const std::vector<Tri>& tris,
 
     size_t intr = 0;
     for (auto& hit : hits) {
-        for (int i = 0; i < 8; i++) intr += hit.primID[i] >= 0;
+        for (int i = 0; i < 8; i++) intr += hit.primID[i] != RTC_INVALID_GEOMETRY_ID;
     }
 
     std::sort(timings.begin(), timings.end());
