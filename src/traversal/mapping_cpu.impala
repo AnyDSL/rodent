@@ -134,7 +134,7 @@ fn cpu_traverse_bvh4_packet(config: TraversalConfig, bvh: &Bvh4, ray_layout: Ray
                                               make_vec3(node.max(0)(k), node.max(1)(k), node.max(2)(k)));
                         let intersect_child = |box| -> (bool, float) {
                             @body(box, |tentry, _, _| -> ! { return(true, tentry) });
-                            (false, 0.0f)
+                            (false, undef())
                         };
                         let (hit, tentry) = @intersect_child(bbox);
 
@@ -181,41 +181,41 @@ fn cpu_traverse_bvh4_single(config: TraversalConfig, bvh: &Bvh4, ray_layout: Ray
                 stack.push(0, ray.tmin);
 
                 let mapping = TraversalMapping {
-                    iterate_children: |node_ref, tmax, stack, body, exit| -> ! {
+                    iterate_children: |node_ref, tmax, stack, body, exit| -> ! @{
                         stack.pop();
 
                         if node_ref.tmin > tmax { exit() }
 
                         let node = &bvh.nodes(node_ref.node);
-                        let bbox = make_bbox(make_vec3(node.min(0)(k), node.min(1)(k), node.min(2)(k)),
-                                             make_vec3(node.max(0)(k), node.max(1)(k), node.max(2)(k)));
+                        let bbox = @make_bbox(make_vec3(node.min(0)(k), node.min(1)(k), node.min(2)(k)),
+                                              make_vec3(node.max(0)(k), node.max(1)(k), node.max(2)(k)));
 
-                        let mut child = -1;
-                        let mut tentry : float;
-                        body(bbox, |t, _| {
-                            tentry = t;
-                            child = node.child(j);
-                        });
+                        let intersect_child = |box| -> (int, float) {
+                            @body(box, |tentry, _, _| -> ! { return(-1, tentry) });
+                            (0, undef())
+                        };
+                        let (hit, tentry) = @intersect_child(bbox);
 
                         // Push intersected nodes on the stack
                         let mut count = 0;
                         for lane in @unroll(0, 4) {
-                            let c = extracti(child, lane);
-                            if c >= 0 {
-                                stack.push(c, extractf(tentry, lane));
+                            let child_id = node.child(k);
+                            if child_id == 0 { break() }
+                            if extracti(hit, lane) == 0 {
+                                stack.push(child_id, extractf(tentry, lane));
                                 count++;
                             }
                         }
 
                         // Sort the nodes on the stack, based on their distance
-                        if count < 2 { exit() }
+                        /*if count < 2 { exit() }
                         if count == 2 {
                             @stack.sort_n(2);
                         } else if count == 3 {
                             @stack.sort_n(3);
                         } else if count == 4 {
                             @stack.sort_n(4);
-                        }
+                        }*/
                     },
                     iterate_primitives: |leaf_ref, tmax, body, exit| -> ! {
                         if leaf_ref.tmin > tmax { exit() }
@@ -254,7 +254,7 @@ fn cpu_traverse_bvh4_single(config: TraversalConfig, bvh: &Bvh4, ray_layout: Ray
                     ray_box_intrinsics: make_ray_box_intrinsics_avx2()
                 };
 
-                ray_layout.output(i, j, @traverse_bvh(mapping, config, stack, ray));
+                @ray_layout.output(i, j, @traverse_bvh(mapping, config, stack, ray));
             }
         }
     }
