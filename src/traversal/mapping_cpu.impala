@@ -178,7 +178,7 @@ fn cpu_traverse_bvh4_single(config: TraversalConfig, bvh: &Bvh4, ray_layout: Ray
             for k in vectorize(4, 16, 0, 4) {
                 let stack = allocate_stack();
 
-                stack.push(0, ray.tmin);
+                @stack.push(0, ray.tmin);
 
                 let mapping = TraversalMapping {
                     iterate_children: |node_ref, tmax, stack, body, exit| -> ! @{
@@ -187,8 +187,8 @@ fn cpu_traverse_bvh4_single(config: TraversalConfig, bvh: &Bvh4, ray_layout: Ray
                         if node_ref.tmin > tmax { exit() }
 
                         let node = &bvh.nodes(node_ref.node);
-                        let bbox = @make_bbox(make_vec3(node.min(0)(k), node.min(1)(k), node.min(2)(k)),
-                                              make_vec3(node.max(0)(k), node.max(1)(k), node.max(2)(k)));
+                        let bbox = @make_bbox(@make_vec3(node.min(0)(k), node.min(1)(k), node.min(2)(k)),
+                                              @make_vec3(node.max(0)(k), node.max(1)(k), node.max(2)(k)));
 
                         let intersect_child = |box| -> (int, float) {
                             @body(box, |tentry, _, _| -> ! { return(-1, tentry) });
@@ -218,12 +218,12 @@ fn cpu_traverse_bvh4_single(config: TraversalConfig, bvh: &Bvh4, ray_layout: Ray
                         }*/
                     },
                     iterate_primitives: |leaf_ref, tmax, body, exit| -> ! {
-                        if leaf_ref.tmin > tmax { exit() }
+                        /*if leaf_ref.tmin > tmax { exit() }
 
                         let mut tri_id = !leaf_ref.node;
-                        while true {
+                        while true @{
                             let tri = &bvh.tris(tri_id++);
-                            /*let closest_intr = |math, ray, tmin, tmax, intr| {
+                            let closest_intr = |math, ray, tmin, tmax, intr| {
                                 let mut found = false;
                                 let mut t  = flt_max;
                                 let mut n  = vec3(0.0f, 0.0f, 0.0f);
@@ -242,16 +242,16 @@ fn cpu_traverse_bvh4_single(config: TraversalConfig, bvh: &Bvh4, ray_layout: Ray
                                     if extractf(t, 1) < extractf(t, 0) { id = 1; }
                                     if extractf(t, 2) < extractf(t, 3) { id = 2; }
                                 }
-                            };*/
+                            };
                             // TODO: Select the closest ray-triangle intersection within the intersector
                             @body(make_primitive(make_ray_tri_intersector(load_bvh4_tri(tri, k)), tri.id(k) & 0x7FFFFFFF));
                             if (tri.id(3) & bitcast[i32](0x80000000u)) != 0 { break() }
-                        }
+                        }*/
                     },
                     iterate_instances: |_, _, _| {},
                     is_leaf: |node_ref| node_ref.node < 0,
                     intrinsics: cpu_intrinsics,
-                    ray_box_intrinsics: make_ray_box_intrinsics_avx2()
+                    ray_box_intrinsics: @make_ray_box_intrinsics_avx2()
                 };
 
                 @ray_layout.output(i, j, @traverse_bvh(mapping, config, stack, ray));
