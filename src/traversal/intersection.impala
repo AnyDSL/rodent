@@ -7,14 +7,11 @@ struct Ray {
     tmax: float    // Maximum distance from the origin
 }
 
-struct Intersection {
+struct Hit {
     distance:  float,  // Distance to the intersection point
-    uv_coords: Vec2    // Surface coordinates
-}
-
-struct Primitive {
-    intersect: Intersector,     // Primitive intersection function
-    id: int                     // Primitive identifier
+    uv_coords: Vec2,   // Surface coordinates
+    prim_id:   int,    // Primitive identifier, or -1 (no intersection found)
+    inst_id:   int     // Instance identifier, or -1 (no instance found)
 }
 
 struct Tri {
@@ -41,7 +38,7 @@ struct RayBoxIntrinsics {
     fminf:    fn (float, float) -> float
 }
 
-type Intersector = fn (Intrinsics, Ray, fn (Intersection) -> ()) -> ();
+type Intersector = fn (Intrinsics, Ray, fn (Hit) -> ()) -> ();
 
 // Constructs a set of intrinsics from min and max functions.
 // May not be the optimal intrinsics if the hardware provides a combined min/max instruction.
@@ -67,13 +64,6 @@ fn make_ray(org: Vec3, dir: Vec3, tmin: float, tmax: float) -> Ray {
         inv_org: inv_org,
         tmin: tmin,
         tmax: tmax
-    }
-}
-
-fn make_primitive(intersect: Intersector, id: int) -> Primitive {
-    Primitive {
-        intersect: intersect,
-        id: id
     }
 }
 
@@ -137,12 +127,14 @@ fn intersect_ray_box(math: RayBoxIntrinsics, ray: Ray, bbox: BBox, intr: fn (flo
 }
 
 // Creates a ray-triangle intersector
-fn make_ray_tri_intersector(tri: Tri) -> Intersector {
+fn make_ray_tri_intersector(tri: Tri, prim_id: int) -> Intersector {
     |math, ray, intr| {
         intersect_ray_tri(math, ray, tri, |t, u, v| {
-            intr(Intersection {
+            intr(Hit {
                 distance:  t,
-                uv_coords: make_vec2(u, v)
+                uv_coords: make_vec2(u, v),
+                prim_id:   prim_id,
+                inst_id:   -1
             })
         })
     }

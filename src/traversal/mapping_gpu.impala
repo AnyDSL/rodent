@@ -51,9 +51,8 @@ fn make_gpu_ray_layout(rays: &[Ray1AoS], hits: &mut[Hit1AoS]) -> RayLayout {
              ray0(3), ray1(3))
         },
         output: |i, j, hit| {
-            let intr = hit.intr;
             *(&hits(i + j) as &mut simd[float * 4]) =
-                simd[bitcast[float](hit.prim_id), intr.distance, intr.uv_coords.x, intr.uv_coords.y];
+                simd[bitcast[float](hit.prim_id), hit.distance, hit.uv_coords.x, hit.uv_coords.y];
         }
     }
 }
@@ -126,7 +125,7 @@ fn gpu_traverse_bvh2(config: TraversalConfig, bvh: &Bvh2, ray_layout: RayLayout,
                     let e2 = make_vec3(tri2(0), tri2(1), tri2(2));
                     let  n = make_vec3(tri0(3), tri1(3), vec3_cross(e1, e2).z);
 
-                    @body(make_primitive(make_ray_tri_intersector(make_tri(v0, e1, e2, n)), (id & 0x7FFFFFFFu) as int));
+                    @body(make_ray_tri_intersector(make_tri(v0, e1, e2, n), (id & 0x7FFFFFFFu) as int));
 
                     if (id & 0x80000000u) != 0u { break() }
                     tri_id++;
