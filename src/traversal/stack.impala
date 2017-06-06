@@ -49,9 +49,9 @@ fn allocate_stack() -> Stack {
             pe_info("i", i);
             pe_info("j", j);
             let m = (i + j) / 2;
-            @sort(true, s, i, m);
-            @sort(false, s, m, j);
-            @merge(b, s, i, j);
+            sort(true, s, i, m);
+            sort(false, s, m, j);
+            merge(b, s, i, j);
         }
     }
 
