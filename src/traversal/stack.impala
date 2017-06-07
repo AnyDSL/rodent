@@ -24,7 +24,7 @@ fn allocate_stack() -> Stack {
     fn cmp_swap(b: bool, s: int, i: int, j: int) -> () {
         let d = (j - i) / 2;
         for k in range(i, i + d) {
-            if (tmins(s + k) > tmins(s + k + d)) == b {
+            if (tmins(s + k) < tmins(s + k + d)) == b {
                 let n = nodes(s);
                 let t = tmins(s);
                 nodes(s) = nodes(s + k + d);

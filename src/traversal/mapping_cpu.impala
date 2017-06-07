@@ -227,26 +227,27 @@ fn cpu_traverse_bvh4_single(config: TraversalConfig, bvh: &Bvh4, ray_layout: Ray
                             let mut uv;
 
                             // Compute the intersection for each lane
-                            let intersect = @make_ray_tri_intersector(load_bvh4_tri(tri, k), undef());
-                            intersect(math, ray, |hit| {
+                            let intersect = @make_ray_tri_intersector(load_bvh4_tri(tri, k), tri.id(k) & 0x7FFFFFFF);
+                            @intersect(math, ray, |hit| {
                                 uv = hit.uv_coords;
                                 t = hit.distance;
                                 found = -1;
                             });
 
                             // Find the closest intersection
-                            let mut hit = @make_hit(-1, -1, flt_max, undef());
                             if any(found != 0) {
-                                for lane in @unroll(0, 4) @{
+                                let mut hit = @make_hit(-1, -1, flt_max, undef());
+                                for lane in @unroll(0, 4) {
+                                    if extracti(found, lane) == 0 { continue() }
                                     let tlane = extractf(t, lane);
-                                    if extracti(found, lane) != 0 && tlane < hit.distance @{
+                                    if tlane < hit.distance @{
                                         hit.prim_id = tri.id(lane) & 0x7FFFFFFF;
                                         hit.uv_coords = make_vec2(extractf(uv.x, lane), extractf(uv.y, lane));
                                         hit.distance = tlane;
                                     }
                                 }
+                                @intr(hit);
                             }
-                            @intr(hit);
                         };
                         @body(closest_intr);
                         if (tri.id(3) & bitcast[i32](0x80000000u)) != 0 { break() }

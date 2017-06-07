@@ -1,6 +1,6 @@
-static flt_eps = 1.0e-5f;
-static flt_max = 1.0e+37f;
-static flt_min = 1.0e-37f;
+static flt_eps = 1.1920928955e-07f;
+static flt_max = 3.4028234664e+38f;
+static flt_min = 1.1754943508e-38f;
 static flt_pi = 3.14159265359f;
 static flt_sqrt2 = 1.41421356237f;
 static flt_sqrt3 = 1.73205080757f;
@@ -28,7 +28,7 @@ fn prodsign(x: float, y: float) -> float {
 }
 
 fn safe_rcp(x: float) -> float {
-    if x == 0.0f { prodsign(flt_max, x) } else { 1.0f / x }
+    select(x == 0.0f, prodsign(flt_max, x), 1.0f / x)
 }
 
 fn lerp(a: float, b: float, k: float) -> float {

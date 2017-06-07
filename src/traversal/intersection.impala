@@ -54,7 +54,7 @@ fn make_ray_box_intrinsics(fminf: fn (float, float) -> float,
     }
 }
 
-fn make_ray(org: Vec3, dir: Vec3, tmin: float, tmax: float) -> Ray {
+fn make_ray(org: Vec3, dir: Vec3, tmin: float, tmax: float) -> Ray @{
     let inv_dir = make_vec3(safe_rcp(dir.x), safe_rcp(dir.y), safe_rcp(dir.z));
     let inv_org = vec3_mul(org, inv_dir);
     Ray {
