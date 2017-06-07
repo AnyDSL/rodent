@@ -196,7 +196,6 @@ fn cpu_traverse_bvh4_single(config: TraversalConfig, bvh: &Bvh4, ray_layout: Ray
                     // Push intersected nodes on the stack
                     let mut count = 0;
                     for lane in @unroll(0, 4) @{
-                        pe_info("lane", lane);
                         let child_id = node.child(lane);
                         if child_id == 0 { break() }
                         if extracti(hit, lane) != 0 @{
