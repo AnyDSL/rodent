@@ -210,7 +210,7 @@ fn cpu_traverse_bvh4_single(config: TraversalConfig, bvh: &Bvh4, ray_layout: Ray
                         @stack.sort_n(2);
                     } else if count == 3 {
                         @stack.sort_n(3);
-                    } else if count == 4 {
+                    } else if count >= 4 {
                         @stack.sort_n(4);
                     }
                 },
@@ -226,8 +226,8 @@ fn cpu_traverse_bvh4_single(config: TraversalConfig, bvh: &Bvh4, ray_layout: Ray
                             let mut uv;
 
                             // Compute the intersection for each lane
-                            let intersect = @make_ray_tri_intersector(load_bvh4_tri(tri, k), tri.id(k) & 0x7FFFFFFF);
-                            @intersect(math, ray, |hit| {
+                            let intersect = make_ray_tri_intersector(load_bvh4_tri(tri, k), tri.id(k) & 0x7FFFFFFF);
+                            @intersect(math, ray, |hit| @{
                                 uv = hit.uv_coords;
                                 t = hit.distance;
                                 found = -1;

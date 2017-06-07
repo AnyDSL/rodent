@@ -23,14 +23,18 @@ fn allocate_stack() -> Stack {
 
     fn cmp_swap(b: bool, s: int, i: int, j: int) -> () {
         let d = (j - i) / 2;
+        let node_ptr = &mut nodes(s) as &mut [int];
+        let tmin_ptr = &mut tmins(s) as &mut [float];
         for k in range(i, i + d) {
-            if (tmins(s + k) < tmins(s + k + d)) == b {
-                let n = nodes(s);
-                let t = tmins(s);
-                nodes(s) = nodes(s + k + d);
-                tmins(s) = tmins(s + k + d);
-                nodes(s + k + d) = n;
-                tmins(s + k + d) = t;
+            let t0 = tmin_ptr(k);
+            let t1 = tmin_ptr(k + d);
+            if (t0 < t1) == b {
+                let n0 = node_ptr(k);
+                let n1 = node_ptr(k + d);
+                node_ptr(k) = n1;
+                tmin_ptr(k) = t1;
+                node_ptr(k + d) = n0;
+                tmin_ptr(k + d) = t0;
             }
         }
     }
