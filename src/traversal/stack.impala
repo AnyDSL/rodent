@@ -21,42 +21,6 @@ fn allocate_stack() -> Stack {
     let mut tmin = flt_max;
     let mut ptr = -1;
 
-    fn cmp_swap(b: bool, s: int, i: int, j: int) -> () {
-        let d = (j - i) / 2;
-        let node_ptr = &mut nodes(s) as &mut [int];
-        let tmin_ptr = &mut tmins(s) as &mut [float];
-        for k in range(i, i + d) {
-            let t0 = tmin_ptr(k);
-            let t1 = tmin_ptr(k + d);
-            if (t0 < t1) == b {
-                let n0 = node_ptr(k);
-                let n1 = node_ptr(k + d);
-                node_ptr(k) = n1;
-                tmin_ptr(k) = t1;
-                node_ptr(k + d) = n0;
-                tmin_ptr(k + d) = t0;
-            }
-        }
-    }
-
-    fn merge(b: bool, s: int, i: int, j: int) -> () {
-        if i < j - 1 {
-            let m = (i + j) / 2;
-            cmp_swap(b, s, i, j);
-            merge(b, s, i, m);
-            merge(b, s, m, j)
-        }
-    }
-
-    fn sort(b: bool, s: int, i: int, j: int) -> () {
-        if i < j - 1 {
-            let m = (i + j) / 2;
-            sort(true, s, i, m);
-            sort(false, s, m, j);
-            merge(b, s, i, j);
-        }
-    }
-
     Stack {
         push: |n, t| {
             ptr++;
@@ -78,8 +42,16 @@ fn allocate_stack() -> Stack {
             ptr++;
             nodes(ptr) = node;
             tmins(ptr) = tmin;
-            pe_info("n", n);
-            sort(true, ptr - n + 1, 0, n);
+            let cmp = |i, j| { tmins(ptr - i) > tmins(ptr - j) };
+            let swap = |i, j| {
+                let t = tmins(ptr - i);
+                let n = nodes(ptr - i);
+                tmins(ptr - i) = tmins(ptr - j);
+                nodes(ptr - i) = nodes(ptr - j);
+                tmins(ptr - j) = t;
+                nodes(ptr - j) = n;
+            };
+            bose_nelson_sort(n, cmp, swap);
             node = nodes(ptr);
             tmin = tmins(ptr);
             ptr--;

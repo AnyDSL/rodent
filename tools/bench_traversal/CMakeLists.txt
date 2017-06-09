@@ -7,6 +7,7 @@ set(TRAVERSAL_SRCS
     ../../src/traversal/mapping_gpu.impala
     ../../src/traversal/ray_layout.impala
     ../../src/core/common.impala
+    ../../src/core/sort.impala
     ../../src/core/matrix.impala
     ../../src/core/vector.impala)
 

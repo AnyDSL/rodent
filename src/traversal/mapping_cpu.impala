@@ -204,15 +204,12 @@ fn cpu_traverse_bvh4_single(config: TraversalConfig, bvh: &Bvh4, ray_layout: Ray
                         }
                     }
 
-                    // Sort the nodes on the stack, based on their distance
                     if count < 2 { exit() }
-                    if count == 2 {
-                        @stack.sort_n(2);
-                    } else if count == 3 {
-                        @stack.sort_n(3);
-                    } else if count >= 4 {
-                        @stack.sort_n(4);
-                    }
+
+                    // Sort the nodes on the stack, based on their distance
+                    if count == 2 { @stack.sort_n(2) }
+                    else if count == 3 { @stack.sort_n(3) }
+                    else /* if count == 4 */ { @stack.sort_n(4) }
                 },
                 iterate_primitives: |leaf_ref, tmax, body, exit| -> ! @{
                     if leaf_ref.tmin > tmax { exit() }

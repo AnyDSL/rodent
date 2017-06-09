@@ -1,0 +1,64 @@
+fn bose_nelson_sort(n: int, cmp: fn (int, int) -> bool, swap: fn (int, int) -> ()) -> () {
+    fn cmp_swap(i1: int, i2: int) -> () {
+        if cmp(i1, i2) { swap(i1, i2); }
+    }
+
+    fn p_star(i: int, len: int) -> () {
+        if len > 1 {
+            let m = len / 2;
+            p_star(i, m);
+            p_star((i + m), (len - m));
+            p_bracket(i, m, (i + m), (len - m));
+        }
+    }
+
+    fn p_bracket(i1: int, len1: int, i2: int, len2: int) -> () {
+        if len1 == 1 && len2 == 1 {
+            cmp_swap(i1, i2);
+        } else if len1 == 1 && len2 == 2 {
+            cmp_swap(i1, i2 + 1);
+            cmp_swap(i1, i2);
+        } else if len1 == 2 && len2 == 1 {
+            cmp_swap(i1, i2);
+            cmp_swap(i1 + 1, i2);
+        } else {
+            let a = len1 / 2;
+            let b = select(len1 % 2 != 0, len2 / 2, (len2 + 1) / 2);
+            p_bracket(i1, a, i2, b);
+            p_bracket((i1 + a), (len1 - a), (i2 + b), (len2 - b));
+            p_bracket((i1 + a), (len1 - a), i2, b);
+        }
+    }
+
+    p_star(0, n)
+}
+
+fn bitonic_sort(n: int, cmp: fn (int, int) -> bool, swap: fn (int, int) -> ()) -> () {
+    fn cmp_swap(dir: bool, i: int, j: int) -> () {
+        let d = (j - i) / 2;
+        for k in range(i, i + d) {
+            if cmp(k, k + d) { swap(k, k + d); }
+        }
+    }
+
+    fn merge(dir: bool, i: int, j: int) -> () {
+        if i < j - 1 {
+            let m = (i + j) / 2;
+            cmp_swap(dir, i, j);
+            merge(dir, i, m);
+            merge(dir, m, j);
+        }
+    }
+
+    fn sort(dir: bool, i: int, j: int) -> () {
+        if i < j - 1 {
+            let m = (i + j) / 2;
+            sort(true, i, m);
+            sort(false, m, j);
+            merge(dir, i, j);
+        }
+    }
+
+    sort(true, 0, n)
+}
+
