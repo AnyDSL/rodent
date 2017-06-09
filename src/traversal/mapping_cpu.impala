@@ -118,13 +118,14 @@ fn make_cpu_ray8_layout(rays: &[Ray8SoA], hits: &mut [Hit8SoA]) -> RayLayout {
 // Mappings  -----------------------------------------------------------------------
 
 fn make_cpu_packet_bvh4_mapping(bvh: &Bvh4, ray_box_intrinsics: RayBoxIntrinsics) -> TraversalMapping {
+    let (nodes, tris) = (bvh.nodes, bvh.tris);
     TraversalMapping {
         iterate_children: |node_ref, tmax, stack, body, exit| -> ! @{
             stack.pop();
 
             if all(node_ref.tmin > tmax) { exit() }
 
-            let node = &bvh.nodes(node_ref.node);
+            let node = &nodes(node_ref.node);
             for k in @unroll(0, 4) @{
                 let child_id = node.child(k);
                 if child_id == 0 { break() }
@@ -150,7 +151,7 @@ fn make_cpu_packet_bvh4_mapping(bvh: &Bvh4, ray_box_intrinsics: RayBoxIntrinsics
 
             let mut tri_id = !leaf_ref.node;
             while true @{
-                let tri = &bvh.tris(tri_id++);
+                let tri = &tris(tri_id++);
                 for k in @unroll(0, 4) @{
                     body(make_ray_tri_intersector(load_bvh4_tri(tri, k), tri.id(k) & 0x7FFFFFFF));
                 }
@@ -165,51 +166,48 @@ fn make_cpu_packet_bvh4_mapping(bvh: &Bvh4, ray_box_intrinsics: RayBoxIntrinsics
 }
 
 fn make_cpu_single_bvh4_mapping(k: int, bvh: &Bvh4, ray_box_intrinsics: RayBoxIntrinsics) -> TraversalMapping {
+    let (nodes, tris) = (bvh.nodes, bvh.tris);
     TraversalMapping {
         iterate_children: |node_ref, tmax, stack, body, exit| -> ! @{
             stack.pop();
 
             if node_ref.tmin > tmax { exit() }
 
-            let node = &bvh.nodes(node_ref.node);
+            let node = &nodes(node_ref.node);
             let bbox = @make_bbox(make_vec3(node.min(0)(k), node.min(1)(k), node.min(2)(k)),
                                   make_vec3(node.max(0)(k), node.max(1)(k), node.max(2)(k)));
 
-            let mut hit = 0;
+            let mut hit = false;
             let mut tentry;
-            @body(bbox, |t, _, _| -> ! { tentry = t; hit = -1; });
+            @body(bbox, |t, _, _| -> ! { tentry = t; hit = true; });
 
             // Push intersected nodes on the stack
-            let mut count = 0;
-            for lane in @unroll(0, 4) @{
-                let child_id = node.child(lane);
-                if child_id == 0 { break() }
-                if extracti(hit, lane) != 0 @{
-                    let t = extractf(tentry, lane);
-                    if stack.top().tmin > t {
-                        stack.push(child_id, t);
-                    } else {
-                        stack.push_after(child_id, t);
+            let mask = ballot(hit);
+            if mask != 0 {
+                for lane in @unroll(0, 4) @{
+                    let child_id = node.child(lane);
+                    if child_id == 0 { break() }
+                    if (mask & (1 << lane)) != 0 @{
+                        let t = extractf(tentry, lane);
+                        if stack.top().tmin > t {
+                            stack.push(child_id, t);
+                        } else {
+                            stack.push_after(child_id, t);
+                        }
                     }
-                    count++;
                 }
+                let count = cpu_popcount32(mask);
+                if count >= 3 { @stack.sort_n(3) }
             }
-
-            if count < 2 { exit() }
-
-            // Sort the nodes on the stack, based on their distance
-            if count == 2 { @stack.sort_n(2) }
-            else if count == 3 { @stack.sort_n(3) }
-            else /* if count == 4 */ { @stack.sort_n(4) }
         },
         iterate_primitives: |leaf_ref, tmax, body, exit| -> ! @{
             if leaf_ref.tmin > tmax { exit() }
 
             let mut tri_id = !leaf_ref.node;
             while true @{
-                let tri = &bvh.tris(tri_id++);
+                let tri = &tris(tri_id++);
                 let closest_intr : Intersector = |math, ray, intr| @{
-                    let mut found = 0;
+                    let mut found = false;
                     let mut t;
                     let mut uv;
 
@@ -218,14 +216,15 @@ fn make_cpu_single_bvh4_mapping(k: int, bvh: &Bvh4, ray_box_intrinsics: RayBoxIn
                     @intersect(math, ray, |hit| @{
                         uv = hit.uv_coords;
                         t = hit.distance;
-                        found = -1;
+                        found = true;
                     });
 
                     // Find the closest intersection
-                    if any(found != 0) {
+                    let mask = ballot(found);
+                    if mask != 0 {
                         let mut hit = @make_hit(-1, -1, flt_max, undef());
                         for lane in @unroll(0, 4) {
-                            if extracti(found, lane) == 0 { continue() }
+                            if (mask & (1 << lane)) == 0 { continue() }
                             let tlane = extractf(t, lane);
                             if tlane < hit.distance @{
                                 hit.prim_id = tri.id(lane) & 0x7FFFFFFF;
@@ -269,6 +268,7 @@ fn cpu_traverse_bvh4_single_avx2(config: TraversalConfig, bvh: &Bvh4, ray_layout
     for i in $range(0, ray_count) @{
         let (packet_id, ray_id) = (i / inc, i % inc);
         let ray = ray_layout.input(packet_id, ray_id);
+
         for k in vectorize(4, 16, 0, 4) @{
             let stack = allocate_stack();
 
