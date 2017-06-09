@@ -17,7 +17,15 @@ struct Bvh4Node {
     child:  [int   * 4]
 }
 
-// Vectorizer intrinsics
+fn load_bvh4_tri(tri: &Bvh4Tri, i: int) -> Tri @{
+    make_tri(make_vec3(tri.v0(0)(i), tri.v0(1)(i), tri.v0(2)(i)),
+             make_vec3(tri.e1(0)(i), tri.e1(1)(i), tri.e1(2)(i)),
+             make_vec3(tri.e2(0)(i), tri.e2(1)(i), tri.e2(2)(i)),
+             make_vec3(tri. n(0)(i), tri. n(1)(i), tri. n(2)(i)))
+}
+
+// Vectorizer intrinsics  ----------------------------------------------------------
+
 extern "C" {
     fn "rv_any"     any(bool) -> bool;
     fn "rv_all"     all(bool) -> bool;
@@ -28,6 +36,8 @@ extern "C" {
 fn extracti(v: int, i: int) -> int {
     bitcast[int](extractf(bitcast[float](v), i))
 }
+
+// Ray-box intrinsics  -------------------------------------------------------------
 
 fn make_ray_box_intrinsics_avx() -> RayBoxIntrinsics {
     make_ray_box_intrinsics(cpu_intrinsics.fminf, cpu_intrinsics.fmaxf)
@@ -46,12 +56,7 @@ fn make_ray_box_intrinsics_avx2() -> RayBoxIntrinsics {
     make_ray_box_intrinsics(fminf, fmaxf)
 }
 
-fn load_bvh4_tri(tri: &Bvh4Tri, i: int) -> Tri @{
-    make_tri(make_vec3(tri.v0(0)(i), tri.v0(1)(i), tri.v0(2)(i)),
-             make_vec3(tri.e1(0)(i), tri.e1(1)(i), tri.e1(2)(i)),
-             make_vec3(tri.e2(0)(i), tri.e2(1)(i), tri.e2(2)(i)),
-             make_vec3(tri. n(0)(i), tri. n(1)(i), tri. n(2)(i)))
-}
+// Ray layouts  --------------------------------------------------------------------
 
 fn make_cpu_ray1_layout(rays: &[Ray1AoS], hits: &mut [Hit1AoS]) -> RayLayout {
     RayLayout {
@@ -110,7 +115,141 @@ fn make_cpu_ray8_layout(rays: &[Ray8SoA], hits: &mut [Hit8SoA]) -> RayLayout {
     }
 }
 
-fn cpu_traverse_bvh4_packet(config: TraversalConfig, bvh: &Bvh4, ray_layout: RayLayout, ray_count: int) -> () {
+// Mappings  -----------------------------------------------------------------------
+
+fn make_cpu_packet_bvh4_mapping(bvh: &Bvh4, ray_box_intrinsics: RayBoxIntrinsics) -> TraversalMapping {
+    TraversalMapping {
+        iterate_children: |node_ref, tmax, stack, body, exit| -> ! @{
+            stack.pop();
+
+            if all(node_ref.tmin > tmax) { exit() }
+
+            let node = &bvh.nodes(node_ref.node);
+            for k in @unroll(0, 4) @{
+                let child_id = node.child(k);
+                if child_id == 0 { break() }
+
+                let bbox = @make_bbox(make_vec3(node.min(0)(k), node.min(1)(k), node.min(2)(k)),
+                                      make_vec3(node.max(0)(k), node.max(1)(k), node.max(2)(k)));
+
+                let mut hit = false;
+                let mut tentry;
+                @body(bbox, |t, _, _| -> ! { tentry = t; hit = true; });
+
+                if any(hit) {
+                    if any(stack.top().tmin > tentry) {
+                        stack.push(child_id, tentry);
+                    } else {
+                        stack.push_after(child_id, tentry);
+                    }
+                }
+            }
+        },
+        iterate_primitives: |leaf_ref, tmax, body, exit| -> ! @{
+            if all(leaf_ref.tmin > tmax) { exit() }
+
+            let mut tri_id = !leaf_ref.node;
+            while true @{
+                let tri = &bvh.tris(tri_id++);
+                for k in @unroll(0, 4) @{
+                    body(make_ray_tri_intersector(load_bvh4_tri(tri, k), tri.id(k) & 0x7FFFFFFF));
+                }
+                if (tri.id(3) & bitcast[i32](0x80000000u)) != 0 { break() }
+            }
+        },
+        iterate_instances: |_, _, _| {},
+        is_leaf: |node_ref| node_ref.node < 0,
+        intrinsics: cpu_intrinsics,
+        ray_box_intrinsics: ray_box_intrinsics
+    }
+}
+
+fn make_cpu_single_bvh4_mapping(k: int, bvh: &Bvh4, ray_box_intrinsics: RayBoxIntrinsics) -> TraversalMapping {
+    TraversalMapping {
+        iterate_children: |node_ref, tmax, stack, body, exit| -> ! @{
+            stack.pop();
+
+            if node_ref.tmin > tmax { exit() }
+
+            let node = &bvh.nodes(node_ref.node);
+            let bbox = @make_bbox(make_vec3(node.min(0)(k), node.min(1)(k), node.min(2)(k)),
+                                  make_vec3(node.max(0)(k), node.max(1)(k), node.max(2)(k)));
+
+            let mut hit = 0;
+            let mut tentry;
+            @body(bbox, |t, _, _| -> ! { tentry = t; hit = -1; });
+
+            // Push intersected nodes on the stack
+            let mut count = 0;
+            for lane in @unroll(0, 4) @{
+                let child_id = node.child(lane);
+                if child_id == 0 { break() }
+                if extracti(hit, lane) != 0 @{
+                    let t = extractf(tentry, lane);
+                    if stack.top().tmin > t {
+                        stack.push(child_id, t);
+                    } else {
+                        stack.push_after(child_id, t);
+                    }
+                    count++;
+                }
+            }
+
+            if count < 2 { exit() }
+
+            // Sort the nodes on the stack, based on their distance
+            if count == 2 { @stack.sort_n(2) }
+            else if count == 3 { @stack.sort_n(3) }
+            else /* if count == 4 */ { @stack.sort_n(4) }
+        },
+        iterate_primitives: |leaf_ref, tmax, body, exit| -> ! @{
+            if leaf_ref.tmin > tmax { exit() }
+
+            let mut tri_id = !leaf_ref.node;
+            while true @{
+                let tri = &bvh.tris(tri_id++);
+                let closest_intr : Intersector = |math, ray, intr| @{
+                    let mut found = 0;
+                    let mut t;
+                    let mut uv;
+
+                    // Compute the intersection for each lane
+                    let intersect = make_ray_tri_intersector(load_bvh4_tri(tri, k), tri.id(k) & 0x7FFFFFFF);
+                    @intersect(math, ray, |hit| @{
+                        uv = hit.uv_coords;
+                        t = hit.distance;
+                        found = -1;
+                    });
+
+                    // Find the closest intersection
+                    if any(found != 0) {
+                        let mut hit = @make_hit(-1, -1, flt_max, undef());
+                        for lane in @unroll(0, 4) {
+                            if extracti(found, lane) == 0 { continue() }
+                            let tlane = extractf(t, lane);
+                            if tlane < hit.distance @{
+                                hit.prim_id = tri.id(lane) & 0x7FFFFFFF;
+                                hit.uv_coords = make_vec2(extractf(uv.x, lane), extractf(uv.y, lane));
+                                hit.distance = tlane;
+                            }
+                        }
+                        @intr(hit);
+                    }
+                };
+                @body(closest_intr);
+                if (tri.id(3) & bitcast[i32](0x80000000u)) != 0 { break() }
+            }
+        },
+        iterate_instances: |_, _, _| {},
+        is_leaf: |node_ref| node_ref.node < 0,
+        intrinsics: cpu_intrinsics,
+        ray_box_intrinsics: ray_box_intrinsics
+    }
+}
+
+// Variants  -----------------------------------------------------------------------
+
+fn cpu_traverse_bvh4_packet_avx2(config: TraversalConfig, bvh: &Bvh4, ray_layout: RayLayout, ray_count: int) -> () {
     let inc = ray_layout.packet_size;
     for i in $range(0, ray_count / inc) {
         for j in vectorize(inc, 32, 0, inc) @{
@@ -119,57 +258,13 @@ fn cpu_traverse_bvh4_packet(config: TraversalConfig, bvh: &Bvh4, ray_layout: Ray
 
             stack.push(0, ray.tmin);
 
-            let mapping = TraversalMapping {
-                iterate_children: |node_ref, tmax, stack, body, exit| -> ! @{
-                    stack.pop();
-
-                    if all(node_ref.tmin > tmax) { exit() }
-
-                    let node = &bvh.nodes(node_ref.node);
-                    for k in @unroll(0, 4) @{
-                        let child_id = node.child(k);
-                        if child_id == 0 { break() }
-
-                        let bbox = @make_bbox(make_vec3(node.min(0)(k), node.min(1)(k), node.min(2)(k)),
-                                              make_vec3(node.max(0)(k), node.max(1)(k), node.max(2)(k)));
-
-                        let mut hit = false;
-                        let mut tentry;
-                        @body(bbox, |t, _, _| -> ! { tentry = t; hit = true; });
-
-                        if any(hit) {
-                            if any(stack.top().tmin > tentry) {
-                                stack.push(child_id, tentry);
-                            } else {
-                                stack.push_after(child_id, tentry);
-                            }
-                        }
-                    }
-                },
-                iterate_primitives: |leaf_ref, tmax, body, exit| -> ! @{
-                    if all(leaf_ref.tmin > tmax) { exit() }
-
-                    let mut tri_id = !leaf_ref.node;
-                    while true @{
-                        let tri = &bvh.tris(tri_id++);
-                        for k in @unroll(0, 4) @{
-                            body(make_ray_tri_intersector(load_bvh4_tri(tri, k), tri.id(k) & 0x7FFFFFFF));
-                        }
-                        if (tri.id(3) & bitcast[i32](0x80000000u)) != 0 { break() }
-                    }
-                },
-                iterate_instances: |_, _, _| {},
-                is_leaf: |node_ref| node_ref.node < 0,
-                intrinsics: cpu_intrinsics,
-                ray_box_intrinsics: make_ray_box_intrinsics_avx2()
-            };
-
+            let mapping = @make_cpu_packet_bvh4_mapping(bvh, make_ray_box_intrinsics_avx2());
             @ray_layout.output(i, j, @traverse_bvh(mapping, config, stack, ray));
         }
     }
 }
 
-fn cpu_traverse_bvh4_single(config: TraversalConfig, bvh: &Bvh4, ray_layout: RayLayout, ray_count: int) -> () {
+fn cpu_traverse_bvh4_single_avx2(config: TraversalConfig, bvh: &Bvh4, ray_layout: RayLayout, ray_count: int) -> () {
     let inc = ray_layout.packet_size;
     for i in $range(0, ray_count) @{
         let (packet_id, ray_id) = (i / inc, i % inc);
@@ -179,87 +274,7 @@ fn cpu_traverse_bvh4_single(config: TraversalConfig, bvh: &Bvh4, ray_layout: Ray
 
             stack.push(0, ray.tmin);
 
-            let mapping = TraversalMapping {
-                iterate_children: |node_ref, tmax, stack, body, exit| -> ! @{
-                    stack.pop();
-
-                    if node_ref.tmin > tmax { exit() }
-
-                    let node = &bvh.nodes(node_ref.node);
-                    let bbox = @make_bbox(make_vec3(node.min(0)(k), node.min(1)(k), node.min(2)(k)),
-                                          make_vec3(node.max(0)(k), node.max(1)(k), node.max(2)(k)));
-
-                    let mut hit = 0;
-                    let mut tentry;
-                    @body(bbox, |t, _, _| -> ! { tentry = t; hit = -1; });
-
-                    // Push intersected nodes on the stack
-                    let mut count = 0;
-                    for lane in @unroll(0, 4) @{
-                        let child_id = node.child(lane);
-                        if child_id == 0 { break() }
-                        if extracti(hit, lane) != 0 @{
-                            let t = extractf(tentry, lane);
-                            if stack.top().tmin > t {
-                                stack.push(child_id, t);
-                            } else {
-                                stack.push_after(child_id, t);
-                            }
-                            count++;
-                        }
-                    }
-
-                    if count < 2 { exit() }
-
-                    // Sort the nodes on the stack, based on their distance
-                    if count == 2 { @stack.sort_n(2) }
-                    else if count == 3 { @stack.sort_n(3) }
-                    else /* if count == 4 */ { @stack.sort_n(4) }
-                },
-                iterate_primitives: |leaf_ref, tmax, body, exit| -> ! @{
-                    if leaf_ref.tmin > tmax { exit() }
-
-                    let mut tri_id = !leaf_ref.node;
-                    while true @{
-                        let tri = &bvh.tris(tri_id++);
-                        let closest_intr : Intersector = |math, ray, intr| @{
-                            let mut found = 0;
-                            let mut t;
-                            let mut uv;
-
-                            // Compute the intersection for each lane
-                            let intersect = make_ray_tri_intersector(load_bvh4_tri(tri, k), tri.id(k) & 0x7FFFFFFF);
-                            @intersect(math, ray, |hit| @{
-                                uv = hit.uv_coords;
-                                t = hit.distance;
-                                found = -1;
-                            });
-
-                            // Find the closest intersection
-                            if any(found != 0) {
-                                let mut hit = @make_hit(-1, -1, flt_max, undef());
-                                for lane in @unroll(0, 4) {
-                                    if extracti(found, lane) == 0 { continue() }
-                                    let tlane = extractf(t, lane);
-                                    if tlane < hit.distance @{
-                                        hit.prim_id = tri.id(lane) & 0x7FFFFFFF;
-                                        hit.uv_coords = make_vec2(extractf(uv.x, lane), extractf(uv.y, lane));
-                                        hit.distance = tlane;
-                                    }
-                                }
-                                @intr(hit);
-                            }
-                        };
-                        @body(closest_intr);
-                        if (tri.id(3) & bitcast[i32](0x80000000u)) != 0 { break() }
-                    }
-                },
-                iterate_instances: |_, _, _| {},
-                is_leaf: |node_ref| node_ref.node < 0,
-                intrinsics: cpu_intrinsics,
-                ray_box_intrinsics: make_ray_box_intrinsics_avx2()
-            };
-
+            let mapping = @make_cpu_single_bvh4_mapping(k, bvh, make_ray_box_intrinsics_avx2());
             @ray_layout.output(packet_id, ray_id, @traverse_bvh(mapping, config, stack, ray));
         }
     }
