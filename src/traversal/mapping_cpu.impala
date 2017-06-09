@@ -199,7 +199,12 @@ fn cpu_traverse_bvh4_single(config: TraversalConfig, bvh: &Bvh4, ray_layout: Ray
                         let child_id = node.child(lane);
                         if child_id == 0 { break() }
                         if extracti(hit, lane) != 0 @{
-                            stack.push(child_id, extractf(tentry, lane));
+                            let t = extractf(tentry, lane);
+                            if stack.top().tmin > t {
+                                stack.push(child_id, t);
+                            } else {
+                                stack.push_after(child_id, t);
+                            }
                             count++;
                         }
                     }
