@@ -1,8 +1,4 @@
-fn bose_nelson_sort(n: int, cmp: fn (int, int) -> bool, swap: fn (int, int) -> ()) -> () {
-    fn cmp_swap(i1: int, i2: int) -> () {
-        if cmp(i1, i2) { swap(i1, i2); }
-    }
-
+fn bose_nelson_sort(n: int, cmp_swap: fn (int, int) -> ()) -> () {
     fn p_star(i: int, len: int) -> () {
         if len > 1 {
             let m = len / 2;
@@ -33,18 +29,18 @@ fn bose_nelson_sort(n: int, cmp: fn (int, int) -> bool, swap: fn (int, int) -> (
     p_star(0, n)
 }
 
-fn bitonic_sort(n: int, cmp: fn (int, int) -> bool, swap: fn (int, int) -> ()) -> () {
-    fn cmp_swap(dir: bool, i: int, j: int) -> () {
+fn bitonic_sort(n: int, cmp_swap: fn (int, int) -> ()) -> () {
+    fn compare(dir: bool, i: int, j: int) -> () {
         let d = (j - i) / 2;
         for k in range(i, i + d) {
-            if cmp(k, k + d) { swap(k, k + d); }
+            cmp_swap(k, k + d);
         }
     }
 
     fn merge(dir: bool, i: int, j: int) -> () {
         if i < j - 1 {
             let m = (i + j) / 2;
-            cmp_swap(dir, i, j);
+            compare(dir, i, j);
             merge(dir, i, m);
             merge(dir, m, j);
         }
