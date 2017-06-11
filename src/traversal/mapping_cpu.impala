@@ -24,6 +24,12 @@ fn load_bvh4_tri(tri: &Bvh4Tri, i: int) -> Tri @{
              make_vec3(tri. n(0)(i), tri. n(1)(i), tri. n(2)(i)))
 }
 
+fn prefetch_bvh4_node(node: &Bvh4Node) -> () {
+    let ptr = node as &[u8];
+    cpu_prefetch(&ptr(0),  0 /* read */, 3 /* locality */, 1 /* data */);
+    cpu_prefetch(&ptr(64), 0 /* read */, 3 /* locality */, 1 /* data */);
+}
+
 // Vectorizer intrinsics  ----------------------------------------------------------
 
 extern "C" {
@@ -188,6 +194,7 @@ fn make_cpu_single_bvh4_mapping(k: int, bvh: &Bvh4, ray_box_intrinsics: RayBoxIn
                     let child_id = node.child(lane);
                     if child_id == 0 { break() }
                     if (mask & (1 << lane)) != 0 @{
+                        prefetch_bvh4_node(&nodes(child_id));
                         let t = extractf(tentry, lane);
                         if stack.top().tmin > t {
                             stack.push(child_id, t);
