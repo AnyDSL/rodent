@@ -140,6 +140,7 @@ static bool extract_bounds(const std::string& bvh_file, BBox& bounds) {
         bounds.min = min(bounds.min, float3(nodes[0].min[0][i], nodes[0].min[1][i], nodes[0].min[2][i]));
         bounds.max = max(bounds.max, float3(nodes[0].max[0][i], nodes[0].max[1][i], nodes[0].max[2][i]));
     }
+    return true;
 }
 
 int main(int argc, char** argv) {
