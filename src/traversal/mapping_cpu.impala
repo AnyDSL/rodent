@@ -172,6 +172,19 @@ fn make_cpu_packet_bvh4_mapping(bvh: &Bvh4, ray_box_intrinsics: RayBoxIntrinsics
 fn make_cpu_single_bvh4_mapping(k: int, indices: &[int], bvh: &Bvh4, ray_box_intrinsics: RayBoxIntrinsics) -> TraversalMapping {
     let (nodes, tris) = (bvh.nodes, bvh.tris);
 
+    // Iterate over the bit that are set in a mask
+    fn one_bits(mask: int, body: fn (int) -> ()) -> () {
+        if mask != 0 @{
+            let lane = cpu_ctz32(mask, true);
+            body(lane);
+            $one_bits(mask & !(1 << lane), body);
+        }
+    }
+
+    fn as_vector(f: float) -> simd[float * 4] {
+        simd[ extractf(f, 0), extractf(f, 1), extractf(f, 2), extractf(f, 3) ]
+    }
+
     TraversalMapping {
         iterate_children: |node_ref, tmax, stack, body, exit| -> ! @{
             stack.pop();
@@ -186,26 +199,24 @@ fn make_cpu_single_bvh4_mapping(k: int, indices: &[int], bvh: &Bvh4, ray_box_int
             let mut hit = false;
             let mut tentry;
             @body(true, bbox, |t, _, _| -> ! { tentry = t; hit = true; });
+            let tvector = as_vector(tentry);
 
             // Push intersected nodes on the stack
             let mask = ballot(hit);
-            if mask != 0 {
-                for lane in @unroll(0, 4) @{
-                    let child_id = node.child(lane);
-                    if child_id == 0 { break() }
-                    if (mask & (1 << lane)) != 0 @{
-                        prefetch_bvh4_node(&nodes(child_id));
-                        let t = extractf(tentry, lane);
-                        if stack.top().tmin > t {
-                            stack.push(child_id, t);
-                        } else {
-                            stack.push_after(child_id, t);
-                        }
-                    }
+            for lane in one_bits(mask) {
+                let child_id = node.child(lane);
+                if child_id == 0 { break() }
+
+                let t = tvector(lane);
+                prefetch_bvh4_node(&nodes(child_id));
+                if stack.top().tmin > t {
+                    stack.push(child_id, t);
+                } else {
+                    stack.push_after(child_id, t);
                 }
-                let count = cpu_popcount32(mask);
-                if count >= 3 { @stack.sort_n(3) }
             }
+            let count = cpu_popc32(mask);
+            if count >= 3 { @stack.sort_n(3) }
         },
         iterate_primitives: |leaf_ref, tmax, body, exit| -> ! @{
             if leaf_ref.tmin > tmax { exit() }
@@ -229,13 +240,15 @@ fn make_cpu_single_bvh4_mapping(k: int, indices: &[int], bvh: &Bvh4, ray_box_int
                     // Find the closest intersection
                     let mask = ballot(found);
                     if mask != 0 {
+                        let tvector = as_vector(t);
+                        let uvector = as_vector(uv.x);
+                        let vvector = as_vector(uv.y);
                         let mut hit = @make_hit(-1, -1, flt_max, undef());
-                        for lane in @unroll(0, 4) {
-                            if (mask & (1 << lane)) == 0 { continue() }
-                            let tlane = extractf(t, lane);
+                        for lane in one_bits(mask) {
+                            let tlane = tvector(lane);
                             if tlane < hit.distance @{
                                 hit.prim_id = tri.id(lane) & 0x7FFFFFFF;
-                                hit.uv_coords = make_vec2(extractf(uv.x, lane), extractf(uv.y, lane));
+                                hit.uv_coords = make_vec2(uvector(lane), vvector(lane));
                                 hit.distance = tlane;
                             }
                         }
