@@ -5,6 +5,13 @@ static flt_pi = 3.14159265359f;
 static flt_sqrt2 = 1.41421356237f;
 static flt_sqrt3 = 1.73205080757f;
 
+extern "device" {
+    fn "llvm.expect.i1" expect(bool, bool) -> bool;
+}
+
+fn   likely(cond: bool) -> bool { expect(cond,  true) }
+fn unlikely(cond: bool) -> bool { expect(cond, false) }
+
 fn range_step(a: int, b: int, c: int, body: fn (int) -> ()) -> () {
     if a < b {
         body(a);
