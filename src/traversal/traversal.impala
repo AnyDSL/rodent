@@ -3,9 +3,7 @@ struct TraversalMapping {
     intrinsics:         Intrinsics,
     ray_box_intrinsics: RayBoxIntrinsics,
 
-    is_leaf: fn (NodeRef) -> bool,
-
-    iterate_children:   fn (NodeRef, float, Stack, fn (BBox, fn (float, float) -> ()) -> ()) -> (),
+    iterate_children:   fn (NodeRef, float, Stack, fn (bool, BBox, fn (float, float) -> ()) -> ()) -> (),
     iterate_primitives: fn (NodeRef, float, fn (Intersector) -> ()) -> (),
     iterate_instances:  fn (NodeRef, float, fn (Instance) -> ()) -> ()
 }
@@ -49,15 +47,18 @@ fn traverse_bvh(mapping: TraversalMapping, config: TraversalConfig, stack: Stack
 
     // The traversal loop should not be unrolled
     while !$stack.is_empty() @{
-        let node = stack.top();
+        // Process inner nodes
+        while $is_inner(stack.top()) @{
+            let node = stack.top();
 
-        // Intersect the bounding box of every child of this node
-        for bbox, hit in @mapping.iterate_children(node, t, stack) @{
-            intersect_ray_box(mapping.ray_box_intrinsics, clip_ray(ray, ray.tmin, t), bbox, hit);
+            // Intersect the bounding box of every child of this node
+            for ord, bbox, hit in @mapping.iterate_children(node, t, stack) @{
+                intersect_ray_box(mapping.ray_box_intrinsics, ord, clip_ray(ray, ray.tmin, t), bbox, hit);
+            }
         }
 
         // Process leaves
-        while $mapping.is_leaf(stack.top()) @{
+        while $is_leaf(stack.top()) @{
             let leaf = stack.top();
 
             // Process primitives, if any

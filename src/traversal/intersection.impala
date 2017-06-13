@@ -96,6 +96,12 @@ fn clip_ray(ray: Ray, tmin: float, tmax: float) -> Ray {
     }
 }
 
+fn ray_octant(ray: Ray) -> int {
+    select(ray.dir.x > 0.0f, 1, 0) |
+    select(ray.dir.y > 0.0f, 2, 0) |
+    select(ray.dir.z > 0.0f, 4, 0)
+}
+
 fn intersect_ray_tri(math: Intrinsics, ray: Ray, tri: Tri, intr: fn (float, float, float) -> ()) -> () @{
     let c = vec3_sub(tri.v0, ray.org);
     let r = vec3_cross(ray.dir, c);
@@ -116,14 +122,20 @@ fn intersect_ray_tri(math: Intrinsics, ray: Ray, tri: Tri, intr: fn (float, floa
     }
 }
 
-fn intersect_ray_box(math: RayBoxIntrinsics, ray: Ray, bbox: BBox, intr: fn (float, float) -> ()) -> () @{
+fn intersect_ray_box(math: RayBoxIntrinsics, ordered: bool, ray: Ray, bbox: BBox, intr: fn (float, float) -> ()) -> () {
     let t0 = vec3_sub(vec3_mul(ray.inv_dir, bbox.min), ray.inv_org);
     let t1 = vec3_sub(vec3_mul(ray.inv_dir, bbox.max), ray.inv_org);
 
-    let tentry = math.fmaxmaxf(math.fminf(t0.x, t1.x), math.fminf(t0.y, t1.y), math.fminmaxf(t0.z, t1.z, ray.tmin));
-    let texit  = math.fminminf(math.fmaxf(t0.x, t1.x), math.fmaxf(t0.y, t1.y), math.fmaxminf(t0.z, t1.z, ray.tmax));
+    let (tentry, texit) =
+        if ordered {
+            (math.fmaxmaxf(t0.x, t0.y, math.fmaxf(t0.z, ray.tmin)),
+             math.fminminf(t1.x, t1.y, math.fminf(t1.z, ray.tmax)))
+        } else {
+            (math.fmaxmaxf(math.fminf(t0.x, t1.x), math.fminf(t0.y, t1.y), math.fminmaxf(t0.z, t1.z, ray.tmin)),
+             math.fminminf(math.fmaxf(t0.x, t1.x), math.fmaxf(t0.y, t1.y), math.fmaxminf(t0.z, t1.z, ray.tmax)))
+        };
 
-    if tentry <= texit @{ intr(tentry, texit) }
+    if bitcast[int](tentry) <= bitcast[int](texit) @{ intr(tentry, texit) }
 }
 
 // Creates a ray-triangle intersector

@@ -137,8 +137,8 @@ static bool extract_bounds(const std::string& bvh_file, BBox& bounds) {
     if (!load_bvh(bvh_file, nodes, tris, false)) return false;
     bounds = BBox::empty();
     for (int i = 0; i < 4; i++) {
-        bounds.min = min(bounds.min, float3(nodes[0].min[0][i], nodes[0].min[1][i], nodes[0].min[2][i]));
-        bounds.max = max(bounds.max, float3(nodes[0].max[0][i], nodes[0].max[1][i], nodes[0].max[2][i]));
+        bounds.min = min(bounds.min, float3(nodes[0].bounds[0][i], nodes[0].bounds[2][i], nodes[0].bounds[4][i]));
+        bounds.max = max(bounds.max, float3(nodes[0].bounds[1][i], nodes[0].bounds[3][i], nodes[0].bounds[5][i]));
     }
     return true;
 }

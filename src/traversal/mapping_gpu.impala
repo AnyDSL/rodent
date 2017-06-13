@@ -72,11 +72,11 @@ fn gpu_traverse_bvh2(config: TraversalConfig, bvh: &Bvh2, ray_layout: RayLayout,
         let ray = ray_layout.input(i, j);
 
         let stack = allocate_stack();
-        stack.push(0, 0.0f);
+        stack.push(1, 0.0f);
 
         let mapping = TraversalMapping {
             iterate_children: |node_ref, tmax, stack, body, exit| -> ! {
-                let node_ptr = &nodes(node_ref.node) as &[1][simd[float * 4]];
+                let node_ptr = &nodes(node_ref.node - 1) as &[1][simd[float * 4]];
                 let bb0 = nvvm_ldg4_f32(&node_ptr(0));
                 let bb1 = nvvm_ldg4_f32(&node_ptr(1));
                 let bb2 = nvvm_ldg4_f32(&node_ptr(2));
@@ -88,7 +88,7 @@ fn gpu_traverse_bvh2(config: TraversalConfig, bvh: &Bvh2, ray_layout: RayLayout,
                                      make_vec3(bb1(3), bb2(1), bb2(3)));
 
                 let intersect_child = |box| -> (bool, float) {
-                    body(box, |tentry, _, _| -> ! { return(true, tentry) });
+                    body(false, box, |tentry, _, _| -> ! { return(true, tentry) });
                     (false, 0.0f)
                 };
 
@@ -132,7 +132,6 @@ fn gpu_traverse_bvh2(config: TraversalConfig, bvh: &Bvh2, ray_layout: RayLayout,
                 }
             },
             iterate_instances: |_, _, _| {},
-            is_leaf: |node_ref| node_ref.node < 0,
             intrinsics: nvvm_intrinsics,
             ray_box_intrinsics: make_ray_box_intrinsics_nvvm()
         };

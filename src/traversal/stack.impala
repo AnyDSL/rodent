@@ -13,11 +13,13 @@ struct Stack {
     is_empty:   fn () -> bool
 }
 
+fn is_leaf (ref: NodeRef) -> bool { ref.node < 0 }
+fn is_inner(ref: NodeRef) -> bool { ref.node > 0 }
+
 fn allocate_stack() -> Stack {
-    let sentinel = 0x7FFFFFFF;
     let mut nodes : [int * 64];
     let mut tmins : [float * 64];
-    let mut node = sentinel;
+    let mut node = 0;
     let mut tmin = flt_max;
     let mut ptr = -1;
 
@@ -63,6 +65,6 @@ fn allocate_stack() -> Stack {
             ptr--;
         },
         top: || NodeRef { node: node, tmin: tmin },
-        is_empty: || node == sentinel
+        is_empty: || node == 0
     }
 }
