@@ -215,7 +215,7 @@ fn make_cpu_single_bvh4_mapping(k: int, indices: &[int], bvh: &Bvh4, ray_box_int
                     stack.push_after(child_id, t);
                 }
             }
-            let count = cpu_popc32(mask);
+            let count = cpu_popcount32(mask);
             if count >= 3 { @stack.sort_n(3) }
         },
         iterate_primitives: |leaf_ref, tmax, body, exit| -> ! @{
