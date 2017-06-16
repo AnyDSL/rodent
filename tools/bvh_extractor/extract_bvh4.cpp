@@ -116,8 +116,10 @@ void extract_bvh4_node(BVH4::NodeRef node,
         c++;
     }
     for (; c < 4; c++) {
-        for (int i = 0; i < 6; i++)
-            new_node.bounds[i][c] = 0.0f;
+        for (int i = 0; i < 3; i++) {
+            new_node.bounds[i * 2 + 0][c] =  1.0f;
+            new_node.bounds[i * 2 + 1][c] = -1.0f;
+        }
         new_node.child[c] = 0;
     }
     new_nodes[index] = new_node;

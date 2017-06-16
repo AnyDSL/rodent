@@ -35,7 +35,8 @@ fn make_ray_box_intrinsics_nvvm() -> RayBoxIntrinsics {
         fminminf: |a, b, c| bitcast[float](nvvm_minmin(bitcast[int](a), bitcast[int](b), bitcast[int](c))),
         fmaxmaxf: |a, b, c| bitcast[float](nvvm_maxmax(bitcast[int](a), bitcast[int](b), bitcast[int](c))),
         fminmaxf: |a, b, c| bitcast[float](nvvm_minmax(bitcast[int](a), bitcast[int](b), bitcast[int](c))),
-        fmaxminf: |a, b, c| bitcast[float](nvvm_maxmin(bitcast[int](a), bitcast[int](b), bitcast[int](c)))
+        fmaxminf: |a, b, c| bitcast[float](nvvm_maxmin(bitcast[int](a), bitcast[int](b), bitcast[int](c))),
+        fcmp_le: |a, b| a <= b
     }
 }
 
@@ -88,7 +89,7 @@ fn gpu_traverse_bvh2(config: TraversalConfig, bvh: &Bvh2, ray_layout: RayLayout,
                                      make_vec3(bb1(3), bb2(1), bb2(3)));
 
                 let intersect_child = |box| -> (bool, float) {
-                    body(false, box, |tentry, _, _| -> ! { return(true, tentry) });
+                    body(box, |tentry, _, _| -> ! { return(true, tentry) });
                     (false, 0.0f)
                 };
 
@@ -133,7 +134,8 @@ fn gpu_traverse_bvh2(config: TraversalConfig, bvh: &Bvh2, ray_layout: RayLayout,
             },
             iterate_instances: |_, _, _| {},
             intrinsics: nvvm_intrinsics,
-            ray_box_intrinsics: make_ray_box_intrinsics_nvvm()
+            ray_box_intrinsics: make_ray_box_intrinsics_nvvm(),
+            ray_box_ordered: false
         };
 
         ray_layout.output(i, j, @traverse_bvh(mapping, config, stack, ray))

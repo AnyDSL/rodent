@@ -45,7 +45,7 @@ fn extracti(v: int, i: int) -> int {
 // Ray-box intrinsics  -------------------------------------------------------------
 
 fn make_ray_box_intrinsics_avx() -> RayBoxIntrinsics {
-    make_ray_box_intrinsics(cpu_intrinsics.fminf, cpu_intrinsics.fmaxf)
+    make_ray_box_intrinsics(cpu_intrinsics.fminf, cpu_intrinsics.fmaxf, |a, b| a <= b)
 }
 
 fn make_ray_box_intrinsics_avx2() -> RayBoxIntrinsics {
@@ -58,7 +58,7 @@ fn make_ray_box_intrinsics_avx2() -> RayBoxIntrinsics {
         let (x_, y_) = (bitcast[int](x), bitcast[int](y));
         bitcast[float](select(x_ > y_, x_, y_))
     };
-    make_ray_box_intrinsics(fminf, fmaxf)
+    make_ray_box_intrinsics(fminf, fmaxf, |a, b| { bitcast[int](a) <= bitcast[int](b) })
 }
 
 // Ray layouts  --------------------------------------------------------------------
@@ -128,7 +128,7 @@ fn make_cpu_packet_bvh4_mapping(bvh: &Bvh4, ray_box_intrinsics: RayBoxIntrinsics
         iterate_children: |node_ref, tmax, stack, body, exit| -> ! @{
             stack.pop();
 
-            if all(node_ref.tmin > tmax) { exit() }
+            if unlikely(all(node_ref.tmin > tmax)) { exit() }
 
             let node = &nodes(node_ref.node - 1);
             for k in @unroll(0, 4) @{
@@ -140,7 +140,7 @@ fn make_cpu_packet_bvh4_mapping(bvh: &Bvh4, ray_box_intrinsics: RayBoxIntrinsics
 
                 let mut hit = false;
                 let mut tentry;
-                @body(false, bbox, |t, _, _| -> ! { tentry = t; hit = true; });
+                @body(bbox, |t, _| { tentry = t; hit = true; });
 
                 if any(hit) {
                     if any(stack.top().tmin > tentry) {
@@ -152,7 +152,7 @@ fn make_cpu_packet_bvh4_mapping(bvh: &Bvh4, ray_box_intrinsics: RayBoxIntrinsics
             }
         },
         iterate_primitives: |leaf_ref, tmax, body, exit| -> ! @{
-            if all(leaf_ref.tmin > tmax) { exit() }
+            if unlikely(all(leaf_ref.tmin > tmax)) { exit() }
 
             let mut tri_id = !leaf_ref.node;
             while true @{
@@ -165,22 +165,26 @@ fn make_cpu_packet_bvh4_mapping(bvh: &Bvh4, ray_box_intrinsics: RayBoxIntrinsics
         },
         iterate_instances: |_, _, _| {},
         intrinsics: cpu_intrinsics,
-        ray_box_intrinsics: ray_box_intrinsics
+        ray_box_intrinsics: ray_box_intrinsics,
+        ray_box_ordered: false
     }
 }
 
-fn make_cpu_single_bvh4_mapping(k: int, indices: &[int], bvh: &Bvh4, ray_box_intrinsics: RayBoxIntrinsics) -> TraversalMapping {
+fn make_cpu_single_bvh4_mapping(k: int, octant: int, bvh: &Bvh4, ray_box_intrinsics: RayBoxIntrinsics) -> TraversalMapping {
     let (nodes, tris) = (bvh.nodes, bvh.tris);
+    let (ox, oy, oz) = (octant & 1, (octant >> 1) & 1, (octant >> 2) & 1);
+    let indices = [ ox * 4, 8 + oy * 4, 16 + oz * 4 ];
 
     // Iterate over the bit that are set in a mask
     fn one_bits(mask: int, body: fn (int) -> ()) -> () {
-        if mask != 0 @{
+        if mask != 0 {
             let lane = cpu_ctz32(mask, true);
             body(lane);
-            $one_bits(mask & !(1 << lane), body);
+            one_bits(mask & !(1 << lane), body);
         }
     }
 
+    // Hack to get a vector extract with a variable index
     fn as_vector(f: float) -> simd[float * 4] {
         simd[ extractf(f, 0), extractf(f, 1), extractf(f, 2), extractf(f, 3) ]
     }
@@ -188,17 +192,17 @@ fn make_cpu_single_bvh4_mapping(k: int, indices: &[int], bvh: &Bvh4, ray_box_int
     TraversalMapping {
         iterate_children: |node_ref, tmax, stack, body, exit| -> ! @{
             stack.pop();
-
-            if node_ref.tmin > tmax { exit() }
+            if unlikely(node_ref.tmin > tmax) { exit() }
 
             let node = &nodes(node_ref.node - 1);
             let bounds_ptr = &node.bounds as &[float];
-            let bbox = @make_bbox(make_vec3(bounds_ptr(indices(0) + k), bounds_ptr(indices(2) + k), bounds_ptr(indices(4) + k)),
-                                  make_vec3(bounds_ptr(indices(1) + k), bounds_ptr(indices(3) + k), bounds_ptr(indices(5) + k)));
+            let (ix, iy, iz) = (indices(0), indices(1), indices(2));
+            let bbox = @make_bbox(@make_vec3(bounds_ptr((ix ^ 4) + k), bounds_ptr((iy ^ 4) + k), bounds_ptr((iz ^ 4) + k)),
+                                  @make_vec3(bounds_ptr( ix      + k), bounds_ptr( iy      + k), bounds_ptr( iz      + k)));
 
             let mut hit = false;
             let mut tentry;
-            @body(true, bbox, |t, _, _| -> ! { tentry = t; hit = true; });
+            @body(bbox, |t, _| { tentry = t; hit = true; });
             let tvector = as_vector(tentry);
 
             // Push intersected nodes on the stack
@@ -210,16 +214,18 @@ fn make_cpu_single_bvh4_mapping(k: int, indices: &[int], bvh: &Bvh4, ray_box_int
                 let t = tvector(lane);
                 prefetch_bvh4_node(&nodes(child_id));
                 if stack.top().tmin > t {
-                    stack.push(child_id, t);
+                    @stack.push(child_id, t);
                 } else {
-                    stack.push_after(child_id, t);
+                    @stack.push_after(child_id, t);
                 }
             }
+
             let count = cpu_popcount32(mask);
-            if count >= 3 { @stack.sort_n(3) }
+            if count == 3 { @stack.sort_n(3) }
+            else if count == 4 { @stack.sort_n(4) }
         },
         iterate_primitives: |leaf_ref, tmax, body, exit| -> ! @{
-            if leaf_ref.tmin > tmax { exit() }
+            if unlikely(leaf_ref.tmin > tmax) { exit() }
 
             let mut tri_id = !leaf_ref.node;
             while true @{
@@ -261,7 +267,8 @@ fn make_cpu_single_bvh4_mapping(k: int, indices: &[int], bvh: &Bvh4, ray_box_int
         },
         iterate_instances: |_, _, _| {},
         intrinsics: cpu_intrinsics,
-        ray_box_intrinsics: ray_box_intrinsics
+        ray_box_intrinsics: ray_box_intrinsics,
+        ray_box_ordered: true
     }
 }
 
@@ -288,20 +295,12 @@ fn cpu_traverse_bvh4_single_avx2(config: TraversalConfig, bvh: &Bvh4, ray_layout
         let (packet_id, ray_id) = (i / inc, i % inc);
         let ray = ray_layout.input(packet_id, ray_id);
 
-        let octant = ray_octant(ray);
-        let (ox, oy, oz) = (octant & 1, (octant >> 1) & 1, (octant >> 2) & 1);
-        let indices = [
-            (1 - ox) * 4, (0 + ox) * 4,
-            (3 - oy) * 4, (2 + oy) * 4,
-            (5 - oz) * 4, (4 + oz) * 4
-        ];
-
         for k in vectorize(4, 16, 0, 4) @{
             let stack = allocate_stack();
 
             stack.push(1, ray.tmin);
 
-            let mapping = @make_cpu_single_bvh4_mapping(k, indices, bvh, make_ray_box_intrinsics_avx2());
+            let mapping = @make_cpu_single_bvh4_mapping(k, ray_octant(ray), bvh, make_ray_box_intrinsics_avx2());
             @ray_layout.output(packet_id, ray_id, @traverse_bvh(mapping, config, stack, ray));
         }
     }
