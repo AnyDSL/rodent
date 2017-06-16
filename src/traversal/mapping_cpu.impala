@@ -128,7 +128,7 @@ fn make_cpu_packet_bvh4_mapping(bvh: &Bvh4, ray_box_intrinsics: RayBoxIntrinsics
         iterate_children: |node_ref, tmax, stack, body, exit| -> ! @{
             stack.pop();
 
-            if unlikely(all(node_ref.tmin > tmax)) { exit() }
+            if all(node_ref.tmin > tmax) { exit() }
 
             let node = &nodes(node_ref.node - 1);
             for k in @unroll(0, 4) @{
@@ -152,7 +152,7 @@ fn make_cpu_packet_bvh4_mapping(bvh: &Bvh4, ray_box_intrinsics: RayBoxIntrinsics
             }
         },
         iterate_primitives: |leaf_ref, tmax, body, exit| -> ! @{
-            if unlikely(all(leaf_ref.tmin > tmax)) { exit() }
+            if all(leaf_ref.tmin > tmax) { exit() }
 
             let mut tri_id = !leaf_ref.node;
             while true @{
@@ -212,7 +212,7 @@ fn make_cpu_single_bvh4_mapping(k: int, octant: int, bvh: &Bvh4, ray_box_intrins
                 if child_id == 0 { break() }
 
                 let t = tvector(lane);
-                prefetch_bvh4_node(&nodes(child_id));
+                prefetch_bvh4_node(&nodes(child_id - 1));
                 if stack.top().tmin > t {
                     @stack.push(child_id, t);
                 } else {
