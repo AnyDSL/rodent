@@ -4,7 +4,7 @@ struct TraversalMapping {
     ray_box_intrinsics: RayBoxIntrinsics,
     ray_box_ordered:    bool,
 
-    iterate_children:   fn (NodeRef, float, Stack, fn (BBox, fn (float, float) -> ()) -> ()) -> (),
+    iterate_children:   fn (NodeRef, float, Stack, fn (BBox) -> (bool, float, float)) -> (),
     iterate_primitives: fn (NodeRef, float, fn (Intersector) -> ()) -> (),
     iterate_instances:  fn (NodeRef, float, fn (Instance) -> ()) -> ()
 }
@@ -49,8 +49,8 @@ fn traverse_bvh(mapping: TraversalMapping, config: TraversalConfig, stack: Stack
     // The traversal loop should not be unrolled
     while !$stack.is_empty() @{
         // Intersect the bounding box of every child of this node
-        for bbox, hit in @mapping.iterate_children(stack.top(), t, stack) {
-            @intersect_ray_box(mapping.ray_box_intrinsics, mapping.ray_box_ordered, clip_ray(ray, ray.tmin, t), bbox, hit);
+        for bbox in @mapping.iterate_children(stack.top(), t, stack) {
+            @intersect_ray_box(mapping.ray_box_intrinsics, mapping.ray_box_ordered, clip_ray(ray, ray.tmin, t), bbox)
         }
 
         // Process leaves
@@ -59,7 +59,7 @@ fn traverse_bvh(mapping: TraversalMapping, config: TraversalConfig, stack: Stack
 
             // Process primitives, if any
             for intersector in @mapping.iterate_primitives(leaf, t) @{
-                with hit in intersector(mapping.intrinsics, clip_ray(ray, ray.tmin, t)) @{
+                with hit in @intersector(mapping.intrinsics, clip_ray(ray, ray.tmin, t)) @{
                     if !@config.transparency(hit) @{
                         prim_id = hit.prim_id;
                         t  = hit.distance;

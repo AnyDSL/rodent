@@ -88,13 +88,8 @@ fn gpu_traverse_bvh2(config: TraversalConfig, bvh: &Bvh2, ray_layout: RayLayout,
                 let box2 = make_bbox(make_vec3(bb1(2), bb2(0), bb2(2)),
                                      make_vec3(bb1(3), bb2(1), bb2(3)));
 
-                let intersect_child = |box| -> (bool, float) {
-                    body(box, |tentry, _, _| -> ! { return(true, tentry) });
-                    (false, 0.0f)
-                };
-
-                let (hit1, t1) = @intersect_child(box1);
-                let (hit2, t2) = @intersect_child(box2);
+                let (hit1, t1, _) = @body(box1);
+                let (hit2, t2, _) = @body(box2);
 
                 if !hit1 && !hit2 {
                     stack.pop();

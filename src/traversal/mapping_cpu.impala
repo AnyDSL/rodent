@@ -134,15 +134,13 @@ fn make_cpu_packet_bvh4_mapping(bvh: &Bvh4, ray_box_intrinsics: RayBoxIntrinsics
                 let bbox = @make_bbox(make_vec3(node.bounds(0)(k), node.bounds(2)(k), node.bounds(4)(k)),
                                       make_vec3(node.bounds(1)(k), node.bounds(3)(k), node.bounds(5)(k)));
 
-                let mut hit = false;
-                let mut tentry;
-                @body(bbox, |t, _| { tentry = t; hit = true; });
+                let (hit, tentry, _) = @body(bbox);
 
                 if any(hit) {
                     if any(stack.top().tmin > tentry) {
-                        stack.push(child_id, tentry);
+                        @stack.push(child_id, tentry);
                     } else {
-                        stack.push_after(child_id, tentry);
+                        @stack.push_after(child_id, tentry);
                     }
                 }
             }
@@ -191,13 +189,11 @@ fn make_cpu_single_bvh4_mapping(k: int, octant: int, bvh: &Bvh4, ray_box_intrins
             let bbox = @make_bbox(@make_vec3(bounds_ptr((ix ^ 4) + k), bounds_ptr((iy ^ 4) + k), bounds_ptr((iz ^ 4) + k)),
                                   @make_vec3(bounds_ptr( ix      + k), bounds_ptr( iy      + k), bounds_ptr( iz      + k)));
 
-            let mut hit = false;
-            let mut tentry;
-            @body(bbox, |t, _| { tentry = t; hit = true; });
+            let (hit, tentry, _) = @body(bbox);
 
             // Push intersected nodes on the stack
             let mask = ballot(hit & (node.child(k) != 0));
-            for lane in one_bits(mask) {
+            for lane in one_bits(mask) @{
                 let child_id = node.child(lane);
                 let t = extract(tentry, lane);
                 prefetch_bvh4_node(&nodes(child_id - 1));
@@ -221,31 +217,22 @@ fn make_cpu_single_bvh4_mapping(k: int, octant: int, bvh: &Bvh4, ray_box_intrins
                 let tri = &tris(tri_id++);
 
                 let closest_intr : Intersector = |math, ray, intr| @{
-                    let mut found = false;
-                    let mut hit;
-
                     // Compute the intersection for each lane
-                    let intersect = @make_ray_tri_intersector(load_bvh4_tri(tri, k), tri.id(k) & 0x7FFFFFFF);
-                    @intersect(math, ray, |h| @{
-                        hit = h;
-                        found = true;
-                    });
+                    let (found, t, u, v) = @intersect_ray_tri(math, ray, @load_bvh4_tri(tri, k));
 
                     // Find the closest intersection
                     let mask = ballot(found);
                     if mask != 0 {
                         let mut closest_hit = @make_hit(-1, -1, flt_max, undef());
-                        for lane in one_bits(mask) {
-                            let t = extract(hit.distance, lane);
-                            if t < closest_hit.distance @{
+                        for lane in one_bits(mask) @{
+                            let tlane = extract(t, lane);
+                            if tlane < closest_hit.distance @{
                                 closest_hit.prim_id = tri.id(lane) & 0x7FFFFFFF;
-                                closest_hit.uv_coords = make_vec2(
-                                    extract(hit.uv_coords.x, lane),
-                                    extract(hit.uv_coords.y, lane));
-                                closest_hit.distance = t;
+                                closest_hit.uv_coords = make_vec2(extract(u, lane), extract(v, lane));
+                                closest_hit.distance = tlane;
                             }
                         }
-                        @intr(closest_hit);
+                        @intr(closest_hit)
                     }
                 };
 
