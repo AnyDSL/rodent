@@ -25,8 +25,8 @@ fn load_bvh4_tri(tri: &Bvh4Tri, i: int) -> Tri @{
 
 fn prefetch_bvh4_node(node: &Bvh4Node) -> () {
     let ptr = node as &[u8];
-    cpu_prefetch(&ptr(0),  0 /* read */, 3 /* locality */, 1 /* data */);
-    cpu_prefetch(&ptr(64), 0 /* read */, 3 /* locality */, 1 /* data */);
+    cpu_prefetch(&ptr(0),  0 /* read */, 3 /* closest locality */, 1 /* data */);
+    cpu_prefetch(&ptr(64), 0 /* read */, 3 /* closest locality */, 1 /* data */);
 }
 
 // Vectorizer intrinsics  ----------------------------------------------------------
@@ -206,11 +206,9 @@ fn make_cpu_single_bvh4_mapping(k: int, octant: int, bvh: &Bvh4, ray_box_intrins
             let tvector = as_vector(tentry);
 
             // Push intersected nodes on the stack
-            let mask = ballot(hit);
+            let mask = ballot(hit & (node.child(k) != 0));
             for lane in one_bits(mask) {
                 let child_id = node.child(lane);
-                if child_id == 0 { break() }
-
                 let t = tvector(lane);
                 prefetch_bvh4_node(&nodes(child_id - 1));
                 if stack.top().tmin > t {
@@ -232,23 +230,21 @@ fn make_cpu_single_bvh4_mapping(k: int, octant: int, bvh: &Bvh4, ray_box_intrins
                 let tri = &tris(tri_id++);
                 let closest_intr : Intersector = |math, ray, intr| @{
                     let mut found = false;
-                    let mut t;
-                    let mut uv;
+                    let mut hit;
 
                     // Compute the intersection for each lane
                     let intersect = make_ray_tri_intersector(load_bvh4_tri(tri, k), tri.id(k) & 0x7FFFFFFF);
-                    @intersect(math, ray, |hit| @{
-                        uv = hit.uv_coords;
-                        t = hit.distance;
+                    @intersect(math, ray, |h| @{
+                        hit = h;
                         found = true;
                     });
 
                     // Find the closest intersection
                     let mask = ballot(found);
                     if mask != 0 {
-                        let tvector = as_vector(t);
-                        let uvector = as_vector(uv.x);
-                        let vvector = as_vector(uv.y);
+                        let tvector = as_vector(hit.distance);
+                        let uvector = as_vector(hit.uv_coords.x);
+                        let vvector = as_vector(hit.uv_coords.y);
                         let mut hit = @make_hit(-1, -1, flt_max, undef());
                         for lane in one_bits(mask) {
                             let tlane = tvector(lane);
