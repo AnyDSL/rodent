@@ -184,11 +184,6 @@ fn make_cpu_single_bvh4_mapping(k: int, octant: int, bvh: &Bvh4, ray_box_intrins
         }
     }
 
-    // Hack to get a vector extract with a variable index
-    fn as_vector(f: float) -> simd[float * 4] {
-        simd[ extractf(f, 0), extractf(f, 1), extractf(f, 2), extractf(f, 3) ]
-    }
-
     TraversalMapping {
         iterate_children: |node_ref, tmax, stack, body, exit| -> ! @{
             stack.pop();
@@ -203,14 +198,14 @@ fn make_cpu_single_bvh4_mapping(k: int, octant: int, bvh: &Bvh4, ray_box_intrins
             let mut hit = false;
             let mut tentry;
             @body(bbox, |t, _| { tentry = t; hit = true; });
-            let tvector = as_vector(tentry);
 
             // Push intersected nodes on the stack
             let mask = ballot(hit & (node.child(k) != 0));
             for lane in one_bits(mask) {
                 let child_id = node.child(lane);
-                let t = tvector(lane);
+                let t = extractf(tentry, lane);
                 prefetch_bvh4_node(&nodes(child_id - 1));
+
                 if stack.top().tmin > t {
                     @stack.push(child_id, t);
                 } else {
@@ -242,19 +237,18 @@ fn make_cpu_single_bvh4_mapping(k: int, octant: int, bvh: &Bvh4, ray_box_intrins
                     // Find the closest intersection
                     let mask = ballot(found);
                     if mask != 0 {
-                        let tvector = as_vector(hit.distance);
-                        let uvector = as_vector(hit.uv_coords.x);
-                        let vvector = as_vector(hit.uv_coords.y);
-                        let mut hit = @make_hit(-1, -1, flt_max, undef());
+                        let mut closest_hit = @make_hit(-1, -1, flt_max, undef());
                         for lane in one_bits(mask) {
-                            let tlane = tvector(lane);
-                            if tlane < hit.distance @{
-                                hit.prim_id = tri.id(lane) & 0x7FFFFFFF;
-                                hit.uv_coords = make_vec2(uvector(lane), vvector(lane));
-                                hit.distance = tlane;
+                            let t = extractf(hit.distance, lane);
+                            if t < hit.distance @{
+                                closest_hit.prim_id = tri.id(lane) & 0x7FFFFFFF;
+                                closest_hit.uv_coords = make_vec2(
+                                    extractf(hit.uv_coords.x, lane),
+                                    extractf(hit.uv_coords.y, lane));
+                                closest_hit.distance = t;
                             }
                         }
-                        @intr(hit);
+                        @intr(closest_hit);
                     }
                 };
                 @body(closest_intr);
