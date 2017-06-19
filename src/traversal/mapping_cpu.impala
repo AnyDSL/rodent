@@ -35,11 +35,7 @@ extern "C" {
     fn "rv_any"     any(bool) -> bool;
     fn "rv_all"     all(bool) -> bool;
     fn "rv_ballot"  ballot(bool) -> int;
-    fn "rv_extract" extractf(float, int) -> float;
-}
-
-fn extracti(v: int, i: int) -> int {
-    bitcast[int](extractf(bitcast[float](v), i))
+    fn "rv_extract" extract(float, int) -> float;
 }
 
 // Ray-box intrinsics  -------------------------------------------------------------
@@ -203,7 +199,7 @@ fn make_cpu_single_bvh4_mapping(k: int, octant: int, bvh: &Bvh4, ray_box_intrins
             let mask = ballot(hit & (node.child(k) != 0));
             for lane in one_bits(mask) {
                 let child_id = node.child(lane);
-                let t = extractf(tentry, lane);
+                let t = extract(tentry, lane);
                 prefetch_bvh4_node(&nodes(child_id - 1));
 
                 if stack.top().tmin > t {
@@ -223,12 +219,13 @@ fn make_cpu_single_bvh4_mapping(k: int, octant: int, bvh: &Bvh4, ray_box_intrins
             let mut tri_id = !leaf_ref.node;
             while true @{
                 let tri = &tris(tri_id++);
+
                 let closest_intr : Intersector = |math, ray, intr| @{
                     let mut found = false;
                     let mut hit;
 
                     // Compute the intersection for each lane
-                    let intersect = make_ray_tri_intersector(load_bvh4_tri(tri, k), tri.id(k) & 0x7FFFFFFF);
+                    let intersect = @make_ray_tri_intersector(load_bvh4_tri(tri, k), tri.id(k) & 0x7FFFFFFF);
                     @intersect(math, ray, |h| @{
                         hit = h;
                         found = true;
@@ -239,18 +236,19 @@ fn make_cpu_single_bvh4_mapping(k: int, octant: int, bvh: &Bvh4, ray_box_intrins
                     if mask != 0 {
                         let mut closest_hit = @make_hit(-1, -1, flt_max, undef());
                         for lane in one_bits(mask) {
-                            let t = extractf(hit.distance, lane);
+                            let t = extract(hit.distance, lane);
                             if t < closest_hit.distance @{
                                 closest_hit.prim_id = tri.id(lane) & 0x7FFFFFFF;
                                 closest_hit.uv_coords = make_vec2(
-                                    extractf(hit.uv_coords.x, lane),
-                                    extractf(hit.uv_coords.y, lane));
+                                    extract(hit.uv_coords.x, lane),
+                                    extract(hit.uv_coords.y, lane));
                                 closest_hit.distance = t;
                             }
                         }
                         @intr(closest_hit);
                     }
                 };
+
                 @body(closest_intr);
                 if (tri.id(3) & bitcast[i32](0x80000000u)) != 0 { break() }
             }
