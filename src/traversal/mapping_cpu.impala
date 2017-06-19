@@ -240,7 +240,7 @@ fn make_cpu_single_bvh4_mapping(k: int, octant: int, bvh: &Bvh4, ray_box_intrins
                         let mut closest_hit = @make_hit(-1, -1, flt_max, undef());
                         for lane in one_bits(mask) {
                             let t = extractf(hit.distance, lane);
-                            if t < hit.distance @{
+                            if t < closest_hit.distance @{
                                 closest_hit.prim_id = tri.id(lane) & 0x7FFFFFFF;
                                 closest_hit.uv_coords = make_vec2(
                                     extractf(hit.uv_coords.x, lane),
