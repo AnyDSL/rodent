@@ -36,6 +36,7 @@ extern "C" {
     fn "rv_all"     all(bool) -> bool;
     fn "rv_ballot"  ballot(bool) -> int;
     fn "rv_extract" extract(float, int) -> float;
+    fn "rv_align"   align(&[float], int)-> &[float];
 }
 
 // Ray-box intrinsics  -------------------------------------------------------------
@@ -167,7 +168,7 @@ fn make_cpu_packet_bvh4_mapping(bvh: &Bvh4, ray_box_intrinsics: RayBoxIntrinsics
 fn make_cpu_single_bvh4_mapping(k: int, octant: int, bvh: &Bvh4, ray_box_intrinsics: RayBoxIntrinsics) -> TraversalMapping {
     let (nodes, tris) = (bvh.nodes, bvh.tris);
     let (ox, oy, oz) = (octant & 1, (octant >> 1) & 1, (octant >> 2) & 1);
-    let indices = [ ox * 4, 8 + oy * 4, 16 + oz * 4 ];
+    let indices = [ ox, 2 + oy, 4 + oz ];
 
     // Iterate over the bit that are set in a mask
     fn one_bits(mask: int, body: fn (int) -> ()) -> () {
@@ -186,8 +187,21 @@ fn make_cpu_single_bvh4_mapping(k: int, octant: int, bvh: &Bvh4, ray_box_intrins
             let node = &nodes(node_ref.node - 1);
             let bounds_ptr = &node.bounds as &[float];
             let (ix, iy, iz) = (indices(0), indices(1), indices(2));
-            let bbox = @make_bbox(@make_vec3(bounds_ptr((ix ^ 4) + k), bounds_ptr((iy ^ 4) + k), bounds_ptr((iz ^ 4) + k)),
-                                  @make_vec3(bounds_ptr( ix      + k), bounds_ptr( iy      + k), bounds_ptr( iz      + k)));
+            // Inform the vectorizer that the indirect accesses are aligned
+            /*let (xmin, ymin, zmin) = (
+                align(&bounds_ptr(ix ^ 4) as &[float], 16)(k),
+                align(&bounds_ptr(iy ^ 4) as &[float], 16)(k),
+                align(&bounds_ptr(iz ^ 4) as &[float], 16)(k)
+            );
+            let (xmax, ymax, zmax) = (
+                align(&bounds_ptr(ix) as &[float], 16)(k),
+                align(&bounds_ptr(iy) as &[float], 16)(k),
+                align(&bounds_ptr(iz) as &[float], 16)(k)
+            );
+            let bbox = @make_bbox(@make_vec3(xmin, ymin, zmin),
+                                  @make_vec3(xmax, ymax, zmax));*/
+            let bbox = @make_bbox(@make_vec3(node.bounds(ix^1)(k), node.bounds(iy^1)(k), node.bounds(iz^1)(k)),
+                                  @make_vec3(node.bounds(ix  )(k), node.bounds(iy  )(k), node.bounds(iz  )(k)));
 
             let (hit, tentry, _) = @body(bbox);
 

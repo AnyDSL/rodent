@@ -116,10 +116,10 @@ fn intersect_ray_tri(math: Intrinsics, ray: Ray, tri: Tri) -> (bool, float, floa
     let w = abs_det - u - v;
 
     let mut mask = (u >= 0.0f) & (v >= 0.0f) & (w >= 0.0f);
-    if any(mask) {
+    if any(mask) @{
         let t = prodsign(vec3_dot(tri.n, c), det);
         mask &= (t >= abs_det * ray.tmin) & (t <= abs_det * ray.tmax) & (abs_det > 0.0f);
-        if any(mask) {
+        if any(mask) @{
             let inv_det = safe_rcp(abs_det);
             return(mask, t * inv_det, u * inv_det, v * inv_det)
         }
@@ -128,7 +128,7 @@ fn intersect_ray_tri(math: Intrinsics, ray: Ray, tri: Tri) -> (bool, float, floa
     (false, undef(), undef(), undef())
 }
 
-fn intersect_ray_box(math: RayBoxIntrinsics, ordered: bool, ray: Ray, bbox: BBox) -> (bool, float, float) {
+fn intersect_ray_box(math: RayBoxIntrinsics, ordered: bool, ray: Ray, bbox: BBox) -> (bool, float, float) @{
     let t0 = vec3_sub(vec3_mul(ray.inv_dir, bbox.min), ray.inv_org);
     let t1 = vec3_sub(vec3_mul(ray.inv_dir, bbox.max), ray.inv_org);
 
@@ -145,8 +145,8 @@ fn intersect_ray_box(math: RayBoxIntrinsics, ordered: bool, ray: Ray, bbox: BBox
 }
 
 // Helper function to create a ray-triangle intersector
-fn make_ray_tri_intersector(tri: Tri, prim_id: int) -> Intersector {
-    |math, ray, intr| {
+fn make_ray_tri_intersector(tri: Tri, prim_id: int) -> Intersector @{
+    |math, ray, intr| @{
         let (mask, t, u, v) = intersect_ray_tri(math, ray, tri);
         if mask {
             @intr(Hit {

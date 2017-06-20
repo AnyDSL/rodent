@@ -6,15 +6,16 @@ fn frontend_config(any: bool) -> TraversalConfig {
 }
 
 // CPU variants
+/*
 extern fn cpu_intersect_packet8(bvh: &Bvh4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () @{
     cpu_traverse_bvh4_packet_avx2(frontend_config(false), bvh, make_cpu_ray8_layout(rays, hits), ray_count);
 }
 extern fn cpu_occluded_packet8(bvh: &Bvh4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () @{
     cpu_traverse_bvh4_packet_avx2(frontend_config(true), bvh, make_cpu_ray8_layout(rays, hits), ray_count);
-}
+}*/
 extern fn cpu_intersect_single(bvh: &Bvh4, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () @{
     cpu_traverse_bvh4_single_avx2(frontend_config(false), bvh, make_cpu_ray1_layout(rays, hits), ray_count);
-}
+}/*
 extern fn cpu_occluded_single(bvh: &Bvh4, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () @{
     cpu_traverse_bvh4_single_avx2(frontend_config(true), bvh, make_cpu_ray1_layout(rays, hits), ray_count);
 }
@@ -25,4 +26,4 @@ extern fn gpu_intersect(bvh: &Bvh2, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_
 }
 extern fn gpu_occluded(bvh: &Bvh2, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () @{
     gpu_traverse_bvh2(frontend_config(false), bvh, make_gpu_ray_layout(rays, hits), ray_count);
-}
+}*/
