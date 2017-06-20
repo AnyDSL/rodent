@@ -36,7 +36,7 @@ extern "C" {
     fn "rv_all"     all(bool) -> bool;
     fn "rv_ballot"  ballot(bool) -> int;
     fn "rv_extract" extract(float, int) -> float;
-    fn "rv_align"   align(&[float], int)-> &[float];
+    fn "rv_align"   align(&i8, int)-> &i8;
 }
 
 // Ray-box intrinsics  -------------------------------------------------------------
@@ -166,9 +166,11 @@ fn make_cpu_packet_bvh4_mapping(bvh: &Bvh4, ray_box_intrinsics: RayBoxIntrinsics
 }
 
 fn make_cpu_single_bvh4_mapping(k: int, octant: int, bvh: &Bvh4, ray_box_intrinsics: RayBoxIntrinsics) -> TraversalMapping {
-    let (nodes, tris) = (bvh.nodes, bvh.tris);
+    let nodes = align(bvh.nodes as &i8, 16) as &[Bvh4Node];
+    let tris  = align(bvh.tris  as &i8, 16) as &[Bvh4Tri ];
+
     let (ox, oy, oz) = (octant & 1, (octant >> 1) & 1, (octant >> 2) & 1);
-    let indices = [ ox, 2 + oy, 4 + oz ];
+    let (ix, iy, iz) = (ox * 16, 32 + oy * 16, 64 + oz * 16);
 
     // Iterate over the bit that are set in a mask
     fn one_bits(mask: int, body: fn (int) -> ()) -> () {
@@ -185,33 +187,34 @@ fn make_cpu_single_bvh4_mapping(k: int, octant: int, bvh: &Bvh4, ray_box_intrins
             if unlikely(node_ref.tmin > tmax) { exit() }
 
             let node = &nodes(node_ref.node - 1);
-            let bounds_ptr = &node.bounds as &[float];
-            let (ix, iy, iz) = (indices(0), indices(1), indices(2));
-            // Inform the vectorizer that the indirect accesses are aligned
-            /*let (xmin, ymin, zmin) = (
-                align(&bounds_ptr(ix ^ 4) as &[float], 16)(k),
-                align(&bounds_ptr(iy ^ 4) as &[float], 16)(k),
-                align(&bounds_ptr(iz ^ 4) as &[float], 16)(k)
+            let bounds_ptr = &node.bounds as &[i8];
+            // Inform the vectorizer of the alignment of the indirect loads
+            let (xmin, ymin, zmin) = (
+                *(align(&bounds_ptr((ix ^ 16) + k), 16) as &float),
+                *(align(&bounds_ptr((iy ^ 16) + k), 16) as &float),
+                *(align(&bounds_ptr((iz ^ 16) + k), 16) as &float)
             );
             let (xmax, ymax, zmax) = (
-                align(&bounds_ptr(ix) as &[float], 16)(k),
-                align(&bounds_ptr(iy) as &[float], 16)(k),
-                align(&bounds_ptr(iz) as &[float], 16)(k)
+                *(align(&bounds_ptr(ix + k), 16) as &float),
+                *(align(&bounds_ptr(iy + k), 16) as &float),
+                *(align(&bounds_ptr(iz + k), 16) as &float)
             );
             let bbox = @make_bbox(@make_vec3(xmin, ymin, zmin),
-                                  @make_vec3(xmax, ymax, zmax));*/
-            let bbox = @make_bbox(@make_vec3(node.bounds(ix^1)(k), node.bounds(iy^1)(k), node.bounds(iz^1)(k)),
-                                  @make_vec3(node.bounds(ix  )(k), node.bounds(iy  )(k), node.bounds(iz  )(k)));
+                                  @make_vec3(xmax, ymax, zmax));
 
             let (hit, tentry, _) = @body(bbox);
 
             // Push intersected nodes on the stack
             let mask = ballot(hit & (node.child(k) != 0));
+            let mut count = 0;
             for lane in one_bits(mask) @{
                 let child_id = node.child(lane);
                 let t = extract(tentry, lane);
+
+                count++;
                 prefetch_bvh4_node(&nodes(child_id - 1));
 
+                // Process the closest child first
                 if stack.top().tmin > t {
                     @stack.push(child_id, t);
                 } else {
@@ -219,9 +222,9 @@ fn make_cpu_single_bvh4_mapping(k: int, octant: int, bvh: &Bvh4, ray_box_intrins
                 }
             }
 
-            let count = cpu_popcount32(mask);
-            if count == 3 { @stack.sort_n(3) }
-            else if count == 4 { @stack.sort_n(4) }
+            if likely(count <= 2) { exit() }
+            if likely(count == 3) { @stack.sort_n(2) }
+            else                  { @stack.sort_n(3) }
         },
         iterate_primitives: |leaf_ref, tmax, body, exit| -> ! @{
             if unlikely(leaf_ref.tmin > tmax) { exit() }

@@ -17,7 +17,7 @@ fn is_leaf (ref: NodeRef) -> bool { ref.node < 0 }
 fn is_inner(ref: NodeRef) -> bool { ref.node > 0 }
 
 fn allocate_stack() -> Stack {
-    let mut nodes : [int * 64];
+    let mut nodes : [int   * 64];
     let mut tmins : [float * 64];
     let mut node = 0;
     let mut tmin = flt_max;
@@ -41,23 +41,16 @@ fn allocate_stack() -> Stack {
             tmin = t;
         },
         sort_n: |n| {
-            ptr++;
-            nodes(ptr) = node;
-            tmins(ptr) = tmin;
             let cmp_swap = |i, j| {
                 let (t0, t1) = (tmins(ptr - i), tmins(ptr - j));
-                if t0 > t1 {
-                    let (n0, n1) = (nodes(ptr - i), nodes(ptr - j));
-                    tmins(ptr - i) = t1;
-                    nodes(ptr - i) = n1;
-                    tmins(ptr - j) = t0;
-                    nodes(ptr - j) = n0;
-                }
+                let (n0, n1) = (nodes(ptr - i), nodes(ptr - j));
+                let swap = t0 > t1;
+                tmins(ptr - i) = select(swap, t1, t0);
+                nodes(ptr - i) = select(swap, n1, n0);
+                tmins(ptr - j) = select(swap, t0, t1);
+                nodes(ptr - j) = select(swap, n0, n1);
             };
             bose_nelson_sort(n, cmp_swap);
-            node = nodes(ptr);
-            tmin = tmins(ptr);
-            ptr--;
         },
         pop: || {
             node = nodes(ptr);
