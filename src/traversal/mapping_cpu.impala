@@ -177,7 +177,7 @@ fn make_cpu_single_bvh4_mapping(k: int, octant: int, bvh: &Bvh4, ray_box_intrins
         if mask != 0 {
             let lane = cpu_ctz32(mask, true);
             body(lane);
-            one_bits(mask & !(1 << lane), body);
+            one_bits(mask & (mask - 1), body);
         }
     }
 
@@ -205,16 +205,19 @@ fn make_cpu_single_bvh4_mapping(k: int, octant: int, bvh: &Bvh4, ray_box_intrins
             let (hit, tentry, _) = @body(bbox);
 
             // Push intersected nodes on the stack
-            let mask = ballot(hit & (node.child(k) != 0));
+            let mask = ballot(hit);
+            if likely(mask == 0) { exit() }
+
             let mut count = 0;
             for lane in one_bits(mask) @{
                 let child_id = node.child(lane);
-                let t = extract(tentry, lane);
+                if child_id == 0 { break() }
 
                 count++;
                 prefetch_bvh4_node(&nodes(child_id - 1));
 
                 // Process the closest child first
+                let t = extract(tentry, lane);
                 if stack.top().tmin > t {
                     @stack.push(child_id, t);
                 } else {
