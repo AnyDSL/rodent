@@ -27,6 +27,24 @@ struct Instance {
     traverse: fn (Ray) -> Hit
 }
 
+struct Bvh {
+    node:  fn (int) -> BvhNode,
+    tri:   fn (int) -> BvhTri,
+    arity: int
+}
+
+struct BvhNode {
+    bbox:     fn (int, int) -> BBox,    // Loads the bounding box of one child node (octant as second argument, -1 if no octant)
+    child:    fn (int) -> int,          // Gets the index of one child node
+    prefetch: fn () -> ()               // Prefetches this node
+}
+
+struct BvhTri {
+    load: fn (int) -> Tri,              // Loads the given triangle in the packet
+    id:   fn (int) -> int,              // Identifier of the given triangle in the packet
+    size: int                           // Number of triangles in the packet
+}
+
 static any_hit : HitCallback = |hit, continue, terminate| -> ! { if any(hit.prim_id < 0) { @continue() } else { @terminate(hit) } };
 static closest_hit : HitCallback = |_, continue, _| -> ! @{ continue() };
 static opaque : Transparency = |_| @{ false };
@@ -54,7 +72,7 @@ fn traverse_bvh(mapping: TraversalMapping, config: TraversalConfig, stack: Stack
         }
 
         // Process leaves
-        while unlikely($is_leaf(stack.top())) @{
+        while $unlikely(is_leaf(stack.top())) @{
             let leaf = stack.top();
 
             // Process primitives, if any

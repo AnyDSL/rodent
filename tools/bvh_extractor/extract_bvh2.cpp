@@ -5,7 +5,7 @@
 
 static void fill_dummy_parent(Bvh2Node& node, const BBox& leaf_bb, int index) {
     node.left  = index;
-    node.right = 0x76543210;
+    node.right = 0;
 
     node.left_bb.lo_x = leaf_bb.min.x;
     node.left_bb.lo_y = leaf_bb.min.y;

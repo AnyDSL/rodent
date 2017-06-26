@@ -1,3 +1,22 @@
+// Misc. ---------------------------------------------------------------------------
+
+// Loads a bounding box ordered by octant on the CPU
+fn make_gpu_ordered_bbox(bbox: BBox, octant: int) -> BBox {
+    let (inv_x, inv_y, inv_z) = ((octant & 1) == 0, (octant & 2) == 0, (octant & 3) == 0);
+    make_bbox(
+        make_vec3(
+            select(inv_x, bbox.max.x, bbox.min.x),
+            select(inv_y, bbox.max.y, bbox.min.y),
+            select(inv_z, bbox.max.z, bbox.min.z)),
+        make_vec3(
+            select(inv_x, bbox.min.x, bbox.max.x),
+            select(inv_y, bbox.min.y, bbox.max.y),
+            select(inv_z, bbox.min.z, bbox.max.z))
+    )
+}
+
+// BVH2 ----------------------------------------------------------------------------
+
 struct Bvh2 {
     nodes: &[Bvh2Node],
     tris:  &[Bvh2Tri]
@@ -27,6 +46,54 @@ struct Bvh2Node {
     pad2:  int
 }
 
+fn make_gpu_bvh2(bvh2: Bvh2) -> Bvh {
+    Bvh {
+        node: |j| {
+            let node_ptr = &bvh2.nodes(j) as &[1][simd[float * 4]];
+            let bb0 = nvvm_ldg4_f32(&node_ptr(0));
+            let bb1 = nvvm_ldg4_f32(&node_ptr(1));
+            let bb2 = nvvm_ldg4_f32(&node_ptr(2));
+            let children = nvvm_ldg4_i32(&node_ptr(3) as &[1]simd[int * 4]);
+
+            BvhNode {
+                bbox: |i, octant| {
+                    let bbox =
+                        if i == 0 {
+                            make_bbox(make_vec3(bb0(0), bb0(2), bb1(0)),
+                                      make_vec3(bb0(1), bb0(3), bb1(1)))
+                        } else {
+                            make_bbox(make_vec3(bb1(2), bb2(0), bb2(2)),
+                                      make_vec3(bb1(3), bb2(1), bb2(3)))
+                        };
+                    if octant >= 0 { make_gpu_ordered_bbox(bbox, octant) } else { bbox }
+                },
+                child: |i| children(i),
+                prefetch: || {} // No-op
+            }
+        },
+        tri: |j| {
+            let tri_ptr = &bvh2.tris(j) as &[1][simd[float * 4]];
+            let tri0 = nvvm_ldg4_f32(&tri_ptr(0));
+            let tri1 = nvvm_ldg4_f32(&tri_ptr(1));
+            let tri2 = nvvm_ldg4_f32(&tri_ptr(2));
+            BvhTri {
+                load: |i| {
+                    let v0 = make_vec3(tri0(0), tri0(1), tri0(2));
+                    let e1 = make_vec3(tri1(0), tri1(1), tri1(2));
+                    let e2 = make_vec3(tri2(0), tri2(1), tri2(2));
+                    let n  = make_vec3(tri0(3), tri1(3), vec3_cross(e1, e2).z);
+                    make_tri(v0, e1, e2, n)
+                },
+                id: |i| bitcast[int](tri2(3)),
+                size: 1
+            }
+        },
+        arity: 2
+    }
+}
+
+// Ray-box intrinsics  -------------------------------------------------------------
+
 fn make_ray_box_intrinsics_nvvm() -> RayBoxIntrinsics {
     // Use video instructions to speed-up the ray-box test
     RayBoxIntrinsics {
@@ -39,6 +106,8 @@ fn make_ray_box_intrinsics_nvvm() -> RayBoxIntrinsics {
         fcmp_le: |a, b| a <= b
     }
 }
+
+// Ray layouts  --------------------------------------------------------------------
 
 fn make_gpu_ray_layout(rays: &[Ray1AoS], hits: &mut[Hit1AoS]) -> RayLayout {
     RayLayout {
@@ -58,9 +127,9 @@ fn make_gpu_ray_layout(rays: &[Ray1AoS], hits: &mut[Hit1AoS]) -> RayLayout {
     }
 }
 
-fn gpu_traverse_bvh2(config: TraversalConfig, bvh: &Bvh2, ray_layout: RayLayout, ray_count: int) -> () {
-    let (nodes, tris) = (bvh.nodes, bvh.tris);
+// Variants  -----------------------------------------------------------------------
 
+fn gpu_traverse(config: TraversalConfig, bvh: Bvh, ray_layout: RayLayout, ray_count: int) -> () {
     let block_size = 64;
     let grid  = (ray_count, ray_layout.packet_size, 1);
     let block = (block_size, ray_layout.packet_size, 1);
@@ -76,55 +145,37 @@ fn gpu_traverse_bvh2(config: TraversalConfig, bvh: &Bvh2, ray_layout: RayLayout,
         stack.push(1, 0.0f);
 
         let mapping = TraversalMapping {
-            iterate_children: |node_ref, tmax, stack, body, exit| -> ! {
-                let node_ptr = &nodes(node_ref.node - 1) as &[1][simd[float * 4]];
-                let bb0 = nvvm_ldg4_f32(&node_ptr(0));
-                let bb1 = nvvm_ldg4_f32(&node_ptr(1));
-                let bb2 = nvvm_ldg4_f32(&node_ptr(2));
-                let mut children = nvvm_ldg4_i32(&node_ptr(3) as &[1]simd[int * 4]);
+            iterate_children: |node_ref, tmax, stack, body, exit| -> ! @{
+                let node = bvh.node(node_ref.node - 1);
 
-                let box1 = make_bbox(make_vec3(bb0(0), bb0(2), bb1(0)),
-                                     make_vec3(bb0(1), bb0(3), bb1(1)));
-                let box2 = make_bbox(make_vec3(bb1(2), bb2(0), bb2(2)),
-                                     make_vec3(bb1(3), bb2(1), bb2(3)));
-
-                let (hit1, t1, _) = @body(box1);
-                let (hit2, t2, _) = @body(box2);
-
-                if !hit1 && !hit2 {
-                    stack.pop();
-                } else {
-                    if hit1 && hit2 {
-                        if t1 < t2 {
-                            let c = children(0);
-                            children(0) = children(1);
-                            children(1) = c;
+                let mut found = false;
+                for k in @unroll(0, bvh.arity) @{
+                    let (hit, t, _) = body(node.bbox(k, -1));
+                    if hit @{
+                        let child = node.child(k);
+                        if !found { @stack.set_top(child, 0.0f); }
+                        else {
+                            if t < stack.top().tmin {
+                                @stack.push(child, 0.0f);
+                            } else {
+                                @stack.push_after(child, 0.0f);
+                            }
                         }
-                        stack.push_after(children(0), 0.0f);
-                        stack.set_top(children(1), 0.0f);
-                    } else {
-                        stack.set_top(if hit1 { children(0) } else { children(1) }, 0.0f)
                     }
+                    found |= hit;
                 }
+                if !found { @stack.pop() }
             },
             iterate_primitives: |leaf_ref, tmax, body, exit| -> ! {
                 let mut tri_id = !leaf_ref.node;
-                while true {
-                    let tri_ptr = &tris(tri_id) as &[1][simd[float * 4]];
-                    let tri0 = nvvm_ldg4_f32(&tri_ptr(0));
-                    let tri1 = nvvm_ldg4_f32(&tri_ptr(1));
-                    let tri2 = nvvm_ldg4_f32(&tri_ptr(2));
+                while true @{
+                    let tri = bvh.tri(tri_id++);
 
-                    let id = bitcast[uint](tri2(3));
-                    let v0 = make_vec3(tri0(0), tri0(1), tri0(2));
-                    let e1 = make_vec3(tri1(0), tri1(1), tri1(2));
-                    let e2 = make_vec3(tri2(0), tri2(1), tri2(2));
-                    let  n = make_vec3(tri0(3), tri1(3), vec3_cross(e1, e2).z);
+                    for k in @unroll(0, tri.size) @{
+                        @body(make_ray_tri_intersector(tri.load(k), tri.id(k) & 0x7FFFFFFF));
+                    }
 
-                    @body(make_ray_tri_intersector(make_tri(v0, e1, e2, n), (id & 0x7FFFFFFFu) as int));
-
-                    if (id & 0x80000000u) != 0u { break() }
-                    tri_id++;
+                    if (bitcast[uint](tri.id(tri.size - 1)) & 0x80000000u) != 0u { break() }
                 }
             },
             iterate_instances: |_, _, _| {},
