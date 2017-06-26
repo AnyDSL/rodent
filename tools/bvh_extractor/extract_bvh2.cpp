@@ -63,7 +63,7 @@ private:
 
             if (!stack.is_empty()) {
                 StackElem elem = stack.pop();
-                *(&nodes[elem.parent].left + elem.child) = i - 1;
+                *(&nodes[elem.parent].left + elem.child) = i + 1;
             }
 
             assert(count == 2);

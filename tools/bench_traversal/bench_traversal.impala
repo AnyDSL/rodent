@@ -21,8 +21,20 @@ extern fn cpu_occluded_single(bvh: &Bvh4, rays: &[Ray1AoS], hits: &mut [Hit1AoS]
 
 // GPU variants
 extern fn gpu_intersect(bvh: &Bvh2, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () @{
-    gpu_traverse(frontend_config(false), make_gpu_bvh2(*bvh), make_gpu_ray_layout(rays, hits), ray_count);
+    gpu_traverse(nvvm_accelerator(0),
+                 nvvm_intrinsics,
+                 make_ray_box_intrinsics_nvvm(),
+                 frontend_config(false),
+                 make_bvh2_nvvm(*bvh),
+                 make_ray_layout_nvvm(rays, hits),
+                 ray_count);
 }
 extern fn gpu_occluded(bvh: &Bvh2, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () @{
-    gpu_traverse(frontend_config(true), make_gpu_bvh2(*bvh), make_gpu_ray_layout(rays, hits), ray_count);
+    gpu_traverse(nvvm_accelerator(0),
+                 nvvm_intrinsics,
+                 make_ray_box_intrinsics_nvvm(),
+                 frontend_config(true),
+                 make_bvh2_nvvm(*bvh),
+                 make_ray_layout_nvvm(rays, hits),
+                 ray_count);
 }
