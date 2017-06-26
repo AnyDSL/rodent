@@ -38,6 +38,17 @@ fn one_bits(mask: int, body: fn (int) -> ()) -> () {
     }
 }
 
+fn extract_ray(ray: Ray, lane: int) -> Ray {
+    Ray {
+        org: make_vec3(extract(ray.org.x, lane), extract(ray.org.y, lane), extract(ray.org.z, lane)),
+        dir: make_vec3(extract(ray.dir.x, lane), extract(ray.dir.y, lane), extract(ray.dir.z, lane)),
+        inv_dir: make_vec3(extract(ray.inv_dir.x, lane), extract(ray.inv_dir.y, lane), extract(ray.inv_dir.z, lane)),
+        inv_org: make_vec3(extract(ray.inv_org.x, lane), extract(ray.inv_org.y, lane), extract(ray.inv_org.z, lane)),
+        tmin: extract(ray.tmin, lane),
+        tmax: extract(ray.tmax, lane)
+    }
+}
+
 // BVH4 ----------------------------------------------------------------------------
 
 struct Bvh4 {
@@ -267,7 +278,7 @@ fn make_cpu_packet_mapping(bvh: Bvh, ray_box_intrinsics: RayBoxIntrinsics) -> Tr
                 if (tri.id(3) & bitcast[i32](0x80000000u)) != 0 { break() }
             }
         },
-        iterate_instances: |_, _, _| {},
+        enter_sublevel: no_sublevel,
         intrinsics: cpu_intrinsics,
         ray_box_intrinsics: ray_box_intrinsics,
         ray_box_ordered: false
@@ -344,7 +355,39 @@ fn make_cpu_single_mapping(k: int, octant: int, bvh: Bvh, ray_box_intrinsics: Ra
                 if (tri.id(tri.size - 1) & bitcast[i32](0x80000000u)) != 0 { break() }
             }
         },
-        iterate_instances: |_, _, _| {},
+        enter_sublevel: no_sublevel,
+        intrinsics: cpu_intrinsics,
+        ray_box_intrinsics: ray_box_intrinsics,
+        ray_box_ordered: true
+    }
+}
+
+fn make_cpu_hybrid_mapping(config: TraversalConfig, bvh: Bvh, ray_box_intrinsics: RayBoxIntrinsics, vector_width: int) -> TraversalMapping @{
+    let packet_mapping   = make_cpu_packet_mapping(bvh, ray_box_intrinsics);
+    let switch_threshold = match vector_width {
+        4  =>  3,
+        8  =>  5,
+        16 => 14,
+        _  => vector_width // Be conservative with unknown SIMD widths
+    };
+
+    TraversalMapping {
+        enter_sublevel: |stack, ray, body| {
+            let level_ref = stack.top();
+            let active = level_ref.tmin <= ray.tmax;
+            if cpu_popcount32(ballot(active)) < switch_threshold @{
+                stack.pop();
+
+                // Switch to single ray traversal when the SIMD utilization is too low
+                for lane in @unroll(0, vector_width) @{
+                    pe_info("single ray lane", lane);
+                    let hit = cpu_traverse_single_helper(config, bvh, @extract_ray(ray, lane), ray_box_intrinsics);
+                    if hit.prim_id >= 0 { @body(hit) }
+                }
+            }
+        },
+        iterate_children: packet_mapping.iterate_children,
+        iterate_primitives: packet_mapping.iterate_primitives,
         intrinsics: cpu_intrinsics,
         ray_box_intrinsics: ray_box_intrinsics,
         ray_box_ordered: true
@@ -352,6 +395,19 @@ fn make_cpu_single_mapping(k: int, octant: int, bvh: Bvh, ray_box_intrinsics: Ra
 }
 
 // Variants  -----------------------------------------------------------------------
+
+fn cpu_traverse_single_helper(config: TraversalConfig, bvh: Bvh, ray: Ray, ray_box_intrinsics: RayBoxIntrinsics) -> Hit @{
+    let mut hit : Hit;
+    pe_info("arity", bvh.arity);
+    for k in vectorize(bvh.arity, bvh.arity * sizeof[float](), 0, bvh.arity) @{
+        let stack = allocate_stack();
+
+        stack.push(1, ray.tmin);
+        let mapping = @make_cpu_single_mapping(k, ray_octant(ray), bvh, ray_box_intrinsics);
+        hit = @traverse_bvh(mapping, config, stack, ray)
+    }
+    hit
+}
 
 fn cpu_traverse_packet_avx2(config: TraversalConfig, bvh: Bvh, ray_layout: RayLayout, ray_count: int) -> () {
     let inc = ray_layout.packet_size;
@@ -368,19 +424,26 @@ fn cpu_traverse_packet_avx2(config: TraversalConfig, bvh: Bvh, ray_layout: RayLa
     }
 }
 
+fn cpu_traverse_hybrid_avx2(config: TraversalConfig, bvh: Bvh, ray_layout: RayLayout, ray_count: int) -> () {
+    let inc = ray_layout.packet_size;
+    for i in $range(0, ray_count / inc) {
+        for j in vectorize(inc, 32, 0, inc) @{
+            let ray = ray_layout.input(i, j);
+            let stack = allocate_stack();
+
+            stack.push(1, ray.tmin);
+
+            let mapping = @make_cpu_hybrid_mapping(config, bvh, make_ray_box_intrinsics_avx2(), inc);
+            @ray_layout.output(i, j, @traverse_bvh(mapping, config, stack, ray));
+        }
+    }
+}
+
 fn cpu_traverse_single_avx2(config: TraversalConfig, bvh: Bvh, ray_layout: RayLayout, ray_count: int) -> () {
     let inc = ray_layout.packet_size;
     for i in $range(0, ray_count) @{
         let (packet_id, ray_id) = (i / inc, i % inc);
         let ray = ray_layout.input(packet_id, ray_id);
-
-        for k in vectorize(bvh.arity, 16, 0, bvh.arity) @{
-            let stack = allocate_stack();
-
-            stack.push(1, ray.tmin);
-
-            let mapping = @make_cpu_single_mapping(k, ray_octant(ray), bvh, make_ray_box_intrinsics_avx2());
-            @ray_layout.output(packet_id, ray_id, @traverse_bvh(mapping, config, stack, ray));
-        }
+        cpu_traverse_single_helper(config, bvh, ray, make_ray_box_intrinsics_avx2());
     }
 }

@@ -208,7 +208,7 @@ fn gpu_traverse(acc: Accelerator,
                     if (bitcast[uint](tri.id(tri.size - 1)) & 0x80000000u) != 0u { break() }
                 }
             },
-            iterate_instances: |_, _, _| {},
+            enter_sublevel: no_sublevel,
             intrinsics: gpu_intrinsics,
             ray_box_intrinsics: ray_box_intrinsics,
             ray_box_ordered: false

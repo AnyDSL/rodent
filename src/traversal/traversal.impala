@@ -4,9 +4,10 @@ struct TraversalMapping {
     ray_box_intrinsics: RayBoxIntrinsics,
     ray_box_ordered:    bool,
 
+    enter_sublevel:     fn (Stack, Ray, fn (Hit) -> ()) -> (),
+
     iterate_children:   fn (NodeRef, float, Stack, fn (BBox) -> (bool, float, float)) -> (),
     iterate_primitives: fn (NodeRef, float, fn (Intersector) -> ()) -> (),
-    iterate_instances:  fn (NodeRef, float, fn (Instance) -> ()) -> ()
 }
 
 type HitCallback  = fn (Hit, fn () -> !, fn (Hit) -> !) -> !;
@@ -18,15 +19,7 @@ struct TraversalConfig {
     transparency: Transparency
 }
 
-// Instance of an object in the scene
-struct Instance {
-    id:       int,     // Instance identifier
-    inverse:  Mat3x4,  // Inverse matrix
-
-    // Associated traversal algorithm for the object
-    traverse: fn (Ray) -> Hit
-}
-
+// Abstract definition of a BVH
 struct Bvh {
     node:  fn (int) -> BvhNode,
     tri:   fn (int) -> BvhTri,
@@ -48,6 +41,7 @@ struct BvhTri {
 static any_hit : HitCallback = |hit, continue, terminate| -> ! { if any(hit.prim_id < 0) { @continue() } else { @terminate(hit) } };
 static closest_hit : HitCallback = |_, continue, _| -> ! @{ continue() };
 static opaque : Transparency = |_| @{ false };
+static no_sublevel = |_, _, _| ();
 
 fn make_hit(inst_id: int, prim_id: int, t: float, uv: Vec2) -> Hit {
     Hit {
@@ -66,17 +60,23 @@ fn traverse_bvh(mapping: TraversalMapping, config: TraversalConfig, stack: Stack
 
     // The traversal loop should not be unrolled
     while !$stack.is_empty() @{
-        // Intersect the bounding box of every child of this node
+        // If the BVH has different levels, handle them here
+        with hit in @mapping.enter_sublevel(stack, clip_ray(ray, ray.tmin, t)) @{
+            inst_id = hit.inst_id;
+            prim_id = hit.prim_id;
+            t  = hit.distance;
+            uv = hit.uv_coords;
+        }
+
+        // Intersect the bounding box of every child of the current node
         for bbox in @mapping.iterate_children(stack.top(), t, stack) {
             @intersect_ray_box(mapping.ray_box_intrinsics, mapping.ray_box_ordered, clip_ray(ray, ray.tmin, t), bbox)
         }
 
         // Process leaves
         while unlikely($is_leaf(stack.top())) @{
-            let leaf = stack.top();
-
             // Process primitives, if any
-            for intersector in @mapping.iterate_primitives(leaf, t) @{
+            for intersector in @mapping.iterate_primitives(stack.top(), t) @{
                 with hit in @intersector(mapping.intrinsics, clip_ray(ray, ray.tmin, t)) @{
                     if !@config.transparency(hit) @{
                         prim_id = hit.prim_id;
@@ -87,24 +87,9 @@ fn traverse_bvh(mapping: TraversalMapping, config: TraversalConfig, stack: Stack
                 @config.hit_callback(@make_hit(inst_id, prim_id, t, uv), continue, return)
             }
 
-            // Process instances, if any
-            for inst in @mapping.iterate_instances(leaf, t) @{
-                let new_dir = mat3x4_mul(inst.inverse, vec3_to_4(ray.dir, 0.0f));
-                let new_org = mat3x4_mul(inst.inverse, vec3_to_4(ray.org, 0.0f));
-                let hit = inst.traverse(make_ray(new_org, new_dir, ray.tmin, t));
-                if hit.prim_id >= 0 @{
-                    inst_id = inst.id;
-                    prim_id = hit.prim_id;
-                    t  = hit.distance;
-                    uv = hit.uv_coords;
-                }
-
-                @config.hit_callback(@make_hit(inst_id, prim_id, t, uv), continue, return)
-            }
-
             stack.pop()
         }
     }
 
-    return(make_hit(inst_id, prim_id, t, uv))
+    make_hit(inst_id, prim_id, t, uv)
 }

@@ -153,7 +153,7 @@ fn make_ray_tri_intersector(tri: Tri, prim_id: int) -> Intersector @{
                 distance:  t,
                 uv_coords: make_vec2(u, v),
                 prim_id:   prim_id,
-                inst_id:   -1
+                inst_id:   undef()
             })
         }
     }
