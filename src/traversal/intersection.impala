@@ -70,6 +70,15 @@ fn make_ray(org: Vec3, dir: Vec3, tmin: float, tmax: float) -> Ray @{
     }
 }
 
+fn make_hit(inst_id: int, prim_id: int, t: float, uv: Vec2) -> Hit {
+    Hit {
+        distance:  t,
+        uv_coords: uv,
+        prim_id:   prim_id,
+        inst_id:   inst_id
+    }
+}
+
 fn make_tri(v0: Vec3, e1: Vec3, e2: Vec3, n: Vec3) -> Tri {
     Tri {
         v0: v0,

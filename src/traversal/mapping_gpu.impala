@@ -127,6 +127,77 @@ fn make_ray_layout_nvvm(rays: &[Ray1AoS], hits: &mut[Hit1AoS]) -> RayLayout {
     }
 }
 
+// Mappings  -----------------------------------------------------------------------
+
+fn make_gpu_mapping_single(config: TraversalConfig, bvh: Bvh, gpu_intrinsics: Intrinsics, ray_box_intrinsics: RayBoxIntrinsics) -> TraversalMapping {
+    TraversalMapping {
+        iterate_children: |stack, tmax, body, exit| -> ! @{
+            let node_ref = stack.top();
+            let node = bvh.node(node_ref.node - 1);
+
+            let mut mask = 0;
+            let mut tentry : [float * 8]; // Up to BVH8
+            for k in @unroll(0, bvh.arity) @{
+                let (hit, t, _) = @body(@node.bbox(k, -1));
+                mask = mask | select(hit, 1 << k, 0);
+                tentry(k) = t;
+            }
+            if mask == 0 { @stack.pop() }
+            else if bvh.arity == 2 @{
+                // Special case for N=2
+                if mask == 3 @{
+                    let mut child1 = node.child(0);
+                    let mut child2 = node.child(1);
+                    if config.any_hit && tentry(1) < tentry(0) {
+                        let c = child1;
+                        child1 = child2;
+                        child2 = c;
+                    }
+                    @stack.set_top(child1, undef());
+                    @stack.push_after(child2, undef());
+                } else @{
+                    stack.set_top(select(mask == 1, node.child(0), node.child(1)), undef());
+                }
+            } else @{
+                // General case - slow
+                @stack.pop();
+                let mut tmin = flt_max;
+                for k in @unroll(0, bvh.arity) @{
+                    if mask & (1 << k) != 0 @{
+                        let child = node.child(k);
+                        let t = tentry(k);
+                        if config.any_hit || t < tmin {
+                            // Equivalent to stack.push(child, undef())
+                            // but does not generate allocas for the stack's tmins
+                            let top = stack.top();
+                            @stack.set_top(child, undef());
+                            @stack.push_after(top.node, undef());
+                        } else {
+                            @stack.push_after(child, undef());
+                        }
+                        tmin = gpu_intrinsics.fminf(tmin, t);
+                    }
+                }
+            }
+        },
+        iterate_primitives: |leaf_ref, tmax, body, exit| -> ! {
+            let mut tri_id = !leaf_ref.node;
+            while true @{
+                let tri = bvh.tri(tri_id++);
+
+                for k in @unroll(0, tri.size) @{
+                    @body(make_ray_tri_intersector(tri.load(k), tri.id(k) & 0x7FFFFFFF));
+                }
+
+                if (bitcast[uint](tri.id(tri.size - 1)) & 0x80000000u) != 0u { break() }
+            }
+        },
+        intrinsics: gpu_intrinsics,
+        ray_box_intrinsics: ray_box_intrinsics,
+        ray_box_ordered: false
+    }
+}
+
 // Variants  -----------------------------------------------------------------------
 
 fn gpu_traverse(acc: Accelerator,
@@ -147,73 +218,7 @@ fn gpu_traverse(acc: Accelerator,
         let stack = allocate_stack();
         stack.push(1, undef());
 
-        let mapping = TraversalMapping {
-            iterate_children: |stack, tmax, body, exit| -> ! @{
-                let node_ref = stack.top();
-                let node = bvh.node(node_ref.node - 1);
-
-                let mut mask = 0;
-                let mut tentry : [float * 8]; // Up to BVH8
-                for k in @unroll(0, bvh.arity) @{
-                    let (hit, t, _) = @body(@node.bbox(k, -1));
-                    mask = mask | select(hit, 1 << k, 0);
-                    tentry(k) = t;
-                }
-                if mask == 0 { @stack.pop() }
-                else if bvh.arity == 2 @{
-                    // Special case for N=2
-                    if mask == 3 @{
-                        let mut child1 = node.child(0);
-                        let mut child2 = node.child(1);
-                        if tentry(1) < tentry(0) {
-                            let c = child1;
-                            child1 = child2;
-                            child2 = c;
-                        }
-                        @stack.set_top(child1, undef());
-                        @stack.push_after(child2, undef());
-                    } else @{
-                        stack.set_top(select(mask == 1, node.child(0), node.child(1)), undef());
-                    }
-                } else @{
-                    // General case - slow
-                    @stack.pop();
-                    let mut tmin = flt_max;
-                    for k in @unroll(0, bvh.arity) @{
-                        if mask & (1 << k) != 0 @{
-                            let child = node.child(k);
-                            let t = tentry(k);
-                            if t < tmin {
-                                // Equivalent to stack.push(child, undef())
-                                // but does not generate allocas for the stack's tmins
-                                let top = stack.top();
-                                @stack.set_top(child, undef());
-                                @stack.push_after(top.node, undef());
-                            } else {
-                                @stack.push_after(child, undef());
-                            }
-                            tmin = gpu_intrinsics.fminf(tmin, t);
-                        }
-                    }
-                }
-            },
-            iterate_primitives: |leaf_ref, tmax, body, exit| -> ! {
-                let mut tri_id = !leaf_ref.node;
-                while true @{
-                    let tri = bvh.tri(tri_id++);
-
-                    for k in @unroll(0, tri.size) @{
-                        @body(make_ray_tri_intersector(tri.load(k), tri.id(k) & 0x7FFFFFFF));
-                    }
-
-                    if (bitcast[uint](tri.id(tri.size - 1)) & 0x80000000u) != 0u { break() }
-                }
-            },
-            intrinsics: gpu_intrinsics,
-            ray_box_intrinsics: ray_box_intrinsics,
-            ray_box_ordered: false
-        };
-
+        let mapping = make_gpu_mapping_single(config, bvh, gpu_intrinsics, ray_box_intrinsics);
         ray_layout.output(i, j, @traverse_bvh(mapping, config, stack, ray))
     }
 }

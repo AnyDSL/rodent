@@ -20,7 +20,7 @@ fn allocate_stack() -> Stack {
     let mut nodes : [int   * 64];
     let mut tmins : [float * 64];
     let mut node = 0;
-    let mut tmin = undef();
+    let mut tmin = flt_max;
     let mut ptr = -1;
 
     Stack {

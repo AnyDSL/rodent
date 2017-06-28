@@ -33,24 +33,24 @@ inline void usage() {
 
 static double bench_cpu(Bvh4* bvh4, Ray8SoA* rays, Hit8SoA* hits, size_t n, bool any_hit) {
     auto t0 = anydsl_get_micro_time();
-    if (any_hit) cpu_occluded_packet8(bvh4, rays, hits, n);
-    else         cpu_intersect_packet8(bvh4, rays, hits, n);
+    if (any_hit) cpu_occluded_packet8_avx2(bvh4, rays, hits, n);
+    else         cpu_intersect_packet8_avx2(bvh4, rays, hits, n);
     auto t1 = anydsl_get_micro_time();
     return (t1 - t0) / 1000.0;
 }
 
 static double bench_cpu(Bvh4* bvh4, Ray1AoS* rays, Hit1AoS* hits, size_t n, bool any_hit) {
     auto t0 = anydsl_get_micro_time();
-    if (any_hit) cpu_occluded_single(bvh4, rays, hits, n);
-    else         cpu_intersect_single(bvh4, rays, hits, n);
+    if (any_hit) cpu_occluded_single_avx2(bvh4, rays, hits, n);
+    else         cpu_intersect_single_avx2(bvh4, rays, hits, n);
     auto t1 = anydsl_get_micro_time();
     return (t1 - t0) / 1000.0;
 }
 
 static double bench_gpu(Bvh2* bvh2, Ray1AoS* rays, Hit1AoS* hits, size_t n, bool any_hit) {
     auto t0 = anydsl_get_kernel_time();
-    if (any_hit) gpu_occluded(bvh2, rays, hits, n);
-    else         gpu_intersect(bvh2, rays, hits, n);
+    if (any_hit) gpu_occluded_nvvm(bvh2, rays, hits, n);
+    else         gpu_intersect_nvvm(bvh2, rays, hits, n);
     auto t1 = anydsl_get_kernel_time();
     return (t1 - t0) / 1000.0;
 }

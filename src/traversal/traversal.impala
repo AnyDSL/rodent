@@ -8,13 +8,9 @@ struct TraversalMapping {
     iterate_primitives: fn (NodeRef, float, fn (Intersector) -> ()) -> (),
 }
 
-type HitCallback  = fn (Hit, fn () -> !, fn (Hit) -> !) -> !;
-type Transparency = fn (Hit) -> bool;
-
 // Structure containing the configuration of the traversal algorithm for a particular use case.
 struct TraversalConfig {
-    hit_callback: HitCallback,
-    transparency: Transparency
+    any_hit: bool
 }
 
 // Abstract definition of a BVH
@@ -36,49 +32,35 @@ struct BvhTri {
     size: int                           // Number of triangles in the packet
 }
 
-static any_hit : HitCallback = |hit, continue, terminate| -> ! { if any(hit.prim_id < 0) { @continue() } else { @terminate(hit) } };
-static closest_hit : HitCallback = |_, continue, _| -> ! @{ continue() };
-static opaque : Transparency = |_| @{ false };
-
-fn make_hit(inst_id: int, prim_id: int, t: float, uv: Vec2) -> Hit {
-    Hit {
-        distance:  t,
-        uv_coords: uv,
-        prim_id:   prim_id,
-        inst_id:   inst_id
-    }
-}
-
 fn traverse_bvh(mapping: TraversalMapping, config: TraversalConfig, stack: Stack, ray: Ray) -> Hit @{
-    let mut inst_id = -1;
-    let mut prim_id = -1;
-    let mut t = ray.tmax;
-    let mut uv = make_vec2(0.0f, 0.0f);
+    let mut res = make_hit(-1, -1, ray.tmax, undef());
 
     // The traversal loop should not be unrolled
     while !$stack.is_empty() @{
         // Intersect the bounding box of every child of the current node
-        for bbox in @mapping.iterate_children(stack, t) {
-            @intersect_ray_box(mapping.ray_box_intrinsics, mapping.ray_box_ordered, clip_ray(ray, ray.tmin, t), bbox)
+        for bbox in @mapping.iterate_children(stack, res.distance) {
+            @intersect_ray_box(mapping.ray_box_intrinsics,
+                               mapping.ray_box_ordered,
+                               clip_ray(ray, ray.tmin, res.distance),
+                               bbox)
         }
 
         // Process leaves
         while unlikely($is_leaf(stack.top())) @{
             // Process primitives, if any
-            for intersector in @mapping.iterate_primitives(stack.top(), t) @{
-                with hit in @intersector(mapping.intrinsics, clip_ray(ray, ray.tmin, t)) @{
-                    if !@config.transparency(hit) @{
-                        prim_id = hit.prim_id;
-                        t  = hit.distance;
-                        uv = hit.uv_coords;
-                    }
+            for intersector in @mapping.iterate_primitives(stack.top(), res.distance) @{
+                with hit in @intersector(mapping.intrinsics, clip_ray(ray, ray.tmin, res.distance)) @{
+                    res.prim_id   = hit.prim_id;
+                    res.distance  = hit.distance;
+                    res.uv_coords = hit.uv_coords;
                 }
-                @config.hit_callback(@make_hit(inst_id, prim_id, t, uv), continue, return)
+
+                if config.any_hit && all(res.prim_id >= 0) { return(res) } 
             }
 
             stack.pop()
         }
     }
 
-    make_hit(inst_id, prim_id, t, uv)
+    res
 }
