@@ -148,7 +148,8 @@ fn gpu_traverse(acc: Accelerator,
         stack.push(1, undef());
 
         let mapping = TraversalMapping {
-            iterate_children: |node_ref, tmax, stack, body, exit| -> ! @{
+            iterate_children: |stack, tmax, body, exit| -> ! @{
+                let node_ref = stack.top();
                 let node = bvh.node(node_ref.node - 1);
 
                 let mut mask = 0;
@@ -208,7 +209,6 @@ fn gpu_traverse(acc: Accelerator,
                     if (bitcast[uint](tri.id(tri.size - 1)) & 0x80000000u) != 0u { break() }
                 }
             },
-            enter_sublevel: no_sublevel,
             intrinsics: gpu_intrinsics,
             ray_box_intrinsics: ray_box_intrinsics,
             ray_box_ordered: false

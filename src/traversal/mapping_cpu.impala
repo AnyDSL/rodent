@@ -245,7 +245,8 @@ fn make_cpu_ray8_layout(rays: &[Ray8SoA], hits: &mut [Hit8SoA]) -> RayLayout {
 
 fn make_cpu_packet_mapping(bvh: Bvh, ray_box_intrinsics: RayBoxIntrinsics) -> TraversalMapping {
     TraversalMapping {
-        iterate_children: |node_ref, tmax, stack, body, exit| -> ! @{
+        iterate_children: |stack, tmax, body, exit| -> ! @{
+            let node_ref = stack.top();
             stack.pop();
 
             if all(node_ref.tmin > tmax) { exit() }
@@ -278,7 +279,6 @@ fn make_cpu_packet_mapping(bvh: Bvh, ray_box_intrinsics: RayBoxIntrinsics) -> Tr
                 if (tri.id(3) & bitcast[i32](0x80000000u)) != 0 { break() }
             }
         },
-        enter_sublevel: no_sublevel,
         intrinsics: cpu_intrinsics,
         ray_box_intrinsics: ray_box_intrinsics,
         ray_box_ordered: false
@@ -287,8 +287,10 @@ fn make_cpu_packet_mapping(bvh: Bvh, ray_box_intrinsics: RayBoxIntrinsics) -> Tr
 
 fn make_cpu_single_mapping(k: int, octant: int, bvh: Bvh, ray_box_intrinsics: RayBoxIntrinsics) -> TraversalMapping {
     TraversalMapping {
-        iterate_children: |node_ref, tmax, stack, body, exit| -> ! @{
+        iterate_children: |stack, tmax, body, exit| -> ! @{
+            let node_ref = stack.top();
             stack.pop();
+
             if unlikely(node_ref.tmin > tmax) { exit() }
 
             let node = bvh.node(node_ref.node - 1);
@@ -300,6 +302,7 @@ fn make_cpu_single_mapping(k: int, octant: int, bvh: Bvh, ray_box_intrinsics: Ra
 
             let mut count = 0;
             for lane in one_bits(mask) @{
+                pe_info("iterate_children one_bits", lane);
                 let child_id = node.child(lane);
                 if child_id == 0 { break() }
 
@@ -338,10 +341,11 @@ fn make_cpu_single_mapping(k: int, octant: int, bvh: Bvh, ray_box_intrinsics: Ra
                         if mask != 0 {
                             let mut closest_hit = @make_hit(-1, -1, flt_max, undef());
                             for lane in one_bits(mask) @{
+                                pe_info("closest_hit one_bits", lane);
                                 let tlane = extract(t, lane);
                                 if tlane < closest_hit.distance @{
                                     closest_hit.prim_id = tri.id(i + lane) & 0x7FFFFFFF;
-                                    closest_hit.uv_coords = make_vec2(extract(u, lane), extract(v, lane));
+                                    closest_hit.uv_coords = @make_vec2(extract(u, lane), extract(v, lane));
                                     closest_hit.distance = tlane;
                                 }
                             }
@@ -355,13 +359,12 @@ fn make_cpu_single_mapping(k: int, octant: int, bvh: Bvh, ray_box_intrinsics: Ra
                 if (tri.id(tri.size - 1) & bitcast[i32](0x80000000u)) != 0 { break() }
             }
         },
-        enter_sublevel: no_sublevel,
         intrinsics: cpu_intrinsics,
         ray_box_intrinsics: ray_box_intrinsics,
         ray_box_ordered: true
     }
 }
-
+/*
 fn make_cpu_hybrid_mapping(config: TraversalConfig, bvh: Bvh, ray_box_intrinsics: RayBoxIntrinsics, vector_width: int) -> TraversalMapping @{
     let packet_mapping   = make_cpu_packet_mapping(bvh, ray_box_intrinsics);
     let switch_threshold = match vector_width {
@@ -392,7 +395,7 @@ fn make_cpu_hybrid_mapping(config: TraversalConfig, bvh: Bvh, ray_box_intrinsics
         ray_box_intrinsics: ray_box_intrinsics,
         ray_box_ordered: true
     }
-}
+}*/
 
 // Variants  -----------------------------------------------------------------------
 
@@ -423,7 +426,7 @@ fn cpu_traverse_packet_avx2(config: TraversalConfig, bvh: Bvh, ray_layout: RayLa
         }
     }
 }
-
+/*
 fn cpu_traverse_hybrid_avx2(config: TraversalConfig, bvh: Bvh, ray_layout: RayLayout, ray_count: int) -> () {
     let inc = ray_layout.packet_size;
     for i in $range(0, ray_count / inc) {
@@ -437,7 +440,7 @@ fn cpu_traverse_hybrid_avx2(config: TraversalConfig, bvh: Bvh, ray_layout: RayLa
             @ray_layout.output(i, j, @traverse_bvh(mapping, config, stack, ray));
         }
     }
-}
+}*/
 
 fn cpu_traverse_single_avx2(config: TraversalConfig, bvh: Bvh, ray_layout: RayLayout, ray_count: int) -> () {
     let inc = ray_layout.packet_size;

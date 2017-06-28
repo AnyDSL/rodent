@@ -290,7 +290,7 @@ int main(int argc, char** argv) {
         else         iter_fn = [&] (RTCScene scene) { return intersect_scene(scene, rays1, hits1, rtcIntersect); };
         count_hits = [&] {
             size_t intr = 0;
-            for (auto hit : hits1) intr += hit.primID != RTC_INVALID_GEOMETRY_ID;
+            for (auto hit : hits1) intr += hit.geomID != RTC_INVALID_GEOMETRY_ID;
             return intr; 
         };
     } else {
@@ -304,7 +304,7 @@ int main(int argc, char** argv) {
         count_hits = [&] {
             size_t intr = 0;
             for (auto hit : hits8) {
-                for (int i = 0; i < 8; i++) intr += hit.primID[i] != RTC_INVALID_GEOMETRY_ID;
+                for (int i = 0; i < 8; i++) intr += hit.geomID[i] != RTC_INVALID_GEOMETRY_ID;
             }
             return intr; 
         };

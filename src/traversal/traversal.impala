@@ -4,9 +4,7 @@ struct TraversalMapping {
     ray_box_intrinsics: RayBoxIntrinsics,
     ray_box_ordered:    bool,
 
-    enter_sublevel:     fn (Stack, Ray, fn (Hit) -> ()) -> (),
-
-    iterate_children:   fn (NodeRef, float, Stack, fn (BBox) -> (bool, float, float)) -> (),
+    iterate_children:   fn (Stack, float, fn (BBox) -> (bool, float, float)) -> (),
     iterate_primitives: fn (NodeRef, float, fn (Intersector) -> ()) -> (),
 }
 
@@ -41,7 +39,6 @@ struct BvhTri {
 static any_hit : HitCallback = |hit, continue, terminate| -> ! { if any(hit.prim_id < 0) { @continue() } else { @terminate(hit) } };
 static closest_hit : HitCallback = |_, continue, _| -> ! @{ continue() };
 static opaque : Transparency = |_| @{ false };
-static no_sublevel = |_, _, _| ();
 
 fn make_hit(inst_id: int, prim_id: int, t: float, uv: Vec2) -> Hit {
     Hit {
@@ -60,16 +57,8 @@ fn traverse_bvh(mapping: TraversalMapping, config: TraversalConfig, stack: Stack
 
     // The traversal loop should not be unrolled
     while !$stack.is_empty() @{
-        // If the BVH has different levels, handle them here
-        with hit in @mapping.enter_sublevel(stack, clip_ray(ray, ray.tmin, t)) @{
-            inst_id = hit.inst_id;
-            prim_id = hit.prim_id;
-            t  = hit.distance;
-            uv = hit.uv_coords;
-        }
-
         // Intersect the bounding box of every child of the current node
-        for bbox in @mapping.iterate_children(stack.top(), t, stack) {
+        for bbox in @mapping.iterate_children(stack, t) {
             @intersect_ray_box(mapping.ray_box_intrinsics, mapping.ray_box_ordered, clip_ray(ray, ray.tmin, t), bbox)
         }
 
