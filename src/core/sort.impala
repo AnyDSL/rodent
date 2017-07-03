@@ -57,4 +57,3 @@ fn bitonic_sort(n: int, cmp_swap: fn (int, int) -> ()) -> () {
 
     sort(true, 0, n)
 }
-

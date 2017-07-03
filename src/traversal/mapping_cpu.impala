@@ -254,7 +254,7 @@ fn make_cpu_packet_mapping(config: TraversalConfig, bvh: Bvh, ray_box_intrinsics
             let node = bvh.node(node_ref.node - 1);
             for k in @unroll(0, bvh.arity) @{
                 let child_id = node.child(k);
-                if child_id == 0 { break() }
+                if unlikely(child_id == 0) { break() }
 
                 let (hit, tentry, _) = @body(node.bbox(k, -1));
 
@@ -288,38 +288,43 @@ fn make_cpu_packet_mapping(config: TraversalConfig, bvh: Bvh, ray_box_intrinsics
 fn make_cpu_single_mapping(k: int, octant: int, config: TraversalConfig, bvh: Bvh, ray_box_intrinsics: RayBoxIntrinsics) -> TraversalMapping {
     TraversalMapping {
         iterate_children: |stack, tmax, body, exit| -> ! @{
-            let node_ref = stack.top();
-            stack.pop();
+            let mut n = 0;
+            while likely($is_inner(stack.top())) @{
+                if likely(n == 2)      { @stack.sort_n(2); }
+                else if likely(n == 3) { @stack.sort_n(3); }
+                else                   { @stack.sort_n(4); }
+                n = 0;
 
-            if unlikely(node_ref.tmin > tmax) { exit() }
+                let node_ref = stack.top();
+                stack.pop();
+                if unlikely(node_ref.tmin > tmax) { continue() }
 
-            let node = bvh.node(node_ref.node - 1);
-            let (hit, tentry, _) = @body(node.bbox(k, octant));
+                let node = @bvh.node(node_ref.node - 1);
+                let (hit, tentry, _) = @body(@node.bbox(k, octant));
 
-            // Push intersected nodes on the stack
-            let mask = ballot(hit);
-            if likely(mask == 0) { exit() }
+                // Push intersected nodes on the stack
+                let /*mut*/ mask = !ballot(!hit) & ((1 << bvh.arity) - 1);
+                if unlikely(mask == 0) { continue() }
 
-            let mut count = 0;
-            for lane in one_bits(mask) @{
-                let child_id = node.child(lane);
-                if child_id == 0 { break() }
+                for bit in one_bits(mask) {
+                    let child_id = node.child(bit);
+                    if unlikely(child_id == 0) { break() }
 
-                count++;
-                bvh.node(child_id - 1).prefetch();
+                    let t = extract(tentry, bit);
+                    if likely(is_inner(NodeRef{ node: child_id, tmin: t })) {
+                        @bvh.node(child_id - 1).prefetch();
+                    }
 
-                // Process the closest child first
-                let t = extract(tentry, lane);
-                if config.any_hit || stack.top().tmin > t {
-                    @stack.push(child_id, t);
-                } else {
-                    @stack.push_after(child_id, t);
+                    if config.any_hit || stack.top().tmin >= t {
+                        @stack.push(child_id, t);
+                    } else {
+                        @stack.push_after(child_id, t);
+                    }
+                    n++;
                 }
-            }
 
-            if config.any_hit || likely(count <= 2) { exit() }
-            if likely(count == 3) { @stack.sort_n(2) }
-            else                  { @stack.sort_n(3) }
+                if config.any_hit || likely(n < 2) { exit() }
+            }
         },
         iterate_primitives: |leaf_ref, tmax, body, exit| -> ! @{
             if unlikely(leaf_ref.tmin > tmax) { exit() }
@@ -390,7 +395,7 @@ fn cpu_traverse_single_helper(ray_box_intrinsics: RayBoxIntrinsics, config: Trav
 
         stack.push(1, ray.tmin);
         let mapping = @make_cpu_single_mapping(k, ray_octant(ray), config, bvh, ray_box_intrinsics);
-        record_hit(@traverse_bvh(mapping, config, stack, ray));
+        @record_hit(@traverse_bvh(mapping, config, stack, ray));
     }
 }
 

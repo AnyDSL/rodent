@@ -28,6 +28,24 @@ struct BBox {
     max: Vec3          // Maximum corner
 }
 
+struct Bvh {
+    node:  fn (int) -> BvhNode,         // Access to one node of the BVH
+    tri:   fn (int) -> BvhTri,          // Access to one (possibly packed) triangle
+    arity: int                          // Arity of the BVH (number of children per node)
+}
+
+struct BvhNode {
+    bbox:     fn (int, int) -> BBox,    // Loads the bounding box of one child node (octant as second argument, -1 if no octant)
+    child:    fn (int) -> int,          // Gets the index of one child node
+    prefetch: fn () -> ()               // Prefetches this node
+}
+
+struct BvhTri {
+    load: fn (int) -> Tri,              // Loads the given triangle in the packet
+    id:   fn (int) -> int,              // Identifier of the given triangle in the packet
+    size: int                           // Number of triangles in the packet
+}
+
 // Intrinsics required to perform the ray-box test
 struct RayBoxIntrinsics {
     fmaxmaxf: fn (float, float, float) -> float,

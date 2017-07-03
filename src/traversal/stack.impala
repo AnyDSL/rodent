@@ -10,11 +10,45 @@ struct Stack {
     sort_n:     fn (int) -> (),
     pop:        fn () -> (),
     top:        fn () -> NodeRef,
-    is_empty:   fn () -> bool
+    is_empty:   fn () -> bool,
+    size:       fn () -> int
+}
+
+struct SmallStack {
+    write: fn (int, (int, float)) -> (),
+    read:  fn (int) -> (int, float)
 }
 
 fn is_leaf (ref: NodeRef) -> bool { ref.node < 0 }
 fn is_inner(ref: NodeRef) -> bool { ref.node > 0 }
+
+fn make_small_stack(n: int) -> SmallStack {
+    if n == 0 {
+        SmallStack {
+            write: |_, _| (),
+            read: |_| undef[(int, float)]()
+        }
+    } else {
+        let mut value : (int, float);
+        let sub = make_small_stack(n - 1);
+        SmallStack {
+            write: |i, v| {
+                if i == n - 1 {
+                    value = v;
+                } else {
+                    sub.write(i, v)
+                }
+            },
+            read: |i| {
+                if i == n - 1 {
+                    value
+                } else {
+                    sub.read(i)
+                }
+            }
+        }
+    }
+}
 
 fn allocate_stack() -> Stack {
     let mut nodes : [int   * 64];
@@ -41,16 +75,20 @@ fn allocate_stack() -> Stack {
             tmin = t;
         },
         sort_n: |n| {
-            let cmp_swap = |i, j| {
-                let (t0, t1) = (tmins(ptr - i), tmins(ptr - j));
-                let (n0, n1) = (nodes(ptr - i), nodes(ptr - j));
-                let swap = t0 > t1;
-                tmins(ptr - i) = select(swap, t1, t0);
-                nodes(ptr - i) = select(swap, n1, n0);
-                tmins(ptr - j) = select(swap, t0, t1);
-                nodes(ptr - j) = select(swap, n0, n1);
-            };
-            bose_nelson_sort(n, cmp_swap);
+            let vals = &mut nodes(ptr - n + 1) as &mut [int];
+            let keys = &mut tmins(ptr - n + 1) as &mut [float];
+            let tmp = make_small_stack(n);
+            for i in range(0, n) { tmp.write(i, (vals(i), keys(i))) }
+            bose_nelson_sort(n, |i,j| {
+                let (v0, k0) = tmp.read(i);
+                let (v1, k1) = tmp.read(j);
+                if k0 < k1 {
+                    tmp.write(i, (v1, k1));
+                    tmp.write(j, (v0, k0));
+                }
+                @return()
+            });
+            for i in range(0, n) { let (v, k) = tmp.read(i) ; vals(i) = v ; keys(i) = k }
         },
         pop: || {
             node = nodes(ptr);
@@ -58,6 +96,7 @@ fn allocate_stack() -> Stack {
             ptr--;
         },
         top: || NodeRef { node: node, tmin: tmin },
-        is_empty: || node == 0
+        is_empty: || node == 0,
+        size: || ptr
     }
 }
