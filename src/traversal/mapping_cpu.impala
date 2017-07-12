@@ -290,10 +290,13 @@ fn make_cpu_single_mapping(k: int, octant: int, config: TraversalConfig, bvh: Bv
         iterate_children: |stack, tmax, body, exit| -> ! @{
             let mut n = 0;
             while likely($is_inner(stack.top())) @{
-                if likely(n == 2)      { @stack.sort_n(2); }
-                else if likely(n == 3) { @stack.sort_n(3); }
-                else                   { @stack.sort_n(4); }
-                n = 0;
+                if !config.any_hit && n >= 2 @{
+                    if likely(n == 2)      { @stack.sort_n(2); }
+                    else if likely(n == 3) { @stack.sort_n(3); }
+                    else                   { @stack.sort_n(4); }
+                    if !is_inner(stack.top()) { break() }
+                    n = 0;
+                }
 
                 let node_ref = stack.top();
                 stack.pop();
@@ -303,7 +306,7 @@ fn make_cpu_single_mapping(k: int, octant: int, config: TraversalConfig, bvh: Bv
                 let (hit, tentry, _) = @body(@node.bbox(k, octant));
 
                 // Push intersected nodes on the stack
-                let /*mut*/ mask = !ballot(!hit) & ((1 << bvh.arity) - 1);
+                let mask = !ballot(!hit) & ((1 << bvh.arity) - 1);
                 if unlikely(mask == 0) { continue() }
 
                 for bit in one_bits(mask) {
@@ -322,8 +325,6 @@ fn make_cpu_single_mapping(k: int, octant: int, config: TraversalConfig, bvh: Bv
                     }
                     n++;
                 }
-
-                if config.any_hit || likely(n < 2) { exit() }
             }
         },
         iterate_primitives: |leaf_ref, tmax, body, exit| -> ! @{
