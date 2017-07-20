@@ -36,7 +36,7 @@ fn traverse_bvh(mapping: TraversalMapping, config: TraversalConfig, stack: Stack
                     res.uv_coords = hit.uv_coords;
                 }
 
-                if config.any_hit && all(res.prim_id >= 0) { return(res) } 
+                if config.any_hit && all(res.prim_id >= 0) { return(res) }
             }
 
             stack.pop()

@@ -66,7 +66,8 @@ struct Bvh4Tri {
 
 struct Bvh4Node {
     bounds: [[float * 4] * 6],
-    child:  [int   * 4]
+    child:   [i32   * 4],
+    pad:     [i32   * 4]
 }
 
 fn make_cpu_bvh4(bvh4: Bvh4) -> Bvh {
@@ -122,7 +123,8 @@ struct Bvh8Tri {
 
 struct Bvh8Node {
     bounds: [[float * 8] * 6],
-    child:  [int   * 8]
+    child:   [int   * 8],
+    pad:     [int   * 8]
 }
 
 fn make_cpu_bvh8(bvh8: Bvh8) -> Bvh {
@@ -288,16 +290,7 @@ fn make_cpu_packet_mapping(config: TraversalConfig, bvh: Bvh, ray_box_intrinsics
 fn make_cpu_single_mapping(k: int, octant: int, config: TraversalConfig, bvh: Bvh, ray_box_intrinsics: RayBoxIntrinsics) -> TraversalMapping {
     TraversalMapping {
         iterate_children: |stack, tmax, body, exit| -> ! @{
-            let mut n = 0;
             while likely($is_inner(stack.top())) @{
-                if !config.any_hit && n >= 2 @{
-                    if likely(n == 2)      { @stack.sort_n(2); }
-                    else if likely(n == 3) { @stack.sort_n(3); }
-                    else                   { @stack.sort_n(4); }
-                    if !is_inner(stack.top()) { break() }
-                    n = 0;
-                }
-
                 let node_ref = stack.top();
                 stack.pop();
                 if unlikely(node_ref.tmin > tmax) { continue() }
@@ -305,25 +298,30 @@ fn make_cpu_single_mapping(k: int, octant: int, config: TraversalConfig, bvh: Bv
                 let node = @bvh.node(node_ref.node - 1);
                 let (hit, tentry, _) = @body(@node.bbox(k, octant));
 
-                // Push intersected nodes on the stack
+                // Use double negation because there is no integer <= on AVX2, only >
                 let mask = !ballot(!hit) & ((1 << bvh.arity) - 1);
-                if unlikely(mask == 0) { continue() }
+                if likely(mask == 0) { continue() }
 
+                // Push intersected nodes on the stack
+                let mut n = 0;
                 for bit in one_bits(mask) {
                     let child_id = node.child(bit);
                     if unlikely(child_id == 0) { break() }
 
-                    let t = extract(tentry, bit);
-                    if likely(is_inner(NodeRef{ node: child_id, tmin: t })) {
-                        @bvh.node(child_id - 1).prefetch();
-                    }
+                    @bvh.node(child_id - 1).prefetch();
 
-                    if config.any_hit || stack.top().tmin >= t {
-                        @stack.push(child_id, t);
-                    } else {
-                        @stack.push_after(child_id, t);
-                    }
+                    let t = extract(tentry, bit);
+                    @stack.push(child_id, t);
                     n++;
+                }
+
+                // Sort them
+                if !config.any_hit && unlikely(n >= 2) @{
+                    stack.push(stack.top().node, stack.top().tmin);
+                    if n == 2      { @stack.sort_n(2); }
+                    else if n == 3 { @stack.sort_n(3); }
+                    else           { @stack.sort_n(4); }
+                    stack.pop()
                 }
             }
         },

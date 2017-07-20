@@ -79,7 +79,7 @@ fn allocate_stack() -> Stack {
             let keys = &mut tmins(ptr - n + 1) as &mut [float];
             let tmp = make_small_stack(n);
             for i in range(0, n) { tmp.write(i, (vals(i), keys(i))) }
-            bose_nelson_sort(n, |i,j| {
+            bose_nelson_sort(n, |i, j| {
                 let (v0, k0) = tmp.read(i);
                 let (v1, k1) = tmp.read(j);
                 if k0 < k1 {

@@ -29,16 +29,16 @@ fn bose_nelson_sort(n: int, cmp_swap: fn (int, int) -> ()) -> () {
     p_star(0, n)
 }
 
-fn bitonic_sort(n: int, cmp_swap: fn (int, int) -> ()) -> () {
+fn bitonic_sort(n: int, cmp_swap: fn (bool, int, int) -> ()) -> () {
     fn compare(dir: bool, i: int, j: int) -> () {
         let d = (j - i) / 2;
         for k in range(i, i + d) {
-            cmp_swap(k, k + d);
+            cmp_swap(dir, k, k + d);
         }
     }
 
     fn merge(dir: bool, i: int, j: int) -> () {
-        if i < j - 1 {
+        if i + 1 < j {
             let m = (i + j) / 2;
             compare(dir, i, j);
             merge(dir, i, m);
@@ -47,7 +47,7 @@ fn bitonic_sort(n: int, cmp_swap: fn (int, int) -> ()) -> () {
     }
 
     fn sort(dir: bool, i: int, j: int) -> () {
-        if i < j - 1 {
+        if i + 1 < j {
             let m = (i + j) / 2;
             sort(true, i, m);
             sort(false, m, j);
