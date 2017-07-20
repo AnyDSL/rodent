@@ -43,13 +43,13 @@ if (NOT ${EMBREE_ROOT_DIR}    STREQUAL "EMBREE_ROOT_DIR-NOTFOUND"    AND
     find_library(TBB_MALLOC_LIBRARY     NAMES tbbmalloc.dll    libtbbmalloc.so   HINTS /usr/lib /usr/lib64)
 
     set(EMBREE_DEPENDENCIES
+        ${EMBREE_SHARED_LIBRARY}
         ${EMBREE_SSE42_LIBRARY}
         ${EMBREE_AVX_LIBRARY}
         ${EMBREE_AVX2_LIBRARY}
         ${EMBREE_TASKING_LIBRARY}
         ${EMBREE_SYS_LIBRARY}
-        ${EMBREE_SIMD_LIBRARY}
-        ${EMBREE_SHARED_LIBRARY})
+        ${EMBREE_SIMD_LIBRARY})
 
     if (NOT PTHREAD_LIBRARY STREQUAL "PTHREAD_LIBRARY-NOTFOUND")
         # pthreads is not required on Windows

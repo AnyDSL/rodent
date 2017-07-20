@@ -156,7 +156,7 @@ void bench(const std::vector<Tri>& tris,
            size_t num_rays) {
     using namespace embree;
 
-    auto device = rtcNewDevice("tri_accel=bvh4.triangle4");
+    auto device = rtcNewDevice("tri_accel=bvh4.triangle4v");
     error_handler(rtcDeviceGetError(device), "");
     rtcDeviceSetErrorFunction(device, error_handler);
 
