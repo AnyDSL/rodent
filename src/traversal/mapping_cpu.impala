@@ -401,12 +401,12 @@ fn make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
         iterate_children: |stack, ray, res_ptr, body, exit| -> ! @{
             let node_ref = stack.top();
             let mask = ballot(node_ref.tmin <= ray.tmax);
-            if unlikely(cpu_popcount32(mask) < switch_threshold) {
+            if unlikely(cpu_popcount32(mask) < switch_threshold) @{
                 stack.pop();
                 if mask == 0 { exit() }
 
                 // Switch to single ray tracing when SIMD utilization is too low
-                for i in range(0, vector_width) @{
+                for i in $range(0, vector_width) @{
                     // Traverse the current BVH node using single ray traversal
                     with hit in cpu_traverse_single_helper(ray_box_intrinsics, config, bvh, extract_ray(ray, i), node_ref.node) {
                         if hit.prim_id >= 0 @{
