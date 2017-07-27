@@ -6,7 +6,7 @@ fn make_traversal_config(any_hit: bool) -> TraversalConfig {
 
 // CPU variants
 extern fn cpu_intersect_packet8_avx2(bvh: &Bvh4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () @{
-    cpu_traverse_packet(
+    /*cpu_traverse_packet(
         make_ray_box_intrinsics_avx2(),
         make_traversal_config(false),
         make_cpu_bvh4(*bvh),
@@ -14,12 +14,12 @@ extern fn cpu_intersect_packet8_avx2(bvh: &Bvh4, rays: &[Ray8SoA], hits: &mut [H
         ray_count);
 }
 extern fn cpu_occluded_packet8_avx2(bvh: &Bvh4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () @{
-    cpu_traverse_packet(
+    /*cpu_traverse_packet(
         make_ray_box_intrinsics_avx2(),
         make_traversal_config(true),
         make_cpu_bvh4(*bvh),
         make_cpu_ray8_layout(rays, hits),
-        ray_count);
+        ray_count);*/
 }
 extern fn cpu_intersect_single_avx2(bvh: &Bvh4, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () @{
     cpu_traverse_single(
@@ -30,46 +30,46 @@ extern fn cpu_intersect_single_avx2(bvh: &Bvh4, rays: &[Ray1AoS], hits: &mut [Hi
         ray_count);
 }
 extern fn cpu_occluded_single_avx2(bvh: &Bvh4, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () @{
-    cpu_traverse_single(
+    /*cpu_traverse_single(
         make_ray_box_intrinsics_avx2(),
         make_traversal_config(true),
         make_cpu_bvh4(*bvh),
         make_cpu_ray1_layout(rays, hits),
-        ray_count);
+        ray_count);*/
 }
 extern fn cpu_intersect_hybrid8_avx2(bvh: &Bvh4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () @{
-    cpu_traverse_hybrid(
+    /*cpu_traverse_hybrid(
         make_ray_box_intrinsics_avx2(),
         make_traversal_config(false),
         make_cpu_bvh4(*bvh),
         make_cpu_ray8_layout(rays, hits),
-        ray_count);
+        ray_count);*/
 }
 extern fn cpu_occluded_hybrid8_avx2(bvh: &Bvh4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () @{
-    cpu_traverse_hybrid(
+    /*cpu_traverse_hybrid(
         make_ray_box_intrinsics_avx2(),
         make_traversal_config(true),
         make_cpu_bvh4(*bvh),
         make_cpu_ray8_layout(rays, hits),
-        ray_count);
+        ray_count);*/
 }
 
 // GPU variants
 extern fn gpu_intersect_nvvm(bvh: &Bvh2, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () @{
-    gpu_traverse(nvvm_accelerator(0),
+    /*gpu_traverse(nvvm_accelerator(0),
                  nvvm_intrinsics,
                  make_ray_box_intrinsics_nvvm(),
                  make_traversal_config(false),
                  make_bvh2_nvvm(*bvh),
                  make_ray_layout_nvvm(rays, hits),
-                 ray_count);
+                 ray_count);*/
 }
 extern fn gpu_occluded_nvvm(bvh: &Bvh2, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () @{
-    gpu_traverse(nvvm_accelerator(0),
+    /*gpu_traverse(nvvm_accelerator(0),
                  nvvm_intrinsics,
                  make_ray_box_intrinsics_nvvm(),
                  make_traversal_config(true),
                  make_bvh2_nvvm(*bvh),
                  make_ray_layout_nvvm(rays, hits),
-                 ray_count);
+                 ray_count);*/
 }

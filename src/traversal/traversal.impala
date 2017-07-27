@@ -4,7 +4,7 @@ struct TraversalMapping {
     ray_box_intrinsics: RayBoxIntrinsics,
     ray_box_ordered:    bool,
 
-    iterate_children:   fn (Stack, Ray, &mut Hit, fn (BBox) -> (bool, float, float)) -> (),
+    iterate_children:   fn (Stack, Ray, Hit, fn (BBox) -> (bool, float, float)) -> Hit,
     iterate_primitives: fn (NodeRef, Ray, fn (Intersector) -> ()) -> (),
 }
 
@@ -13,33 +13,32 @@ struct TraversalConfig {
     any_hit: bool
 }
 
-fn traverse_bvh(mapping: TraversalMapping, config: TraversalConfig, stack: Stack, mut ray: Ray) -> Hit @{
-    let mut res = make_hit(-1, -1, ray.tmax, undef());
-
+fn traverse_bvh(mapping: TraversalMapping, config: TraversalConfig, stack: Stack, mut ray: Ray, mut hit: Hit) -> Hit @{
     // The traversal loop should not be unrolled
     while !$stack.is_empty() @{
         // Intersect the bounding box of every child of the current node
-        for bbox in @mapping.iterate_children(stack, ray, &mut res) {
+        // This may require to update the current traversal result
+        hit = for bbox in @mapping.iterate_children(stack, ray, hit) {
             @intersect_ray_box(mapping.ray_box_intrinsics, mapping.ray_box_ordered, ray, bbox)
-        }
+        };
 
         // Process leaves
         while unlikely(is_leaf(stack.top())) @{
             // Process primitives, if any
             for intersector in @mapping.iterate_primitives(stack.top(), ray) @{
-                with hit in @intersector(mapping.intrinsics, ray) @{
-                    res.prim_id   = hit.prim_id;
-                    res.distance  = hit.distance;
-                    res.uv_coords = hit.uv_coords;
-                    ray.tmax      = res.distance;
+                with intr in @intersector(mapping.intrinsics, ray) @{
+                    hit.prim_id   = intr.prim_id;
+                    hit.distance  = intr.distance;
+                    hit.uv_coords = intr.uv_coords;
+                    ray.tmax      = intr.distance;
                 }
 
-                if config.any_hit && all(res.prim_id >= 0) { return(res) }
+                if config.any_hit && all(hit.prim_id >= 0) { return(hit) }
             }
 
             stack.pop()
         }
     }
 
-    res
+    hit
 }

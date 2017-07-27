@@ -132,6 +132,10 @@ fn ray_octant(ray: Ray) -> int {
     select(ray.dir.z > 0.0f, 4, 0)
 }
 
+fn empty_hit(tmax: float) -> Hit {
+    make_hit(-1, -1, tmax, undef())
+}
+
 fn intersect_ray_tri(math: Intrinsics, ray: Ray, tri: Tri) -> (bool, float, float, float) @{
     let c = vec3_sub(tri.v0, ray.org);
     let r = vec3_cross(ray.dir, c);
