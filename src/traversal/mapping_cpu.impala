@@ -17,9 +17,9 @@ fn make_cpu_ordered_bbox(bounds_ptr: &[i8], k: int, octant: int, size: int) -> B
     let (ix, iy, iz) = (ox * size, 2 * size + oy * size, 4 * size + oz * size);
 
     let (xmin, ymin, zmin) = (
-        *(align(&bounds_ptr((ix ^ size) + k), 16) as &float),
-        *(align(&bounds_ptr((iy ^ size) + k), 16) as &float),
-        *(align(&bounds_ptr((iz ^ size) + k), 16) as &float)
+        *(align(&bounds_ptr((ix ^ size) + k), size) as &float),
+        *(align(&bounds_ptr((iy ^ size) + k), size) as &float),
+        *(align(&bounds_ptr((iz ^ size) + k), size) as &float)
     );
     let (xmax, ymax, zmax) = (
         *(align(&bounds_ptr(ix + k), size) as &float),
@@ -101,7 +101,7 @@ struct Bvh4Node {
 fn make_cpu_bvh4(bvh4: Bvh4) -> Bvh {
     Bvh {
         node: |j| {
-            let node_ptr = &bvh4.nodes(j);
+            let node_ptr = align(&bvh4.nodes(j) as &i8, 16) as &Bvh4Node;
             BvhNode {
                 bbox: |i, octant| if octant >= 0 {
                     make_cpu_ordered_bbox(&node_ptr.bounds as &[i8], i, octant, 16)
@@ -118,7 +118,7 @@ fn make_cpu_bvh4(bvh4: Bvh4) -> Bvh {
             }
         },
         tri: |j| {
-            let tri_ptr = &bvh4.tris(j);
+            let tri_ptr = align(&bvh4.tris(j) as &i8, 16) as &Bvh4Tri;
             BvhTri {
                 load: |i| {
                     make_tri(make_vec3(tri_ptr.v0(0)(i), tri_ptr.v0(1)(i), tri_ptr.v0(2)(i)),
@@ -158,7 +158,7 @@ struct Bvh8Node {
 fn make_cpu_bvh8(bvh8: Bvh8) -> Bvh {
     Bvh {
         node: |j| {
-            let node_ptr = &bvh8.nodes(j);
+            let node_ptr = align(&bvh8.nodes(j) as &i8, 32) as &Bvh8Node;
             BvhNode {
                 bbox: |i, octant| if octant >= 0 {
                     make_cpu_ordered_bbox(&node_ptr.bounds as &[i8], i, octant, 32)
@@ -177,7 +177,7 @@ fn make_cpu_bvh8(bvh8: Bvh8) -> Bvh {
             }
         },
         tri: |j| {
-            let tri_ptr = &bvh8.tris(j);
+            let tri_ptr = align(&bvh8.tris(j) as &i8, 32) as &Bvh8Tri;
             BvhTri {
                 load: |i| {
                     make_tri(make_vec3(tri_ptr.v0(0)(i), tri_ptr.v0(1)(i), tri_ptr.v0(2)(i)),
