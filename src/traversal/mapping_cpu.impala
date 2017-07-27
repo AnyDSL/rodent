@@ -275,7 +275,7 @@ fn make_cpu_ray8_layout(rays: &[Ray8SoA], hits: &mut [Hit8SoA]) -> RayLayout {
 
 fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: TraversalConfig, bvh: Bvh, k: int, octant: int) -> TraversalMapping {
     TraversalMapping {
-        iterate_children: |stack, ray, hit, body, exit| -> ! @{
+        iterate_children: |stack, ray, hit, body| @{
             while likely($is_inner(stack.top())) @{
                 let node_ref = stack.top();
                 stack.pop();
@@ -311,7 +311,6 @@ fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
                     stack.pop()
                 }
             }
-            exit(hit)
         },
         iterate_primitives: |leaf_ref, ray, body, exit| -> ! @{
             if unlikely(leaf_ref.tmin > ray.tmax) { exit() }
@@ -330,7 +329,7 @@ fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
                         // Find the closest intersection
                         let mask = ballot(found);
                         if mask != 0 {
-                            let mut closest_hit = @make_hit(-1, -1, flt_max, undef());
+                            let mut closest_hit = empty_hit(ray.tmax);
                             for lane in one_bits(mask) @{
                                 let tlane = extract(t, lane);
                                 if config.any_hit || tlane < closest_hit.distance @{
@@ -371,7 +370,7 @@ fn make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
             stack.pop();
 
             let mask = ballot(node_ref.tmin <= ray.tmax);
-            if unlikely(mask == 0) { exit(hit) }
+            if unlikely(mask == 0) { exit() }
 
             if packet_only || likely(cpu_popcount32(mask) >= switch_threshold) @{
                 let node = bvh.node(node_ref.node - 1);
@@ -389,20 +388,18 @@ fn make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
                         }
                     }
                 }
-                exit(hit)
             } else @{
                 // Switch to single ray tracing when SIMD utilization is too low
-                let mut res = hit;
                 for i in $range(0, vector_width) @{
                     if mask & (1 << i) != 0 @{
                         // Traverse the current BVH node using single ray traversal
+                        // TODO: update the ray as well as the hit
                         let lane_ray = extract_ray(ray, i);
-                        let lane_hit = extract_hit(hit, i);
-                        res = insert_hit(res, i, cpu_traverse_single_helper(ray_box_intrinsics, config, bvh, lane_ray, lane_hit, node_ref.node));
+                        *hit = insert_hit(*hit, i, cpu_traverse_single_helper(ray_box_intrinsics, config, bvh, lane_ray, node_ref.node));
                     }
                 }
-                exit(res)
             }
+            exit()
         },
         iterate_primitives: |leaf_ref, ray, body, exit| -> ! @{
             if all(leaf_ref.tmin > ray.tmax) { exit() }
@@ -425,13 +422,14 @@ fn make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
 
 // Variants  -----------------------------------------------------------------------
 
-fn cpu_traverse_single_helper(ray_box_intrinsics: RayBoxIntrinsics, config: TraversalConfig, bvh: Bvh, ray: Ray, mut hit: Hit, root: int) -> Hit @{
+fn cpu_traverse_single_helper(ray_box_intrinsics: RayBoxIntrinsics, config: TraversalConfig, bvh: Bvh, ray: Ray, root: int) -> Hit @{
+    let mut hit = empty_hit(ray.tmax);
     for k in vectorize(bvh.arity, bvh.arity * sizeof[float](), 0, bvh.arity) @{
         let stack = allocate_stack();
 
         stack.push(root, ray.tmin);
         let mapping = @make_cpu_single_mapping(ray_box_intrinsics, config, bvh, k, ray_octant(ray));
-        hit = @traverse_bvh(mapping, config, stack, ray, hit);
+        hit = @traverse_bvh(mapping, config, stack, ray);
     }
     hit
 }
@@ -446,7 +444,7 @@ fn cpu_traverse_packet(ray_box_intrinsics: RayBoxIntrinsics, config: TraversalCo
             stack.push(1, ray.tmin);
 
             let mapping = @make_cpu_hybrid_mapping(ray_box_intrinsics, config, bvh, true, inc);
-            @ray_layout.output(i, j, @traverse_bvh(mapping, config, stack, ray, empty_hit(ray.tmax)));
+            @ray_layout.output(i, j, @traverse_bvh(mapping, config, stack, ray));
         }
     }
 }
@@ -461,7 +459,7 @@ fn cpu_traverse_hybrid(ray_box_intrinsics: RayBoxIntrinsics, config: TraversalCo
             stack.push(1, ray.tmin);
 
             let mapping = @make_cpu_hybrid_mapping(ray_box_intrinsics, config, bvh, false, inc);
-            @ray_layout.output(i, j, @traverse_bvh(mapping, config, stack, ray, empty_hit(ray.tmax)));
+            @ray_layout.output(i, j, @traverse_bvh(mapping, config, stack, ray));
         }
     }
 }
@@ -471,7 +469,7 @@ fn cpu_traverse_single(ray_box_intrinsics: RayBoxIntrinsics, config: TraversalCo
     for i in $range(0, ray_count) @{
         let (packet_id, ray_id) = (i / inc, i % inc);
         let ray = ray_layout.input(packet_id, ray_id);
-        let hit = cpu_traverse_single_helper(ray_box_intrinsics, config, bvh, ray, empty_hit(ray.tmax), 1);
+        let hit = cpu_traverse_single_helper(ray_box_intrinsics, config, bvh, ray, 1);
         @ray_layout.output(packet_id, ray_id, hit);
     }
 }

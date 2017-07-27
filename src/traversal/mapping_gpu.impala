@@ -131,7 +131,7 @@ fn make_ray_layout_nvvm(rays: &[Ray1AoS], hits: &mut[Hit1AoS]) -> RayLayout {
 
 fn make_gpu_mapping_single(config: TraversalConfig, bvh: Bvh, gpu_intrinsics: Intrinsics, ray_box_intrinsics: RayBoxIntrinsics) -> TraversalMapping {
     TraversalMapping {
-        iterate_children: |stack, ray, hit, body, exit| -> ! @{
+        iterate_children: |stack, ray, hit, body| @{
             let node_ref = stack.top();
             let node = bvh.node(node_ref.node - 1);
 
@@ -179,7 +179,6 @@ fn make_gpu_mapping_single(config: TraversalConfig, bvh: Bvh, gpu_intrinsics: In
                     }
                 }
             }
-            exit(hit)
         },
         iterate_primitives: |leaf_ref, ray, body| {
             let mut tri_id = !leaf_ref.node;
@@ -220,6 +219,6 @@ fn gpu_traverse(acc: Accelerator,
         stack.push(1, undef());
 
         let mapping = make_gpu_mapping_single(config, bvh, gpu_intrinsics, ray_box_intrinsics);
-        ray_layout.output(i, j, @traverse_bvh(mapping, config, stack, ray, empty_hit(ray.tmax)))
+        ray_layout.output(i, j, @traverse_bvh(mapping, config, stack, ray))
     }
 }

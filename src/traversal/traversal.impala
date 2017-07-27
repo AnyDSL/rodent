@@ -4,7 +4,7 @@ struct TraversalMapping {
     ray_box_intrinsics: RayBoxIntrinsics,
     ray_box_ordered:    bool,
 
-    iterate_children:   fn (Stack, Ray, Hit, fn (BBox) -> (bool, float, float)) -> Hit,
+    iterate_children:   fn (Stack, Ray, &mut Hit, fn (BBox) -> (bool, float, float)) -> (),
     iterate_primitives: fn (NodeRef, Ray, fn (Intersector) -> ()) -> (),
 }
 
@@ -13,12 +13,14 @@ struct TraversalConfig {
     any_hit: bool
 }
 
-fn traverse_bvh(mapping: TraversalMapping, config: TraversalConfig, stack: Stack, mut ray: Ray, mut hit: Hit) -> Hit @{
+fn traverse_bvh(mapping: TraversalMapping, config: TraversalConfig, stack: Stack, mut ray: Ray) -> Hit @{
+    let mut hit = empty_hit(ray.tmax);
+
     // The traversal loop should not be unrolled
     while !$stack.is_empty() @{
         // Intersect the bounding box of every child of the current node
         // This may require to update the current traversal result
-        hit = for bbox in @mapping.iterate_children(stack, ray, hit) {
+        for bbox in @mapping.iterate_children(stack, ray, &mut hit) {
             @intersect_ray_box(mapping.ray_box_intrinsics, mapping.ray_box_ordered, ray, bbox)
         };
 
