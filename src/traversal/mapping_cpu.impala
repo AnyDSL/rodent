@@ -76,6 +76,16 @@ fn insert_hit(hit: Hit, lane: int, elem: Hit) -> Hit {
         uv_coords: insert_vec2(hit.uv_coords, lane, elem.uv_coords)
     }
 }
+fn insert_ray(ray: Ray, lane: int, elem: Ray) -> Ray {
+    Ray {
+        org: insert_vec3(ray.org, lane, elem.org),
+        dir: insert_vec3(ray.dir, lane, elem.dir),
+        inv_dir: insert_vec3(ray.inv_dir, lane, elem.inv_dir),
+        inv_org: insert_vec3(ray.inv_org, lane, elem.inv_org),
+        tmin: insert(ray.tmin, lane, elem.tmin),
+        tmax: insert(ray.tmax, lane, elem.tmax)
+    }
+}
 
 // BVH4 ----------------------------------------------------------------------------
 
@@ -393,9 +403,12 @@ fn make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
                 for i in $range(0, vector_width) @{
                     if mask & (1 << i) != 0 @{
                         // Traverse the current BVH node using single ray traversal
-                        // TODO: update the ray as well as the hit
-                        let lane_ray = extract_ray(ray, i);
-                        *hit = insert_hit(*hit, i, cpu_traverse_single_helper(ray_box_intrinsics, config, bvh, lane_ray, node_ref.node));
+                        let lane_ray = extract_ray(*ray, i);
+                        let lane_hit = cpu_traverse_single_helper(ray_box_intrinsics, config, bvh, lane_ray, node_ref.node);
+                        if lane_hit.prim_id >= 0 @{
+                            *hit = insert_hit(*hit, i, lane_hit);
+                            *ray = insert_ray(*ray, i, @clip_ray(lane_ray, lane_ray.tmin, lane_hit.distance));
+                        }
                     }
                 }
             }
