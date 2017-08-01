@@ -76,16 +76,6 @@ fn insert_hit(hit: Hit, lane: int, elem: Hit) -> Hit {
         uv_coords: insert_vec2(hit.uv_coords, lane, elem.uv_coords)
     }
 }
-fn insert_ray(ray: Ray, lane: int, elem: Ray) -> Ray {
-    Ray {
-        org: insert_vec3(ray.org, lane, elem.org),
-        dir: insert_vec3(ray.dir, lane, elem.dir),
-        inv_dir: insert_vec3(ray.inv_dir, lane, elem.inv_dir),
-        inv_org: insert_vec3(ray.inv_org, lane, elem.inv_org),
-        tmin: insert(ray.tmin, lane, elem.tmin),
-        tmax: insert(ray.tmax, lane, elem.tmax)
-    }
-}
 
 // BVH4 ----------------------------------------------------------------------------
 
@@ -314,10 +304,13 @@ fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
                 // Sort them
                 if !config.any_hit && unlikely(n >= 2) @{
                     stack.push(stack.top().node, stack.top().tmin);
-                    // TODO: use loop here
-                    if n == 2      { @stack.sort_n(2); }
-                    else if n == 3 { @stack.sort_n(3); }
-                    else           { @stack.sort_n(4); }
+                    for i in @unroll(2, bvh.arity + 1) {
+                        // Generate a specialized sorting network
+                        if n == i @{
+                            stack.sort_n(i);
+                            break()
+                        }
+                    }
                     stack.pop()
                 }
             }
@@ -382,7 +375,7 @@ fn make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
             let mask = ballot(node_ref.tmin <= ray.tmax);
             if unlikely(mask == 0) { exit() }
 
-            if packet_only || likely(cpu_popcount32(mask) >= switch_threshold) @{
+            if packet_only || likely(cpu_popcount32(mask) > switch_threshold) @{
                 let node = bvh.node(node_ref.node - 1);
                 for k in @unroll(0, bvh.arity) @{
                     let child_id = node.child(k);
@@ -400,7 +393,7 @@ fn make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
                 }
             } else {
                 // Switch to single ray tracing when SIMD utilization is too low
-                for lane in one_bits(mask) {
+                for lane in $one_bits(mask) {
                     // Traverse the current BVH node using single ray traversal
                     let lane_ray = extract_ray(*ray, lane);
                     let lane_hit = @cpu_traverse_single_helper(ray_box_intrinsics, config, bvh, lane_ray, node_ref.node);

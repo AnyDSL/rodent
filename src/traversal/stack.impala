@@ -82,10 +82,9 @@ fn allocate_stack() -> Stack {
             bose_nelson_sort(n, |i, j| {
                 let (v0, k0) = tmp.read(i);
                 let (v1, k1) = tmp.read(j);
-                if k0 < k1 {
-                    tmp.write(i, (v1, k1));
-                    tmp.write(j, (v0, k0));
-                }
+                let swp = k0 < k1;
+                tmp.write(i, select(swp, (v1, k1), (v0, k0)));
+                tmp.write(j, select(swp, (v0, k0), (v1, k1)));
                 @return()
             });
             for i in range(0, n) { let (v, k) = tmp.read(i) ; vals(i) = v ; keys(i) = k }
