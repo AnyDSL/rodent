@@ -304,8 +304,8 @@ fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
                 // Sort them
                 if !config.any_hit && unlikely(n >= 2) @{
                     stack.push(stack.top().node, stack.top().tmin);
+                    // Generate a specialized sorting network for lenghts [2..bvh.arity] (included)
                     for i in @unroll(2, bvh.arity + 1) {
-                        // Generate a specialized sorting network
                         if n == i @{
                             stack.sort_n(i);
                             break()
@@ -359,7 +359,7 @@ fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
     }
 }
 
-fn make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: TraversalConfig, bvh: Bvh, packet_only: bool, vector_width: int) -> TraversalMapping @{
+fn make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: TraversalConfig, bvh: Bvh, packet_only: bool, k:int, vector_width: int) -> TraversalMapping @{
     let switch_threshold = match vector_width {
         4  =>  3,
         8  =>  5,
@@ -447,7 +447,7 @@ fn cpu_traverse_packet(ray_box_intrinsics: RayBoxIntrinsics, config: TraversalCo
 
             stack.push(1, ray.tmin);
 
-            let mapping = @make_cpu_hybrid_mapping(ray_box_intrinsics, config, bvh, true, inc);
+            let mapping = @make_cpu_hybrid_mapping(ray_box_intrinsics, config, bvh, true, j, inc);
             @ray_layout.output(i, j, @traverse_bvh(mapping, config, stack, ray));
         }
     }
@@ -462,7 +462,7 @@ fn cpu_traverse_hybrid(ray_box_intrinsics: RayBoxIntrinsics, config: TraversalCo
 
             stack.push(1, ray.tmin);
 
-            let mapping = @make_cpu_hybrid_mapping(ray_box_intrinsics, config, bvh, false, inc);
+            let mapping = @make_cpu_hybrid_mapping(ray_box_intrinsics, config, bvh, false, j, inc);
             @ray_layout.output(i, j, @traverse_bvh(mapping, config, stack, ray));
         }
     }
