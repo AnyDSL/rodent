@@ -398,17 +398,15 @@ fn make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
                         }
                     }
                 }
-            } else @{
+            } else {
                 // Switch to single ray tracing when SIMD utilization is too low
-                for i in $range(0, vector_width) @{
-                    if mask & (1 << i) != 0 @{
-                        // Traverse the current BVH node using single ray traversal
-                        let lane_ray = extract_ray(*ray, i);
-                        let lane_hit = cpu_traverse_single_helper(ray_box_intrinsics, config, bvh, lane_ray, node_ref.node);
-                        if lane_hit.prim_id >= 0 @{
-                            *hit = insert_hit(*hit, i, lane_hit);
-                            *ray = insert_ray(*ray, i, @clip_ray(lane_ray, lane_ray.tmin, lane_hit.distance));
-                        }
+                for lane in one_bits(mask) {
+                    // Traverse the current BVH node using single ray traversal
+                    let lane_ray = extract_ray(*ray, lane);
+                    let lane_hit = @cpu_traverse_single_helper(ray_box_intrinsics, config, bvh, lane_ray, node_ref.node);
+                    if lane_hit.prim_id >= 0 @{
+                        *hit = insert_hit(*hit, lane, lane_hit);
+                        ray.tmax = insert(ray.tmax, lane, lane_hit.distance);
                     }
                 }
             }
