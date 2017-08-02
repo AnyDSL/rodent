@@ -302,7 +302,7 @@ fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
                 }
 
                 // Sort them
-                if !config.any_hit && unlikely(n >= 2) @{
+                if !config.any_hit && n >= 2 @{
                     stack.push(stack.top().node, stack.top().tmin);
                     // Generate a specialized sorting network for lengths [2..bvh.arity] (included)
                     for i in @unroll(2, bvh.arity + 1) {

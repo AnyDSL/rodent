@@ -1,4 +1,5 @@
 #include <fstream>
+#include <limits>
 
 #include <embree2/rtcore.h>
 
@@ -124,8 +125,8 @@ void extract_bvh_node(NodeRef node, int index,
     }
     for (; c < N; c++) {
         for (int i = 0; i < 3; i++) {
-            new_node.bounds[i * 2 + 0][c] =  0.0f;
-            new_node.bounds[i * 2 + 1][c] = -0.0f;
+            new_node.bounds[i * 2 + 0][c] =  std::numeric_limits<float>::infinity();
+            new_node.bounds[i * 2 + 1][c] = -std::numeric_limits<float>::infinity();
         }
         new_node.child[c] = 0;
     }
@@ -141,7 +142,7 @@ int build_embree_bvh(std::ofstream& out, const std::vector<Tri>& tris) {
     error_handler(rtcDeviceGetError(device), "");
     rtcDeviceSetErrorFunction(device, error_handler);
 
-    auto scene = rtcDeviceNewScene(device, RTC_SCENE_STATIC, RTC_INTERSECT1);
+    auto scene = rtcDeviceNewScene(device, RTC_SCENE_STATIC, RTC_INTERSECT8 | RTC_INTERSECT1);
     auto mesh = rtcNewTriangleMesh(scene, RTC_GEOMETRY_STATIC, tris.size(), tris.size() * 3);
 
     auto vertices = (Vec3fa*)rtcMapBuffer(scene, mesh, RTC_VERTEX_BUFFER); 
