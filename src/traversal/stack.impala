@@ -29,19 +29,19 @@ fn make_small_stack(n: int) -> SmallStack {
             read: |_| undef[(int, float)]()
         }
     } else {
-        let mut value : (int, float);
+        let mut val : (int, float);
         let sub = make_small_stack(n - 1);
         SmallStack {
             write: |i, v| {
                 if i == n - 1 {
-                    value = v;
+                    val = v;
                 } else {
                     sub.write(i, v)
                 }
             },
             read: |i| {
                 if i == n - 1 {
-                    value
+                    val
                 } else {
                     sub.read(i)
                 }
@@ -82,7 +82,7 @@ fn allocate_stack() -> Stack {
             bose_nelson_sort(n, |i, j| {
                 let (v0, k0) = tmp.read(i);
                 let (v1, k1) = tmp.read(j);
-                let swp = k0 < k1;
+                let swp = any(k0 < k1);
                 tmp.write(i, select(swp, (v1, k1), (v0, k0)));
                 tmp.write(j, select(swp, (v0, k0), (v1, k1)));
                 @return()

@@ -4,7 +4,8 @@ fn make_traversal_config(any_hit: bool) -> TraversalConfig {
     }
 }
 
-// CPU variants
+// CPU variants --------------------------------------------------------------------
+
 extern fn cpu_intersect_packet8_avx2(bvh: &Bvh4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () @{
     cpu_traverse_packet(
         make_ray_box_intrinsics_avx2(),
@@ -54,7 +55,8 @@ extern fn cpu_occluded_hybrid8_avx2(bvh: &Bvh4, rays: &[Ray8SoA], hits: &mut [Hi
         ray_count);
 }
 
-// GPU variants
+// GPU variants --------------------------------------------------------------------
+
 extern fn gpu_intersect_nvvm(bvh: &Bvh2, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () @{
     gpu_traverse(
         nvvm_accelerator(0),

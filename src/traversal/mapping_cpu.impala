@@ -304,7 +304,7 @@ fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
                 // Sort them
                 if !config.any_hit && unlikely(n >= 2) @{
                     stack.push(stack.top().node, stack.top().tmin);
-                    // Generate a specialized sorting network for lenghts [2..bvh.arity] (included)
+                    // Generate a specialized sorting network for lengths [2..bvh.arity] (included)
                     for i in @unroll(2, bvh.arity + 1) {
                         if n == i @{
                             stack.sort_n(i);
@@ -375,23 +375,7 @@ fn make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
             let mask = ballot(node_ref.tmin <= ray.tmax);
             if unlikely(mask == 0) { exit() }
 
-            if packet_only || likely(cpu_popcount32(mask) > switch_threshold) @{
-                let node = bvh.node(node_ref.node - 1);
-                for k in @unroll(0, bvh.arity) @{
-                    let child_id = node.child(k);
-                    if unlikely(child_id == 0) { break() }
-
-                    let (hit, tentry, _) = @body(node.bbox(k, -1));
-
-                    if any(hit) {
-                        if config.any_hit || any(stack.top().tmin > tentry) {
-                            @stack.push(child_id, tentry);
-                        } else {
-                            @stack.push_after(child_id, tentry);
-                        }
-                    }
-                }
-            } else {
+            if !packet_only && unlikely(cpu_popcount32(mask) <= switch_threshold) {
                 // Switch to single ray tracing when SIMD utilization is too low
                 for lane in $one_bits(mask) {
                     // Traverse the current BVH node using single ray traversal
@@ -400,6 +384,24 @@ fn make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
                     if lane_hit.prim_id >= 0 @{
                         *hit = insert_hit(*hit, lane, lane_hit);
                         ray.tmax = insert(ray.tmax, lane, lane_hit.distance);
+                    }
+                }
+                exit()
+            }
+
+            // Intersect the node with the packet of rays
+            let node = bvh.node(node_ref.node - 1);
+            for k in @unroll(0, bvh.arity) @{
+                let child_id = node.child(k);
+                if unlikely(child_id == 0) { break() }
+
+                let (hit, tentry, _) = @body(node.bbox(k, -1));
+
+                if any(hit) {
+                    if config.any_hit || any(stack.top().tmin > tentry) {
+                        @stack.push(child_id, tentry);
+                    } else {
+                        @stack.push_after(child_id, tentry);
                     }
                 }
             }
