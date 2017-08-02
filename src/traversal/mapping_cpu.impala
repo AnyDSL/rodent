@@ -306,7 +306,7 @@ fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
                     stack.push(stack.top().node, stack.top().tmin);
                     // Generate a specialized sorting network for lengths [2..bvh.arity] (included)
                     for i in @unroll(2, bvh.arity + 1) {
-                        if n == i @{
+                        if i == bvh.arity || n == i @{
                             stack.sort_n(i);
                             break()
                         }
@@ -335,7 +335,7 @@ fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
                             let mut closest_hit = empty_hit(ray.tmax);
                             for lane in one_bits(mask) @{
                                 let tri_id = tri.id(i + lane);
-                                if tri_id == bitcast[int](0xFFFFFFFFu) { exit() }
+                                if unlikely(tri_id == bitcast[int](0xFFFFFFFFu)) { exit() }
 
                                 let tlane = extract(t, lane);
                                 if config.any_hit || tlane < closest_hit.distance @{
