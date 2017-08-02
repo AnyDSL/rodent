@@ -9,7 +9,8 @@ namespace detail {
 
 enum class BvhType : uint32_t {
     BVH2 = 1,
-    BVH4 = 2
+    BVH4 = 2,
+    BVH8 = 3
 };
 
 struct BvhHeader {

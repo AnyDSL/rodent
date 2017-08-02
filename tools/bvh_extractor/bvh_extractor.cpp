@@ -7,6 +7,7 @@
 #include "file_path.h"
 #include "tri.h"
 
+int build_bvh8(std::ofstream&, const std::vector<Tri>&);
 int build_bvh4(std::ofstream&, const std::vector<Tri>&);
 int build_bvh2(std::ofstream&, const std::vector<Tri>&);
 
@@ -93,6 +94,14 @@ int main(int argc, char** argv) {
 
     uint32_t magic = 0x95CBED1F;
     out.write((char*)&magic, sizeof(uint32_t));
+
+    int bvh8_nodes = build_bvh8(out, tris);
+    if (!bvh8_nodes) {
+        std::cerr << "Cannot build a BVH8 using Embree" << std::endl;
+        return 1;
+    }
+
+    std::cout << "BVH8 successfully built (" << bvh8_nodes << " nodes)" << std::endl;
 
     int bvh4_nodes = build_bvh4(out, tris);
     if (!bvh4_nodes) {

@@ -1,6 +1,6 @@
 add_executable(bvh_extractor
     bvh_extractor.cpp
-    extract_bvh4.cpp
+    extract_bvh4_8.cpp
     extract_bvh2.cpp
     sbvh_builder.h
     bvh_helper.h
