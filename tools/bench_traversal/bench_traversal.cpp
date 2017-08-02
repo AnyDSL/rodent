@@ -182,20 +182,20 @@ int main(int argc, char** argv) {
     Bvh4 bvh4;
     Bvh2 bvh2;
     if (use_gpu) {
-        if (!load_bvh(bvh_file, nodes2, tris2, true)) {
+        if (!load_bvh(bvh_file, nodes2, tris2, 2, true)) {
             std::cerr << "Cannot load BVH file" << std::endl;
             return 1;
         }
         bvh2 = Bvh2{ nodes2.data(), tris2.data() };
     } else {
         if (bvh_width == 4) {
-            if (!load_bvh(bvh_file, nodes4, tris4, false)) {
+            if (!load_bvh(bvh_file, nodes4, tris4, 4, false)) {
                 std::cerr << "Cannot load BVH file" << std::endl;
                 return 1;
             }
             bvh4 = Bvh4{ nodes4.data(), tris4.data() };
         } else {
-            if (!load_bvh(bvh_file, nodes8, tris8, false)) {
+            if (!load_bvh(bvh_file, nodes8, tris8, 8, false)) {
                 std::cerr << "Cannot load BVH file" << std::endl;
                 return 1;
             }

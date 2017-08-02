@@ -29,7 +29,7 @@ static void error_handler(const RTCError code, const char* str) {
     if (str) std::cerr << " (" << str << ")";
     std::cerr << std::endl;
 
-    exit(1);
+    abort();
 }
 
 template <int N, typename NodeRef, typename BvhTri>
@@ -84,8 +84,7 @@ void extract_bvh_leaf(NodeRef leaf, std::vector<BvhTri>& new_tris) {
 }
 
 template <int N, typename Bvh, typename NodeRef, typename BvhNode, typename BvhTri>
-void extract_bvh_node(NodeRef node,
-                      int index,
+void extract_bvh_node(NodeRef node, int index,
                       std::vector<BvhNode>& new_nodes,
                       std::vector<BvhTri>&  new_tris) {
     assert(node.isAlignedNode());
@@ -93,19 +92,15 @@ void extract_bvh_node(NodeRef node,
     auto n = node.alignedNode();
     BvhNode new_node;
 
-    int child_count = 0;
-    int leaf_count = 0;
-    for (size_t i = 0; i < N; i++) {
-        child_count += n->child(i) != Bvh::emptyNode;
-        leaf_count  += n->child(i) != Bvh::emptyNode &&
-                       !n->child(i).isAlignedNode();
-    }
+    size_t node_count = 0;
+    for (size_t i = 0; i < N; i++)
+        node_count += n->child(i) != Bvh::emptyNode && n->child(i).isAlignedNode();
 
     int first_child = new_nodes.size();
-    new_nodes.resize(new_nodes.size() + child_count - leaf_count);
+    new_nodes.resize(new_nodes.size() + node_count);
 
     size_t c = 0;
-    for (size_t i = 0; c < child_count; i++) {
+    for (size_t i = 0; i < N; i++) {
         if (n->child(i) == Bvh::emptyNode) continue;
 
         new_node.bounds[0][c] = n->bounds(i).lower.x;
@@ -118,16 +113,19 @@ void extract_bvh_node(NodeRef node,
         if (n->child(i).isAlignedNode()) {
             new_node.child[c] = first_child + 1;
             extract_bvh_node<N, Bvh>(n->child(i), first_child++, new_nodes, new_tris);
-        } else {
+        } else if (n->child(i).isLeaf()) {
             new_node.child[c] = ~new_tris.size();
             extract_bvh_leaf<N>(n->child(i), new_tris);
+        } else {
+            assert(false);
+            continue;
         }
         c++;
     }
     for (; c < N; c++) {
         for (int i = 0; i < 3; i++) {
-            new_node.bounds[i * 2 + 0][c] =  1.0f;
-            new_node.bounds[i * 2 + 1][c] = -1.0f;
+            new_node.bounds[i * 2 + 0][c] =  0.0f;
+            new_node.bounds[i * 2 + 1][c] = -0.0f;
         }
         new_node.child[c] = 0;
     }

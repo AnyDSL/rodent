@@ -47,11 +47,19 @@ template <typename Node, typename Tri>
 inline bool load_bvh(const std::string& filename,
                      anydsl::Array<Node>& nodes,
                      anydsl::Array<Tri>& tris,
+                     int bvh_width,
                      bool use_gpu) {
     std::ifstream in(filename, std::ifstream::binary);
-    if (!in ||
-        !detail::check_header(in) ||
-        !detail::locate_block(in, use_gpu ? detail::BvhType::BVH2 : detail::BvhType::BVH4))
+
+    detail::BvhType bvh_type;
+    switch (bvh_width) {
+        case 2: bvh_type = detail::BvhType::BVH2; break;
+        case 4: bvh_type = detail::BvhType::BVH4; break;
+        case 8: bvh_type = detail::BvhType::BVH8; break;
+        default: return false;
+    }
+
+    if (!in || !detail::check_header(in) || !detail::locate_block(in, bvh_type))
         return false;
 
     detail::BvhHeader header;

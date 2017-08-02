@@ -94,8 +94,8 @@ struct Bvh4Tri {
 
 struct Bvh4Node {
     bounds: [[float * 4] * 6],
-    child:   [i32   * 4],
-    pad:     [i32   * 4]
+    child:   [int   * 4],
+    pad:     [int   * 4]
 }
 
 fn make_cpu_bvh4(bvh4: Bvh4) -> Bvh {
@@ -325,7 +325,7 @@ fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
                 // This assumes that the number of triangles per packet is a
                 // multiple of the BVH arity (which is also the vector width)
                 for i in @unroll(0, tri.size / bvh.arity) {
-                    let closest_intr : Intersector = |math, ray, intr, no_intr| -> ! @{
+                    let closest_intr : Intersector = |math, ray, intr| @{
                         // Compute the intersection for each lane
                         let (found, t, u, v) = @intersect_ray_tri(math, ray, tri.load(i + k));
 
@@ -335,7 +335,7 @@ fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
                             let mut closest_hit = empty_hit(ray.tmax);
                             for lane in one_bits(mask) @{
                                 let tri_id = tri.id(i + lane);
-                                if tri_id == bitcast[int](0xFFFFFFFFu) { no_intr() }
+                                if tri_id == bitcast[int](0xFFFFFFFFu) { exit() }
 
                                 let tlane = extract(t, lane);
                                 if config.any_hit || tlane < closest_hit.distance @{
@@ -347,13 +347,12 @@ fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
                             }
                             @intr(closest_hit)
                         }
-                        no_intr()
                     };
 
                     @body(closest_intr);
                 }
 
-                if (tri.id(tri.size - 1) & bitcast[i32](0x80000000u)) != 0 { break() }
+                if (tri.id(tri.size - 1) & bitcast[i32](0x80000000u)) != 0 { exit() }
             }
             exit()
         },
@@ -423,7 +422,7 @@ fn make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
 
                     body(make_ray_tri_intersector(tri.load(k), tri_id & 0x7FFFFFFF));
                 }
-                if (tri.id(3) & bitcast[i32](0x80000000u)) != 0 { exit() }
+                if (tri.id(tri.size - 1) & bitcast[i32](0x80000000u)) != 0 { exit() }
             }
             exit()
         },
@@ -450,7 +449,7 @@ fn cpu_traverse_single_helper(ray_box_intrinsics: RayBoxIntrinsics, config: Trav
 fn cpu_traverse_packet(ray_box_intrinsics: RayBoxIntrinsics, config: TraversalConfig, bvh: Bvh, ray_layout: RayLayout, ray_count: int) -> () {
     let inc = ray_layout.packet_size;
     for i in $range(0, ray_count / inc) {
-        for j in vectorize(inc, 32, 0, inc) @{
+        for j in vectorize(inc, inc * sizeof[float](), 0, inc) @{
             let ray = ray_layout.input(i, j);
             let stack = allocate_stack();
 
@@ -465,7 +464,7 @@ fn cpu_traverse_packet(ray_box_intrinsics: RayBoxIntrinsics, config: TraversalCo
 fn cpu_traverse_hybrid(ray_box_intrinsics: RayBoxIntrinsics, config: TraversalConfig, bvh: Bvh, ray_layout: RayLayout, ray_count: int) -> () {
     let inc = ray_layout.packet_size;
     for i in $range(0, ray_count / inc) {
-        for j in vectorize(inc, 32, 0, inc) @{
+        for j in vectorize(inc, inc * sizeof[float](), 0, inc) @{
             let ray = ray_layout.input(i, j);
             let stack = allocate_stack();
 
