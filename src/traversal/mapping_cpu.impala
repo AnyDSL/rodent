@@ -332,7 +332,7 @@ fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
                         // Find the closest intersection
                         let mask = ballot(found);
                         if mask != 0 {
-                            let mut closest_hit = empty_hit(ray.tmax);
+                            let mut closest_hit = empty_hit(flt_max);
                             for lane in one_bits(mask) @{
                                 let tri_id = tri.id(i + lane);
                                 if unlikely(tri_id == bitcast[int](0xFFFFFFFFu)) { exit() }
