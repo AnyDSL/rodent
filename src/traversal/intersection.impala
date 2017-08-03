@@ -144,12 +144,11 @@ fn intersect_ray_tri(math: Intrinsics, ray: Ray, tri: Tri) -> (bool, float, floa
 
     let u = prodsign(vec3_dot(r, tri.e2), det);
     let v = prodsign(vec3_dot(r, tri.e1), det);
-    let w = abs_det - u - v;
 
-    let mut mask = (u >= 0.0f) & (v >= 0.0f) & (w >= 0.0f);
+    let mut mask = (det != 0.0f) & (u >= 0.0f) & (v >= 0.0f) & (u + v <= abs_det);
     if any(mask) @{
         let t = prodsign(vec3_dot(tri.n, c), det);
-        mask &= (t >= abs_det * ray.tmin) & (t <= abs_det * ray.tmax) & (abs_det > 0.0f);
+        mask &= (t >= abs_det * ray.tmin) & (t <= abs_det * ray.tmax);
         if any(mask) @{
             let inv_det = 1.0f / abs_det;
             return(mask, t * inv_det, u * inv_det, v * inv_det)

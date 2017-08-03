@@ -6,6 +6,7 @@ extern "C" {
     fn "rv_ballot"  ballot(bool) -> int;
     fn "rv_extract" extract(float, int) -> float;
     fn "rv_insert"  insert(float, int, float) -> float;
+    fn "rv_shuffle" shuffle(float, int) -> float;
     fn "rv_align"   align(&i8, int)-> &i8;
 }
 
@@ -37,6 +38,22 @@ fn one_bits(mask: int, body: fn (int) -> ()) -> () {
         body(lane);
         one_bits(mask & (mask - 1), body);
     }
+}
+
+// Performs a horizontal reduction over vector lanes
+fn reduce(value: float, n: int, op: fn (float, float) -> float) -> float {
+    pe_info("n", n);
+    if (n >= 2) {
+        let m = n / 2;
+        reduce(op(value, shuffle(value, m)), m, op)
+    } else {
+        value
+    }
+}
+
+// Returns the first vector lane index i for which value[i] == lane
+fn index_of(value: float, lane: float) -> int {
+    cpu_ctz32(ballot(value == lane), true)
 }
 
 // Lane extraction from vectorized structures
@@ -273,7 +290,7 @@ fn make_cpu_ray8_layout(rays: &[Ray8SoA], hits: &mut [Hit8SoA]) -> RayLayout {
 
 // Mappings  -----------------------------------------------------------------------
 
-fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: TraversalConfig, bvh: Bvh, k: int, octant: int) -> TraversalMapping {
+fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: TraversalConfig, bvh: Bvh, k: int, octant: int, vector_width: int) -> TraversalMapping {
     TraversalMapping {
         iterate_children: |stack, ray, hit, body| @{
             while likely($is_inner(stack.top())) @{
@@ -330,22 +347,15 @@ fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
                         let (found, t, u, v) = @intersect_ray_tri(math, ray, tri.load(i + k));
 
                         // Find the closest intersection
-                        let mask = ballot(found);
-                        if mask != 0 {
-                            let mut closest_hit = empty_hit(flt_max);
-                            for lane in one_bits(mask) @{
-                                let tri_id = tri.id(i + lane);
-                                if unlikely(tri_id == bitcast[int](0xFFFFFFFFu)) { exit() }
-
-                                let tlane = extract(t, lane);
-                                if config.any_hit || tlane < closest_hit.distance @{
-                                    closest_hit.prim_id = tri_id & 0x7FFFFFFF;
-                                    closest_hit.uv_coords = @make_vec2(extract(u, lane), extract(v, lane));
-                                    closest_hit.distance = tlane;
-                                    if config.any_hit { break() }
-                                }
-                            }
-                            @intr(closest_hit)
+                        if any(found) {
+                            let min_t = @reduce(t, vector_width, ray_box_intrinsics.fminf);
+                            let lane = index_of(t, min_t);
+                            @intr(make_hit(
+                                -1,
+                                tri.id(i + lane) & 0x7FFFFFFF,
+                                extract(t, lane),
+                                @make_vec2(extract(u, lane), extract(v, lane))
+                            ));
                         }
                     };
 
@@ -440,7 +450,7 @@ fn cpu_traverse_single_helper(ray_box_intrinsics: RayBoxIntrinsics, config: Trav
         let stack = allocate_stack();
 
         stack.push(root, ray.tmin);
-        let mapping = @make_cpu_single_mapping(ray_box_intrinsics, config, bvh, k, ray_octant(ray));
+        let mapping = @make_cpu_single_mapping(ray_box_intrinsics, config, bvh, k, ray_octant(ray), bvh.arity);
         hit = @traverse_bvh(mapping, config, stack, ray);
     }
     hit
