@@ -348,7 +348,7 @@ fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
 
                         // Find the closest intersection
                         if any(found) {
-                            let min_t = @reduce(t, vector_width, ray_box_intrinsics.fminf);
+                            let min_t = @reduce(select(found, t, flt_max), vector_width, ray_box_intrinsics.fminf);
                             let lane = index_of(t, min_t);
                             @intr(make_hit(
                                 -1,
