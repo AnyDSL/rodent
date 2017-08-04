@@ -319,11 +319,11 @@ fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
                 }
 
                 // Sort them
-                if !config.any_hit && n >= 2 @{
+                if !config.any_hit && unlikely(n >= 2) @{
                     stack.push(stack.top().node, stack.top().tmin);
                     // Generate a specialized sorting network for lengths [2..bvh.arity] (included)
                     for i in @unroll(2, bvh.arity + 1) {
-                        if i == bvh.arity || n == i @{
+                        if i == bvh.arity || likely(n == i) @{
                             stack.sort_n(i);
                             break()
                         }
@@ -348,12 +348,13 @@ fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
 
                         // Find the closest intersection
                         if any(found) {
-                            let min_t = @reduce(select(found, t, flt_max), vector_width, ray_box_intrinsics.fminf);
-                            let lane = index_of(t, min_t);
+                            let found_t = select(found, t, flt_max);
+                            let min_t = @reduce(found_t, vector_width, ray_box_intrinsics.fminf);
+                            let lane = index_of(found_t, min_t);
                             @intr(make_hit(
                                 -1,
                                 tri.id(i + lane) & 0x7FFFFFFF,
-                                extract(t, lane),
+                                extract(found_t, lane),
                                 @make_vec2(extract(u, lane), extract(v, lane))
                             ));
                         }

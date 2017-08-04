@@ -35,7 +35,8 @@ fn prodsign(x: float, y: float) -> float {
 }
 
 fn safe_rcp(x: float) -> float {
-    if x == 0.0f { prodsign(flt_max, x) } else { 1.0f / x }
+    let min_rcp = 1e-8f;
+    if select(x > 0.0f, x, -x) < min_rcp { prodsign(min_rcp, x) } else { 1.0f / x }
 }
 
 fn lerp(a: float, b: float, k: float) -> float {
