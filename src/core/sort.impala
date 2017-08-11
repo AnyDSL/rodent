@@ -37,13 +37,14 @@ fn batcher_sort(n: int, cmp_swap: fn (int, int) -> ()) -> () {
         if step < len {
             merge(i, len, step);
             merge(i + r, len, step);
-            for k in range_step(i + r, i + len - r, step) {
+            for j in range_step(i + r, i + len - r, step) {
                 // Remove comparators for non-existing elements
-                if k < n && k + r < n {
-                    cmp_swap(k, k + r)
+                if j < n && j + r < n {
+                    cmp_swap(j, j + r)
                 }
             }
         } else {
+            // idem
             if i < n && i + r < n {
                 cmp_swap(i, i + r)
             }
@@ -67,30 +68,28 @@ fn batcher_sort(n: int, cmp_swap: fn (int, int) -> ()) -> () {
 }
 
 fn bitonic_sort(n: int, cmp_swap: fn (int, int) -> ()) -> () {
-    fn compare(dir: bool, i: int, j: int) -> () {
-        let d = (j - i) / 2;
-        for k in range(i, i + d) {
-            cmp_swap(select(dir, k, k + d), select(dir, k + d, k));
+    fn merge(i: int, len: int, dir: bool) -> () {
+        if len > 1 {
+            // Compute greatest power of two lower than len
+            let m = 1 << (ilog2(len) - 1);
+
+            for j in range(i, i + len - m) {
+                cmp_swap(select(dir, j, j + m), select(dir, j + m, j));
+            }
+
+            merge(i, m, dir);
+            merge(i + m, len - m, dir);
         }
     }
 
-    fn merge(dir: bool, i: int, j: int) -> () {
-        if i + 1 < j {
-            let m = (i + j) / 2;
-            compare(dir, i, j);
-            merge(dir, i, m);
-            merge(dir, m, j);
+    fn sort(i: int, len: int, dir: bool) -> () {
+        if len > 1 {
+            let m = len / 2;
+            sort(i, m, !dir);
+            sort(i + m, len - m, dir);
+            merge(i, len, dir);
         }
     }
 
-    fn sort(dir: bool, i: int, j: int) -> () {
-        if i + 1 < j {
-            let m = (i + j) / 2;
-            sort(true, i, m);
-            sort(false, m, j);
-            merge(dir, i, j);
-        }
-    }
-
-    sort(true, 0, n)
+    sort(0, n, true)
 }
