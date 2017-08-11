@@ -114,38 +114,40 @@ struct Bvh4Node {
     pad:     [int   * 4]
 }
 
+fn make_cpu_bvh4_node(node_ptr: &Bvh4Node) -> BvhNode {
+    BvhNode {
+        bbox: |i, octant| if octant >= 0 {
+            make_cpu_ordered_bbox(&node_ptr.bounds as &[i8], i, octant, 16)
+        } else {
+            make_bbox(make_vec3(node_ptr.bounds(0)(i), node_ptr.bounds(2)(i), node_ptr.bounds(4)(i)),
+                      make_vec3(node_ptr.bounds(1)(i), node_ptr.bounds(3)(i), node_ptr.bounds(5)(i)))
+        },
+        child: |i| node_ptr.child(i),
+        prefetch: || {
+            let ptr = node_ptr as &[u8];
+            cpu_prefetch(&ptr(0),  0 /* read */, 3 /* closest locality */, 1 /* data */);
+            cpu_prefetch(&ptr(64), 0 /* read */, 3 /* closest locality */, 1 /* data */);
+        }
+    }
+}
+
+fn make_cpu_bvh4_tri(tri_ptr: &Bvh4Tri) -> BvhTri {
+    BvhTri {
+        load: |i| {
+            make_tri(make_vec3(tri_ptr.v0(0)(i), tri_ptr.v0(1)(i), tri_ptr.v0(2)(i)),
+                     make_vec3(tri_ptr.e1(0)(i), tri_ptr.e1(1)(i), tri_ptr.e1(2)(i)),
+                     make_vec3(tri_ptr.e2(0)(i), tri_ptr.e2(1)(i), tri_ptr.e2(2)(i)),
+                     make_vec3(tri_ptr. n(0)(i), tri_ptr. n(1)(i), tri_ptr. n(2)(i)))
+        },
+        id: |i| tri_ptr.id(i),
+        size: 4
+    }
+}
+
 fn make_cpu_bvh4(bvh4: Bvh4) -> Bvh {
     Bvh {
-        node: |j| {
-            let node_ptr = align(&bvh4.nodes(j) as &i8, 16) as &Bvh4Node;
-            BvhNode {
-                bbox: |i, octant| if octant >= 0 {
-                    make_cpu_ordered_bbox(&node_ptr.bounds as &[i8], i, octant, 16)
-                } else {
-                    make_bbox(make_vec3(node_ptr.bounds(0)(i), node_ptr.bounds(2)(i), node_ptr.bounds(4)(i)),
-                              make_vec3(node_ptr.bounds(1)(i), node_ptr.bounds(3)(i), node_ptr.bounds(5)(i)))
-                },
-                child: |i| node_ptr.child(i),
-                prefetch: || {
-                    let ptr = node_ptr as &[u8];
-                    cpu_prefetch(&ptr(0),  0 /* read */, 3 /* closest locality */, 1 /* data */);
-                    cpu_prefetch(&ptr(64), 0 /* read */, 3 /* closest locality */, 1 /* data */);
-                }
-            }
-        },
-        tri: |j| {
-            let tri_ptr = align(&bvh4.tris(j) as &i8, 16) as &Bvh4Tri;
-            BvhTri {
-                load: |i| {
-                    make_tri(make_vec3(tri_ptr.v0(0)(i), tri_ptr.v0(1)(i), tri_ptr.v0(2)(i)),
-                             make_vec3(tri_ptr.e1(0)(i), tri_ptr.e1(1)(i), tri_ptr.e1(2)(i)),
-                             make_vec3(tri_ptr.e2(0)(i), tri_ptr.e2(1)(i), tri_ptr.e2(2)(i)),
-                             make_vec3(tri_ptr. n(0)(i), tri_ptr. n(1)(i), tri_ptr. n(2)(i)))
-                },
-                id: |i| tri_ptr.id(i),
-                size: 4
-            }
-        },
+        node: |j| make_cpu_bvh4_node(align(&bvh4.nodes(j) as &i8, 16) as &Bvh4Node),
+        tri:  |j| make_cpu_bvh4_tri(align(&bvh4.tris(j) as &i8, 16) as &Bvh4Tri),
         arity: 4
     }
 }
@@ -155,6 +157,12 @@ fn make_cpu_bvh4(bvh4: Bvh4) -> Bvh {
 struct Bvh8 {
     nodes: &[Bvh8Node],
     tris:  &[Bvh8Tri]
+}
+
+// Special case for a BVH8 with packets of 4 triangles (Embree layout)
+struct Bvh8Tri4 {
+    nodes: &[Bvh8Node],
+    tris:  &[Bvh4Tri]
 }
 
 struct Bvh8Tri {
@@ -171,40 +179,50 @@ struct Bvh8Node {
     pad:     [int   * 8]
 }
 
+fn make_cpu_bvh8_node(node_ptr: &Bvh8Node) -> BvhNode {
+    BvhNode {
+        bbox: |i, octant| if octant >= 0 {
+            make_cpu_ordered_bbox(&node_ptr.bounds as &[i8], i, octant, 32)
+        } else {
+            make_bbox(make_vec3(node_ptr.bounds(0)(i), node_ptr.bounds(2)(i), node_ptr.bounds(4)(i)),
+                      make_vec3(node_ptr.bounds(1)(i), node_ptr.bounds(3)(i), node_ptr.bounds(5)(i)))
+        },
+        child: |i| node_ptr.child(i),
+        prefetch: || {
+            let ptr = node_ptr as &[u8];
+            cpu_prefetch(&ptr(0),   0 /* read */, 3 /* closest locality */, 1 /* data */);
+            cpu_prefetch(&ptr(64),  0 /* read */, 3 /* closest locality */, 1 /* data */);
+            cpu_prefetch(&ptr(128), 0 /* read */, 3 /* closest locality */, 1 /* data */);
+            cpu_prefetch(&ptr(192), 0 /* read */, 3 /* closest locality */, 1 /* data */);
+        }
+    }
+}
+
+fn make_cpu_bvh8_tri(tri_ptr: &Bvh8Tri) -> BvhTri {
+    BvhTri {
+        load: |i| {
+            make_tri(make_vec3(tri_ptr.v0(0)(i), tri_ptr.v0(1)(i), tri_ptr.v0(2)(i)),
+                     make_vec3(tri_ptr.e1(0)(i), tri_ptr.e1(1)(i), tri_ptr.e1(2)(i)),
+                     make_vec3(tri_ptr.e2(0)(i), tri_ptr.e2(1)(i), tri_ptr.e2(2)(i)),
+                     make_vec3(tri_ptr. n(0)(i), tri_ptr. n(1)(i), tri_ptr. n(2)(i)))
+        },
+        id: |i| tri_ptr.id(i),
+        size: 8
+    }
+}
+
 fn make_cpu_bvh8(bvh8: Bvh8) -> Bvh {
     Bvh {
-        node: |j| {
-            let node_ptr = align(&bvh8.nodes(j) as &i8, 32) as &Bvh8Node;
-            BvhNode {
-                bbox: |i, octant| if octant >= 0 {
-                    make_cpu_ordered_bbox(&node_ptr.bounds as &[i8], i, octant, 32)
-                } else {
-                    make_bbox(make_vec3(node_ptr.bounds(0)(i), node_ptr.bounds(2)(i), node_ptr.bounds(4)(i)),
-                              make_vec3(node_ptr.bounds(1)(i), node_ptr.bounds(3)(i), node_ptr.bounds(5)(i)))
-                },
-                child: |i| node_ptr.child(i),
-                prefetch: || {
-                    let ptr = node_ptr as &[u8];
-                    cpu_prefetch(&ptr(0),   0 /* read */, 3 /* closest locality */, 1 /* data */);
-                    cpu_prefetch(&ptr(64),  0 /* read */, 3 /* closest locality */, 1 /* data */);
-                    cpu_prefetch(&ptr(128), 0 /* read */, 3 /* closest locality */, 1 /* data */);
-                    cpu_prefetch(&ptr(192), 0 /* read */, 3 /* closest locality */, 1 /* data */);
-                }
-            }
-        },
-        tri: |j| {
-            let tri_ptr = align(&bvh8.tris(j) as &i8, 32) as &Bvh8Tri;
-            BvhTri {
-                load: |i| {
-                    make_tri(make_vec3(tri_ptr.v0(0)(i), tri_ptr.v0(1)(i), tri_ptr.v0(2)(i)),
-                             make_vec3(tri_ptr.e1(0)(i), tri_ptr.e1(1)(i), tri_ptr.e1(2)(i)),
-                             make_vec3(tri_ptr.e2(0)(i), tri_ptr.e2(1)(i), tri_ptr.e2(2)(i)),
-                             make_vec3(tri_ptr. n(0)(i), tri_ptr. n(1)(i), tri_ptr. n(2)(i)))
-                },
-                id: |i| tri_ptr.id(i),
-                size: 8
-            }
-        },
+        node: |j| make_cpu_bvh8_node(align(&bvh8.nodes(j) as &i8, 32) as &Bvh8Node),
+        tri:  |j| make_cpu_bvh8_tri(align(&bvh8.tris(j) as &i8, 32) as &Bvh8Tri),
+        arity: 8
+    }
+}
+
+fn make_cpu_bvh8_tri4(bvh84: Bvh8Tri4) -> Bvh {
+    Bvh {
+        node: |j| make_cpu_bvh8_node(align(&bvh84.nodes(j) as &i8, 32) as &Bvh8Node),
+        tri:  |j| make_cpu_bvh4_tri(align(&bvh84.tris(j) as &i8, 16) as &Bvh4Tri),
         arity: 8
     }
 }
