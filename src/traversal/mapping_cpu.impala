@@ -290,6 +290,14 @@ fn make_cpu_ray8_layout(rays: &[Ray8SoA], hits: &mut [Hit8SoA]) -> RayLayout {
 // Mappings  -----------------------------------------------------------------------
 
 fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: TraversalConfig, bvh: Bvh, k: int, octant: int, vector_width: int) -> TraversalMapping {
+    // Parameters that define how nodes are sorted on the stack
+    let sorting_network =
+        match bvh.arity {
+            8 => batcher_sort,
+            _ => bose_nelson_sort
+        };
+    let branchless = bvh.arity > 4;
+
     TraversalMapping {
         iterate_children: |stack, ray, hit, body| @{
             while likely($is_inner(stack.top())) @{
@@ -326,7 +334,7 @@ fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
                     // Generate a specialized sorting network for lengths [2..bvh.arity] (included)
                     for i in @unroll(2, bvh.arity + 1) {
                         if i == bvh.arity || likely(n == i) @{
-                            stack.sort_n(i);
+                            stack.sort_n(i, sorting_network, branchless);
                             break()
                         }
                     }

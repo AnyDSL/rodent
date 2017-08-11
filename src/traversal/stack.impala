@@ -7,15 +7,48 @@ struct Stack {
     push:       fn (int, float) -> (),
     push_after: fn (int, float) -> (),
     set_top:    fn (int, float) -> (),
-    sort_n:     fn (int) -> (),
+    sort_n:     fn (int, SortingNetwork, bool) -> (),
     pop:        fn () -> (),
     top:        fn () -> NodeRef,
     is_empty:   fn () -> bool,
     size:       fn () -> int
 }
 
+struct SmallStack {
+    write: fn (int, (int, float)) -> (),
+    read:  fn (int) -> (int, float)
+}
+
 fn is_leaf (ref: NodeRef) -> bool { ref.node < 0 }
 fn is_inner(ref: NodeRef) -> bool { ref.node > 0 }
+
+fn make_small_stack(n: int) -> SmallStack {
+    if n == 0 {
+        SmallStack {
+            write: |_, _| (),
+            read: |_| undef[(int, float)]()
+        }
+    } else {
+        let mut val : (int, float);
+        let sub = make_small_stack(n - 1);
+        SmallStack {
+            write: |i, v| {
+                if i == n - 1 {
+                    val = v;
+                } else {
+                    sub.write(i, v)
+                }
+            },
+            read: |i| {
+                if i == n - 1 {
+                    val
+                } else {
+                    sub.read(i)
+                }
+            }
+        }
+    }
+}
 
 fn allocate_stack() -> Stack {
     let mut nodes : [int   * 64];
@@ -41,19 +74,33 @@ fn allocate_stack() -> Stack {
             node = n;
             tmin = t;
         },
-        sort_n: |n| {
+        sort_n: |n, sorting_network, branchless| {
             let vals = &mut nodes(ptr - n + 1) as &mut [int];
             let keys = &mut tmins(ptr - n + 1) as &mut [float];
-            bose_nelson_sort(n, |i, j| {
-                let (k0, k1) = (keys(i), keys(j));
-                if any(k0 < k1) {
-                    let (v0, v1) = (vals(i), vals(j));
-                    vals(i) = v1;
-                    vals(j) = v0;
-                    keys(i) = k1;
-                    keys(j) = k0;
-                }
-            });
+            if branchless {
+                // Store the stack to registers, sort registers, store back to memory
+                let tmp = make_small_stack(n);
+                for i in range(0, n) { tmp.write(i, (vals(i), keys(i))) }
+                sorting_network(n, |i, j| {
+                    let (v0, k0) = tmp.read(i);
+                    let (v1, k1) = tmp.read(j);
+                    let swp = any(k0 < k1);
+                    tmp.write(i, select(swp, (v1, k1), (v0, k0)));
+                    tmp.write(j, select(swp, (v0, k0), (v1, k1)));
+                });
+                for i in range(0, n) { let (v, k) = tmp.read(i) ; vals(i) = v ; keys(i) = k }
+            } else {
+                sorting_network(n, |i, j| {
+                    let (k0, k1) = (keys(i), keys(j));
+                    if any(k0 < k1) {
+                        let (v0, v1) = (vals(i), vals(j));
+                        keys(i) = k1;
+                        keys(j) = k0;
+                        vals(i) = v1;
+                        vals(j) = v0;
+                    }
+                });
+            }
         },
         pop: || {
             node = nodes(ptr);

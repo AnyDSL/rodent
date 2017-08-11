@@ -1,3 +1,5 @@
+type SortingNetwork = fn (int, fn (int, int) -> ()) -> ();
+
 fn bose_nelson_sort(n: int, cmp_swap: fn (int, int) -> ()) -> () {
     fn p_star(i: int, len: int) -> () {
         if len > 1 {
@@ -29,11 +31,46 @@ fn bose_nelson_sort(n: int, cmp_swap: fn (int, int) -> ()) -> () {
     p_star(0, n)
 }
 
-fn bitonic_sort(n: int, cmp_swap: fn (bool, int, int) -> ()) -> () {
+fn batcher_sort(n: int, cmp_swap: fn (int, int) -> ()) -> () {
+    fn merge(i: int, len: int, r: int) -> () {
+        let step = r * 2;
+        if step < len {
+            merge(i, len, step);
+            merge(i + r, len, step);
+            for k in range_step(i + r, i + len - r, step) {
+                // Remove comparators for non-existing elements
+                if k < n && k + r < n {
+                    cmp_swap(k, k + r)
+                }
+            }
+        } else {
+            if i < n && i + r < n {
+                cmp_swap(i, i + r)
+            }
+        }
+    }
+
+    fn sort(i: int, len: int) -> () {
+        if len > 1 {
+            let m = len / 2;
+            sort(i, m);
+            sort(i + m, m);
+            merge(i, len, 1);
+        }
+    }
+
+    // Compute closest power of two
+    let mut p = 1;
+    while p < n { p *= 2; }
+
+    sort(0, p)
+}
+
+fn bitonic_sort(n: int, cmp_swap: fn (int, int) -> ()) -> () {
     fn compare(dir: bool, i: int, j: int) -> () {
         let d = (j - i) / 2;
         for k in range(i, i + d) {
-            cmp_swap(dir, k, k + d);
+            cmp_swap(select(dir, k, k + d), select(dir, k + d, k));
         }
     }
 
