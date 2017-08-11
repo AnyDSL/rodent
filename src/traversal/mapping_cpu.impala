@@ -42,7 +42,6 @@ fn one_bits(mask: int, body: fn (int) -> ()) -> () {
 
 // Performs a horizontal reduction over vector lanes
 fn reduce(value: float, n: int, op: fn (float, float) -> float) -> float {
-    pe_info("n", n);
     if (n >= 2) {
         let m = n / 2;
         reduce(op(value, shuffle(value, m)), m, op)
@@ -314,13 +313,16 @@ fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
                     @bvh.node(child_id - 1).prefetch();
 
                     let t = extract(tentry, bit);
-                    @stack.push(child_id, t);
+                    if t < stack.top().tmin {
+                        @stack.push(child_id, t);
+                    } else {
+                        @stack.push_after(child_id, t);
+                    }
                     n++;
                 }
 
                 // Sort them
                 if !config.any_hit && unlikely(n >= 2) @{
-                    stack.push(stack.top().node, stack.top().tmin);
                     // Generate a specialized sorting network for lengths [2..bvh.arity] (included)
                     for i in @unroll(2, bvh.arity + 1) {
                         if i == bvh.arity || likely(n == i) @{
@@ -328,7 +330,6 @@ fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
                             break()
                         }
                     }
-                    stack.pop()
                 }
             }
         },
