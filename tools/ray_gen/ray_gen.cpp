@@ -134,7 +134,7 @@ inline void usage() {
 static bool extract_bounds(const std::string& bvh_file, BBox& bounds) {
     anydsl::Array<Bvh4Node> nodes;
     anydsl::Array<Bvh4Tri>  tris;
-    if (!load_bvh(bvh_file, nodes, tris, 4, false)) return false;
+    if (!load_bvh(bvh_file, nodes, tris, BvhType::BVH4, false)) return false;
     bounds = BBox::empty();
     for (int i = 0; i < 4; i++) {
         bounds.min = min(bounds.min, float3(nodes[0].bounds[0][i], nodes[0].bounds[2][i], nodes[0].bounds[4][i]));

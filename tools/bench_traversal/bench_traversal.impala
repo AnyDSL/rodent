@@ -57,51 +57,51 @@ extern fn cpu_occluded_bvh4_hybrid8_avx2(bvh: &Bvh4, rays: &[Ray8SoA], hits: &mu
 
 // CPU BVH8 variants ---------------------------------------------------------------
 
-extern fn cpu_intersect_bvh8_packet8_avx2(bvh: &Bvh8, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () @{
+extern fn cpu_intersect_bvh8_tri4_packet8_avx2(bvh: &Bvh8Tri4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () @{
     /*cpu_traverse_packet(
         make_ray_box_intrinsics_avx2(),
         make_traversal_config(false),
-        make_cpu_bvh8(*bvh),
+        make_cpu_bvh8_tri4(*bvh),
         make_cpu_ray8_layout(rays, hits),
         ray_count);*/
 }
-extern fn cpu_occluded_bvh8_packet8_avx2(bvh: &Bvh8, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () @{
+extern fn cpu_occluded_bvh8_tri4_packet8_avx2(bvh: &Bvh8Tri4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () @{
     /*cpu_traverse_packet(
         make_ray_box_intrinsics_avx2(),
         make_traversal_config(true),
-        make_cpu_bvh8(*bvh),
+        make_cpu_bvh8_tri4(*bvh),
         make_cpu_ray8_layout(rays, hits),
         ray_count);*/
 }
-extern fn cpu_intersect_bvh8_single_avx2(bvh: &Bvh8, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () @{
+extern fn cpu_intersect_bvh8_tri4_single_avx2(bvh: &Bvh8Tri4, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () @{
     cpu_traverse_single(
         make_ray_box_intrinsics_avx2(),
         make_traversal_config(false),
-        make_cpu_bvh8(*bvh),
+        make_cpu_bvh8_tri4(*bvh),
         make_cpu_ray1_layout(rays, hits),
         ray_count);
 }
-extern fn cpu_occluded_bvh8_single_avx2(bvh: &Bvh8, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () @{
+extern fn cpu_occluded_bvh8_tri4_single_avx2(bvh: &Bvh8Tri4, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () @{
     /*cpu_traverse_single(
         make_ray_box_intrinsics_avx2(),
         make_traversal_config(true),
-        make_cpu_bvh8(*bvh),
+        make_cpu_bvh8_tri4(*bvh),
         make_cpu_ray1_layout(rays, hits),
         ray_count);*/
 }
-extern fn cpu_intersect_bvh8_hybrid8_avx2(bvh: &Bvh8, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () @{
+extern fn cpu_intersect_bvh8_tri4_hybrid8_avx2(bvh: &Bvh8Tri4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () @{
     /*cpu_traverse_hybrid(
         make_ray_box_intrinsics_avx2(),
         make_traversal_config(false),
-        make_cpu_bvh8(*bvh),
+        make_cpu_bvh8_tri4(*bvh),
         make_cpu_ray8_layout(rays, hits),
         ray_count);*/
 }
-extern fn cpu_occluded_bvh8_hybrid8_avx2(bvh: &Bvh8, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () @{
+extern fn cpu_occluded_bvh8_tri4_hybrid8_avx2(bvh: &Bvh8Tri4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () @{
     /*cpu_traverse_hybrid(
         make_ray_box_intrinsics_avx2(),
         make_traversal_config(true),
-        make_cpu_bvh8(*bvh),
+        make_cpu_bvh8_tri4(*bvh),
         make_cpu_ray8_layout(rays, hits),
         ray_count);*/
 }

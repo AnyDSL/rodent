@@ -8,6 +8,7 @@
 #include <kernels/geometry/triangle.h>
 
 #include "traversal.h"
+#include "load_bvh.h"
 #include "tri.h"
 
 using namespace embree;
@@ -33,7 +34,7 @@ static void error_handler(const RTCError code, const char* str) {
     abort();
 }
 
-template <int N, typename NodeRef, typename BvhTri>
+template <int M, typename NodeRef, typename BvhTri>
 void extract_bvh_leaf(NodeRef leaf, std::vector<BvhTri>& new_tris) {
     size_t num; 
     auto tris = (const Triangle4*)leaf.leaf(num);
@@ -57,14 +58,14 @@ void extract_bvh_leaf(NodeRef leaf, std::vector<BvhTri>& new_tris) {
             new_tri.id[cur] = tris[i].primID(j);
             cur++;
 
-            if (cur >= N) {
+            if (cur >= M) {
                 new_tris.push_back(new_tri);
                 cur = 0;
             }
         }
     }
     if (cur > 0) {
-        for (size_t j = cur; j < N; j++) {
+        for (size_t j = cur; j < M; j++) {
             new_tri.v0[0][j] = 0.0f;
             new_tri.v0[1][j] = 0.0f;
             new_tri.v0[2][j] = 0.0f;
@@ -81,10 +82,10 @@ void extract_bvh_leaf(NodeRef leaf, std::vector<BvhTri>& new_tris) {
         }
         new_tris.push_back(new_tri);
     }
-    new_tris.back().id[N - 1] |= 0x80000000;
+    new_tris.back().id[M - 1] |= 0x80000000;
 }
 
-template <int N, typename Bvh, typename NodeRef, typename BvhNode, typename BvhTri>
+template <int N, int M, typename Bvh, typename NodeRef, typename BvhNode, typename BvhTri>
 void extract_bvh_node(NodeRef node, int index,
                       std::vector<BvhNode>& new_nodes,
                       std::vector<BvhTri>&  new_tris) {
@@ -113,10 +114,10 @@ void extract_bvh_node(NodeRef node, int index,
 
         if (n->child(i).isAlignedNode()) {
             new_node.child[c] = first_child + 1;
-            extract_bvh_node<N, Bvh>(n->child(i), first_child++, new_nodes, new_tris);
+            extract_bvh_node<N, M, Bvh>(n->child(i), first_child++, new_nodes, new_tris);
         } else if (n->child(i).isLeaf()) {
             new_node.child[c] = ~new_tris.size();
-            extract_bvh_leaf<N>(n->child(i), new_tris);
+            extract_bvh_leaf<M>(n->child(i), new_tris);
         } else {
             assert(false);
             continue;
@@ -175,12 +176,12 @@ int build_embree_bvh(std::ofstream& out, const std::vector<Tri>& tris) {
     std::vector<BvhNode> new_nodes;
     std::vector<BvhTri>  new_tris;
     new_nodes.emplace_back();
-    extract_bvh_node<N, Bvh>(bvh->root, 0, new_nodes, new_tris);
+    extract_bvh_node<N, 4, Bvh>(bvh->root, 0, new_nodes, new_tris);
 
     uint64_t offset = sizeof(uint32_t) * 3 +
         sizeof(BvhNode) * new_nodes.size() +
         sizeof(BvhTri)  * new_tris.size();
-    uint32_t block_type = N == 4 ? 2 : 3;
+    uint32_t block_type = uint32_t(N == 4 ? BvhType::BVH4 : BvhType::BVH8_TRI4);
     uint32_t num_nodes = new_nodes.size();
     uint32_t num_tris  = new_tris.size();
 
@@ -202,5 +203,5 @@ void build_bvh4(std::ofstream& out, const std::vector<Tri>& tris) {
 }
 
 void build_bvh8(std::ofstream& out, const std::vector<Tri>& tris) {
-    build_embree_bvh<8, BVH8, Bvh8Node, Bvh8Tri>(out, tris);
+    build_embree_bvh<8, BVH8, Bvh8Node, Bvh4Tri>(out, tris);
 }

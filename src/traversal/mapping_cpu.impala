@@ -159,7 +159,7 @@ struct Bvh8 {
     tris:  &[Bvh8Tri]
 }
 
-// Special case for a BVH8 with packets of 4 triangles (Embree layout)
+// BVH8 with packets of 4 triangles (Embree layout)
 struct Bvh8Tri4 {
     nodes: &[Bvh8Node],
     tris:  &[Bvh4Tri]
@@ -211,7 +211,7 @@ fn make_cpu_bvh8_tri(tri_ptr: &Bvh8Tri) -> BvhTri {
     }
 }
 
-fn make_cpu_bvh8(bvh8: Bvh8) -> Bvh {
+fn make_cpu_bvh8_tri8(bvh8: Bvh8) -> Bvh {
     Bvh {
         node: |j| make_cpu_bvh8_node(align(&bvh8.nodes(j) as &i8, 32) as &Bvh8Node),
         tri:  |j| make_cpu_bvh8_tri(align(&bvh8.tris(j) as &i8, 32) as &Bvh8Tri),

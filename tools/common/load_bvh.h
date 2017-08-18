@@ -5,13 +5,13 @@
 #include <anydsl_runtime.hpp>
 #include "traversal.h"
 
-namespace detail {
-
 enum class BvhType : uint32_t {
     BVH2 = 1,
     BVH4 = 2,
-    BVH8 = 3
+    BVH8_TRI4 = 3
 };
+
+namespace detail {
 
 struct BvhHeader {
     uint32_t node_count;
@@ -41,24 +41,15 @@ inline bool locate_block(std::istream& is, BvhType type) {
     return static_cast<bool>(is);
 }
 
-}
+} // namespace detail
 
 template <typename Node, typename Tri>
 inline bool load_bvh(const std::string& filename,
                      anydsl::Array<Node>& nodes,
                      anydsl::Array<Tri>& tris,
-                     int bvh_width,
+                     BvhType bvh_type,
                      bool use_gpu) {
     std::ifstream in(filename, std::ifstream::binary);
-
-    detail::BvhType bvh_type;
-    switch (bvh_width) {
-        case 2: bvh_type = detail::BvhType::BVH2; break;
-        case 4: bvh_type = detail::BvhType::BVH4; break;
-        case 8: bvh_type = detail::BvhType::BVH8; break;
-        default: return false;
-    }
-
     if (!in || !detail::check_header(in) || !detail::locate_block(in, bvh_type))
         return false;
 
