@@ -336,7 +336,9 @@ fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
                     let child_id = node.child(bit);
                     if unlikely(child_id == 0) { break() }
 
-                    @bvh.node(child_id - 1).prefetch();
+                    if likely(child_id > 0) {
+                        @bvh.node(child_id - 1).prefetch();
+                    }
 
                     let t = extract(tentry, bit);
                     if t < stack.top().tmin {

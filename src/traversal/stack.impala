@@ -79,14 +79,16 @@ fn allocate_stack() -> Stack {
             let keys = &mut tmins(ptr - n + 1) as &mut [float];
             let tmp = make_small_stack(n);
 
-            fn cmp_swap(i: int, j: int) -> () {
-                if branchless {
+            let cmp_swap = if branchless {
+                |i, j| {
                     let (v0, k0) = tmp.read(i);
                     let (v1, k1) = tmp.read(j);
                     let swp = any(k0 < k1);
                     tmp.write(i, select(swp, (v1, k1), (v0, k0)));
                     tmp.write(j, select(swp, (v0, k0), (v1, k1)));
-                } else {
+                }
+            } else {
+                |i, j| {
                     let (k0, k1) = (keys(i), keys(j));
                     if any(k0 < k1) {
                         let (v0, v1) = (vals(i), vals(j));
@@ -96,7 +98,7 @@ fn allocate_stack() -> Stack {
                         vals(j) = v0;
                     }
                 }
-            }
+            };
 
             if branchless {
                 // Store the stack elements into registers
