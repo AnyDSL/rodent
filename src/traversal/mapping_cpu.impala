@@ -427,22 +427,21 @@ fn make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
                         ray.tmax = insert(ray.tmax, lane, lane_hit.distance);
                     }
                 }
-                exit()
-            }
+            } else {
+                // Intersect the node with the packet of rays
+                let node = bvh.node(node_ref.node - 1);
+                for k in @unroll(0, bvh.arity) @{
+                    let child_id = node.child(k);
+                    if unlikely(child_id == 0) { break() }
 
-            // Intersect the node with the packet of rays
-            let node = bvh.node(node_ref.node - 1);
-            for k in @unroll(0, bvh.arity) @{
-                let child_id = node.child(k);
-                if unlikely(child_id == 0) { break() }
+                    let (hit, tentry, _) = @body(node.bbox(k, -1));
 
-                let (hit, tentry, _) = @body(node.bbox(k, -1));
-
-                if any(hit) {
-                    if config.any_hit || any(stack.top().tmin > tentry) {
-                        @stack.push(child_id, tentry);
-                    } else {
-                        @stack.push_after(child_id, tentry);
+                    if any(hit) {
+                        if config.any_hit || any(stack.top().tmin > tentry) {
+                            @stack.push(child_id, tentry);
+                        } else {
+                            @stack.push_after(child_id, tentry);
+                        }
                     }
                 }
             }
