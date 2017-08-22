@@ -416,9 +416,9 @@ fn make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
         if all(leaf_ref.tmin >= ray.tmax) { exit() }
 
         let mut tri_id = !leaf_ref.node;
-        while true {
+        while true @{
             let tri = bvh.tri(tri_id++);
-            for k in $range(0, tri.size) @{
+            for k in unroll(0, tri.size) @{
                 let tri_id = tri.id(k);
                 if tri_id == bitcast[int](0xFFFFFFFFu) { exit() }
 
