@@ -351,8 +351,8 @@ fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
         exit()
     };
 
-    let iterate_children = |stack, ray, hit, body| @{
-        while likely($is_inner(stack.top())) @{
+    let iterate_children = |stack, ray, hit, body| {
+        while likely($is_inner(stack.top())) {
             let node_ref = stack.top();
             stack.pop();
             if unlikely(node_ref.tmin >= ray.tmax) { continue() }
@@ -443,7 +443,7 @@ fn make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
                 let lane_ray = extract_ray(*ray, lane);
                 let mut lane_hit = empty_hit(lane_ray.tmax);
 
-                for k in vectorize(bvh.arity, bvh.arity * sizeof[float](), 0, bvh.arity) {
+                for k in vectorize(bvh.arity, bvh.arity * sizeof[float](), 0, bvh.arity) @{
                     let single_mapping = make_cpu_single_mapping(ray_box_intrinsics, config, bvh, k, ray_octant(lane_ray));
                     let lane_stack = allocate_stack();
 

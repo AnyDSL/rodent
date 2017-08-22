@@ -57,6 +57,9 @@ fn allocate_stack() -> Stack {
     let mut tmin = flt_max;
     let mut ptr = -1;
 
+    let vals_accessor = |off| (|i| nodes(i + off), |i, v| nodes(i + off) = v);
+    let keys_accessor = |off| (|i| tmins(i + off), |i, k| tmins(i + off) = k);
+
     Stack {
         push: |n, t| {
             ptr++;
@@ -75,8 +78,8 @@ fn allocate_stack() -> Stack {
             tmin = t;
         },
         sort_n: |n, cmp, sorting_network, branchless| {
-            let (read_val, write_val) = (|i| nodes(i + ptr - n + 1), |i, v| nodes(i + ptr - n + 1) = v);
-            let (read_key, write_key) = (|i| tmins(i + ptr - n + 1), |i, k| tmins(i + ptr - n + 1) = k);
+            let (read_val, write_val) = vals_accessor(ptr - n + 1);
+            let (read_key, write_key) = keys_accessor(ptr - n + 1);
             let tmp = make_small_stack(n);
 
             let cmp_swap = if branchless {
