@@ -1,11 +1,14 @@
+type IterateChildrenFn   = fn (Stack, &mut Ray, &mut Hit, fn (BBox) -> (bool, float, float)) -> ();
+type IteratePrimitivesFn = fn (NodeRef, Ray, fn (Intersector) -> ()) -> ();
+
 // Structure containing the mapping of the traversal algorithm for a particular device.
 struct TraversalMapping {
     intrinsics:         Intrinsics,
     ray_box_intrinsics: RayBoxIntrinsics,
     ray_box_ordered:    bool,
 
-    iterate_children:   fn (Stack, &mut Ray, &mut Hit, fn (BBox) -> (bool, float, float)) -> (),
-    iterate_primitives: fn (NodeRef, Ray, fn (Intersector) -> ()) -> (),
+    iterate_children:   IterateChildrenFn,
+    iterate_primitives: IteratePrimitivesFn,
 }
 
 // Structure containing the configuration of the traversal algorithm for a particular use case.

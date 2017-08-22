@@ -7,7 +7,7 @@ struct Stack {
     push:       fn (int, float) -> (),
     push_after: fn (int, float) -> (),
     set_top:    fn (int, float) -> (),
-    sort_n:     fn (int, SortingNetwork, bool) -> (),
+    sort_n:     fn (int, fn (float, float) -> bool, SortingNetwork, bool) -> (),
     pop:        fn () -> (),
     top:        fn () -> NodeRef,
     is_empty:   fn () -> bool,
@@ -74,28 +74,28 @@ fn allocate_stack() -> Stack {
             node = n;
             tmin = t;
         },
-        sort_n: |n, sorting_network, branchless| {
-            let vals = &mut nodes(ptr - n + 1) as &mut [int];
-            let keys = &mut tmins(ptr - n + 1) as &mut [float];
+        sort_n: |n, cmp, sorting_network, branchless| {
+            let (read_val, write_val) = (|i| nodes(i + ptr - n + 1), |i, v| nodes(i + ptr - n + 1) = v);
+            let (read_key, write_key) = (|i| tmins(i + ptr - n + 1), |i, k| tmins(i + ptr - n + 1) = k);
             let tmp = make_small_stack(n);
 
             let cmp_swap = if branchless {
                 |i, j| {
                     let (v0, k0) = tmp.read(i);
                     let (v1, k1) = tmp.read(j);
-                    let swp = any(k0 < k1);
+                    let swp = cmp(k0, k1);
                     tmp.write(i, select(swp, (v1, k1), (v0, k0)));
                     tmp.write(j, select(swp, (v0, k0), (v1, k1)));
                 }
             } else {
                 |i, j| {
-                    let (k0, k1) = (keys(i), keys(j));
-                    if any(k0 < k1) {
-                        let (v0, v1) = (vals(i), vals(j));
-                        keys(i) = k1;
-                        keys(j) = k0;
-                        vals(i) = v1;
-                        vals(j) = v0;
+                    let (k0, k1) = (read_key(i), read_key(j));
+                    if cmp(k0, k1) {
+                        let (v0, v1) = (read_val(i), read_val(j));
+                        write_key(i, k1);
+                        write_key(j, k0);
+                        write_val(i, v1);
+                        write_val(j, v0);
                     }
                 }
             };
@@ -103,7 +103,7 @@ fn allocate_stack() -> Stack {
             if branchless {
                 // Store the stack elements into registers
                 for i in range(0, n) {
-                    tmp.write(i, (vals(i), keys(i)))
+                    tmp.write(i, (read_val(i), read_key(i)))
                 }
             }
 
@@ -113,8 +113,8 @@ fn allocate_stack() -> Stack {
                 // Read back the stack elements from registers
                 for i in range(0, n) {
                     let (v, k) = tmp.read(i);
-                    vals(i) = v;
-                    keys(i) = k;
+                    write_val(i, v);
+                    write_key(i, k);
                 }
             }
         },
