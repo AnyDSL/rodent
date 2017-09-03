@@ -19,10 +19,10 @@ struct SmallStack {
     read:  fn (int) -> (int, float)
 }
 
-fn is_leaf (ref: NodeRef) -> bool { ref.node < 0 }
-fn is_inner(ref: NodeRef) -> bool { ref.node > 0 }
+fn @(true) is_leaf (ref: NodeRef) -> bool { ref.node < 0 }
+fn @(true) is_inner(ref: NodeRef) -> bool { ref.node > 0 }
 
-fn make_small_stack(n: int) -> SmallStack {
+fn @(true) make_small_stack(n: int) -> SmallStack {
     if n == 0 {
         SmallStack {
             write: |_, _| (),
@@ -50,7 +50,7 @@ fn make_small_stack(n: int) -> SmallStack {
     }
 }
 
-fn allocate_stack() -> Stack {
+fn @(true) allocate_stack() -> Stack {
     let mut nodes : [int   * 64];
     let mut tmins : [float * 64];
     let mut node = 0;
