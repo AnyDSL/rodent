@@ -388,7 +388,7 @@ fn @(true) make_cpu_single_mapping( ray_box_intrinsics: RayBoxIntrinsics
             }
 
             // Sort them
-            if !config.any_hit && unlikely(n >= 2) {
+            /*if !config.any_hit && unlikely(n >= 2) {
                 // Generate a specialized sorting network for lengths [2..bvh.arity] (included)
                 for i in range(2, bvh.arity + 1) {
                     if i == bvh.arity || likely(n == i) {
@@ -396,7 +396,7 @@ fn @(true) make_cpu_single_mapping( ray_box_intrinsics: RayBoxIntrinsics
                         break()
                     }
                 }
-            }
+            }*/
         }
     };
 
