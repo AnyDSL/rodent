@@ -15,7 +15,7 @@ struct TraversalConfig {
     any_hit: bool
 }
 
-fn @(true) traverse_bvh(mapping: TraversalMapping, config: TraversalConfig, stack: Stack, mut ray: Ray) -> Hit {
+fn @traverse_bvh(mapping: TraversalMapping, config: TraversalConfig, stack: Stack, mut ray: Ray) -> Hit {
     let mut hit = empty_hit(ray.tmax);
 
     // The traversal loop should not be unrolled

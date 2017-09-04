@@ -53,12 +53,12 @@ fn reduce(value: float, @ n: int, @ op: fn (float, float) -> float) -> float {
 }
 
 // Returns the first vector lane index i for which value[i] == lane
-fn index_of(value: float, lane: float) -> int {
+fn @index_of(value: float, lane: float) -> int {
     cpu_ctz32(ballot(value == lane), true)
 }
 
 // Load one ray from a packet of rays
-fn load_ray(ray_ptr: &Ray, lane: int) -> Ray {
+fn @load_ray(ray_ptr: &Ray, lane: int) -> Ray {
     Ray {
         org: make_vec3(load(&ray_ptr.org.x, lane), load(&ray_ptr.org.y, lane), load(&ray_ptr.org.z, lane)),
         dir: make_vec3(load(&ray_ptr.dir.x, lane), load(&ray_ptr.dir.y, lane), load(&ray_ptr.dir.z, lane)),
@@ -70,7 +70,7 @@ fn load_ray(ray_ptr: &Ray, lane: int) -> Ray {
 }
 
 // Store one hit in a packet of hits
-fn store_hit(hit_ptr: &mut Hit, lane: int, hit: Hit) -> () {
+fn @store_hit(hit_ptr: &mut Hit, lane: int, hit: Hit) -> () {
     store(&mut hit_ptr.distance, lane, hit.distance);
     store(&mut hit_ptr.uv_coords.x, lane, hit.uv_coords.x);
     store(&mut hit_ptr.uv_coords.y, lane, hit.uv_coords.y);
@@ -348,7 +348,7 @@ fn @make_cpu_single_mapping( ray_box_intrinsics: RayBoxIntrinsics
                        , hit: &mut Hit
                        , body: fn (BBox) -> (bool, float, float)
                        ) -> () {
-        while $likely(is_inner(stack.top())) {
+        while likely(is_inner(stack.top())) {
             let node_ref = stack.top();
             stack.pop();
             if unlikely(node_ref.tmin >= ray.tmax) { continue() }
@@ -399,7 +399,7 @@ fn @make_cpu_single_mapping( ray_box_intrinsics: RayBoxIntrinsics
     }
 }
 
-fn @make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics
+fn @make_cpu_hybrid_mapping( ray_box_intrinsics: RayBoxIntrinsics
                            , config: TraversalConfig
                            , bvh: Bvh
                            , packet_only: bool
