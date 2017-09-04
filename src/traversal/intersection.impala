@@ -61,10 +61,10 @@ type Intersector = fn (Ray, fn (Hit) -> ()) -> ();
 
 // Constructs a set of intrinsics from min and max functions.
 // May not be the optimal intrinsics if the hardware provides a combined min/max instruction.
-fn @(true) make_ray_box_intrinsics( fminf: fn (float, float) -> float
-                                  , fmaxf: fn (float, float) -> float
-                                  , fcmp_le: fn (float, float) -> bool
-                                  ) -> RayBoxIntrinsics {
+fn @make_ray_box_intrinsics( fminf: fn (float, float) -> float
+                           , fmaxf: fn (float, float) -> float
+                           , fcmp_le: fn (float, float) -> bool
+                           ) -> RayBoxIntrinsics {
     RayBoxIntrinsics {
         fminf: fminf,
         fmaxf: fmaxf,
@@ -76,7 +76,7 @@ fn @(true) make_ray_box_intrinsics( fminf: fn (float, float) -> float
     }
 }
 
-fn @(true) make_ray(org: Vec3, dir: Vec3, tmin: float, tmax: float) -> Ray {
+fn @make_ray(org: Vec3, dir: Vec3, tmin: float, tmax: float) -> Ray {
     let inv_dir = make_vec3(safe_rcp(dir.x), safe_rcp(dir.y), safe_rcp(dir.z));
     let inv_org = vec3_neg(vec3_mul(org, inv_dir));
     Ray {
@@ -89,7 +89,7 @@ fn @(true) make_ray(org: Vec3, dir: Vec3, tmin: float, tmax: float) -> Ray {
     }
 }
 
-fn @(true) make_hit(inst_id: int, prim_id: int, t: float, uv: Vec2) -> Hit {
+fn @make_hit(inst_id: int, prim_id: int, t: float, uv: Vec2) -> Hit {
     Hit {
         distance:  t,
         uv_coords: uv,
@@ -98,7 +98,7 @@ fn @(true) make_hit(inst_id: int, prim_id: int, t: float, uv: Vec2) -> Hit {
     }
 }
 
-fn @(true) make_tri(v0: Vec3, e1: Vec3, e2: Vec3, n: Vec3) -> Tri {
+fn @make_tri(v0: Vec3, e1: Vec3, e2: Vec3, n: Vec3) -> Tri {
     Tri {
         v0: v0,
         v1: vec3_sub(v0, e1),
@@ -109,14 +109,14 @@ fn @(true) make_tri(v0: Vec3, e1: Vec3, e2: Vec3, n: Vec3) -> Tri {
     }
 }
 
-fn @(true) make_bbox(min: Vec3, max: Vec3) -> BBox {
+fn @make_bbox(min: Vec3, max: Vec3) -> BBox {
     BBox {
         min: min,
         max: max
     }
 }
 
-fn @(true) clip_ray(ray: Ray, tmin: float, tmax: float) -> Ray {
+fn @clip_ray(ray: Ray, tmin: float, tmax: float) -> Ray {
     Ray {
         org: ray.org,
         dir: ray.dir,
@@ -127,17 +127,17 @@ fn @(true) clip_ray(ray: Ray, tmin: float, tmax: float) -> Ray {
     }
 }
 
-fn @(true) ray_octant(ray: Ray) -> int {
+fn @ray_octant(ray: Ray) -> int {
     select(ray.dir.x > 0.0f, 1, 0) |
     select(ray.dir.y > 0.0f, 2, 0) |
     select(ray.dir.z > 0.0f, 4, 0)
 }
 
-fn @(true) empty_hit(tmax: float) -> Hit {
+fn @empty_hit(tmax: float) -> Hit {
     make_hit(-1, -1, tmax, undef())
 }
 
-fn @(true) intersect_ray_tri(math: Intrinsics, ray: Ray, tri: Tri) -> (bool, float, float, float) {
+fn @intersect_ray_tri(math: Intrinsics, ray: Ray, tri: Tri) -> (bool, float, float, float) {
     let c = vec3_sub(tri.v0, ray.org);
     let r = vec3_cross(ray.dir, c);
     let det = vec3_dot(tri.n, ray.dir);
@@ -159,7 +159,7 @@ fn @(true) intersect_ray_tri(math: Intrinsics, ray: Ray, tri: Tri) -> (bool, flo
     (false, undef(), undef(), undef())
 }
 
-fn @(true) intersect_ray_box(math: RayBoxIntrinsics, ordered: bool, ray: Ray, bbox: BBox) -> (bool, float, float) {
+fn @intersect_ray_box(math: RayBoxIntrinsics, ordered: bool, ray: Ray, bbox: BBox) -> (bool, float, float) {
     let t0 = vec3_add(vec3_mul(ray.inv_dir, bbox.min), ray.inv_org);
     let t1 = vec3_add(vec3_mul(ray.inv_dir, bbox.max), ray.inv_org);
 
@@ -176,8 +176,8 @@ fn @(true) intersect_ray_box(math: RayBoxIntrinsics, ordered: bool, ray: Ray, bb
 }
 
 // Helper function to create a ray-triangle intersector
-fn @(true) make_ray_tri_intersector(math: Intrinsics, tri: Tri, prim_id: int) -> Intersector {
-    @(true) |ray, intr| {
+fn @make_ray_tri_intersector(math: Intrinsics, tri: Tri, prim_id: int) -> Intersector {
+    @ |ray, intr| {
         let (mask, t, u, v) = intersect_ray_tri(math, ray, tri);
         if mask {
             intr(Hit {

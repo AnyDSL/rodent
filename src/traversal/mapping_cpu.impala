@@ -15,7 +15,7 @@ extern "C" {
 // Misc. ---------------------------------------------------------------------------
 
 // Loads a bounding box ordered by octant on the CPU
-fn @(true) make_cpu_ordered_bbox(bounds_ptr: &[i8], k: int, octant: int, size: int) -> BBox {
+fn @make_cpu_ordered_bbox(bounds_ptr: &[i8], k: int, octant: int, size: int) -> BBox {
     let (ox, oy, oz) = (octant & 1, (octant >> 1) & 1, (octant >> 2) & 1);
     let (ix, iy, iz) = (ox * size, 2 * size + oy * size, 4 * size + oz * size);
 
@@ -34,16 +34,16 @@ fn @(true) make_cpu_ordered_bbox(bounds_ptr: &[i8], k: int, octant: int, size: i
 }
 
 // Iterate over the bit that are set in a mask
-fn one_bits(mask: int, body: fn (int) -> ()) -> () {
-    if $mask != 0 {
+fn one_bits(mask: int, @ body: fn (int) -> ()) -> () {
+    if mask != 0 {
         let lane = cpu_ctz32(mask, true);
         body(lane);
-        one_bits(mask & (mask - 1), body);
+        one_bits(mask & (mask - 1), body, return)
     }
 }
 
 // Performs a horizontal reduction over vector lanes
-fn reduce(value: float, @(true) n: int, @(true) op: fn (float, float) -> float) -> float {
+fn reduce(value: float, @ n: int, @ op: fn (float, float) -> float) -> float {
     if (n >= 2) {
         let m = n / 2;
         reduce(op(value, shuffle(value, m)), m, op)
@@ -99,16 +99,16 @@ struct Bvh4Node {
     pad:     [int   * 4]
 }
 
-fn @(true) make_cpu_bvh4_node(node_ptr: &Bvh4Node) -> BvhNode {
+fn @make_cpu_bvh4_node(node_ptr: &Bvh4Node) -> BvhNode {
     BvhNode {
-        bbox: |i, octant| if octant >= 0 {
+        bbox: @ |i, octant| if octant >= 0 {
             make_cpu_ordered_bbox(&node_ptr.bounds as &[i8], i, octant, 16)
         } else {
             make_bbox(make_vec3(node_ptr.bounds(0)(i), node_ptr.bounds(2)(i), node_ptr.bounds(4)(i)),
                       make_vec3(node_ptr.bounds(1)(i), node_ptr.bounds(3)(i), node_ptr.bounds(5)(i)))
         },
-        child: |i| node_ptr.child(i),
-        prefetch: || {
+        child: @ |i| node_ptr.child(i),
+        prefetch: @ || {
             let ptr = node_ptr as &[u8];
             cpu_prefetch(&ptr(0),  0 /* read */, 3 /* closest locality */, 1 /* data */);
             cpu_prefetch(&ptr(64), 0 /* read */, 3 /* closest locality */, 1 /* data */);
@@ -116,23 +116,23 @@ fn @(true) make_cpu_bvh4_node(node_ptr: &Bvh4Node) -> BvhNode {
     }
 }
 
-fn @(true) make_cpu_bvh4_tri(tri_ptr: &Bvh4Tri) -> BvhTri {
+fn @make_cpu_bvh4_tri(tri_ptr: &Bvh4Tri) -> BvhTri {
     BvhTri {
-        load: |i| {
+        load: @ |i| {
             make_tri(make_vec3(tri_ptr.v0(0)(i), tri_ptr.v0(1)(i), tri_ptr.v0(2)(i)),
                      make_vec3(tri_ptr.e1(0)(i), tri_ptr.e1(1)(i), tri_ptr.e1(2)(i)),
                      make_vec3(tri_ptr.e2(0)(i), tri_ptr.e2(1)(i), tri_ptr.e2(2)(i)),
                      make_vec3(tri_ptr. n(0)(i), tri_ptr. n(1)(i), tri_ptr. n(2)(i)))
         },
-        id: |i| tri_ptr.id(i),
+        id: @ |i| tri_ptr.id(i),
         size: 4
     }
 }
 
-fn @(true) make_cpu_bvh4(bvh4: Bvh4) -> Bvh {
+fn @make_cpu_bvh4(bvh4: Bvh4) -> Bvh {
     Bvh {
-        node: |j| make_cpu_bvh4_node(align(&bvh4.nodes(j) as &i8, 16) as &Bvh4Node),
-        tri:  |j| make_cpu_bvh4_tri(align(&bvh4.tris(j) as &i8, 16) as &Bvh4Tri),
+        node: @ |j| make_cpu_bvh4_node(align(&bvh4.nodes(j) as &i8, 16) as &Bvh4Node),
+        tri:  @ |j| make_cpu_bvh4_tri(align(&bvh4.tris(j) as &i8, 16) as &Bvh4Tri),
         arity: 4
     }
 }
@@ -164,16 +164,16 @@ struct Bvh8Node {
     pad:     [int   * 8]
 }
 
-fn @(true) make_cpu_bvh8_node(node_ptr: &Bvh8Node) -> BvhNode {
+fn @make_cpu_bvh8_node(node_ptr: &Bvh8Node) -> BvhNode {
     BvhNode {
-        bbox: |i, octant| if octant >= 0 {
+        bbox: @ |i, octant| if octant >= 0 {
             make_cpu_ordered_bbox(&node_ptr.bounds as &[i8], i, octant, 32)
         } else {
             make_bbox(make_vec3(node_ptr.bounds(0)(i), node_ptr.bounds(2)(i), node_ptr.bounds(4)(i)),
                       make_vec3(node_ptr.bounds(1)(i), node_ptr.bounds(3)(i), node_ptr.bounds(5)(i)))
         },
-        child: |i| node_ptr.child(i),
-        prefetch: || {
+        child: @ |i| node_ptr.child(i),
+        prefetch: @ || {
             let ptr = node_ptr as &[u8];
             cpu_prefetch(&ptr(0),   0 /* read */, 3 /* closest locality */, 1 /* data */);
             cpu_prefetch(&ptr(64),  0 /* read */, 3 /* closest locality */, 1 /* data */);
@@ -183,42 +183,42 @@ fn @(true) make_cpu_bvh8_node(node_ptr: &Bvh8Node) -> BvhNode {
     }
 }
 
-fn @(true) make_cpu_bvh8_tri(tri_ptr: &Bvh8Tri) -> BvhTri {
+fn @make_cpu_bvh8_tri(tri_ptr: &Bvh8Tri) -> BvhTri {
     BvhTri {
-        load: |i| {
+        load: @ |i| {
             make_tri(make_vec3(tri_ptr.v0(0)(i), tri_ptr.v0(1)(i), tri_ptr.v0(2)(i)),
                      make_vec3(tri_ptr.e1(0)(i), tri_ptr.e1(1)(i), tri_ptr.e1(2)(i)),
                      make_vec3(tri_ptr.e2(0)(i), tri_ptr.e2(1)(i), tri_ptr.e2(2)(i)),
                      make_vec3(tri_ptr. n(0)(i), tri_ptr. n(1)(i), tri_ptr. n(2)(i)))
         },
-        id: |i| tri_ptr.id(i),
+        id: @ |i| tri_ptr.id(i),
         size: 8
     }
 }
 
-fn @(true) make_cpu_bvh8_tri8(bvh8: Bvh8) -> Bvh {
+fn @make_cpu_bvh8_tri8(bvh8: Bvh8) -> Bvh {
     Bvh {
-        node: |j| make_cpu_bvh8_node(align(&bvh8.nodes(j) as &i8, 32) as &Bvh8Node),
-        tri:  |j| make_cpu_bvh8_tri(align(&bvh8.tris(j) as &i8, 32) as &Bvh8Tri),
+        node: @ |j| make_cpu_bvh8_node(align(&bvh8.nodes(j) as &i8, 32) as &Bvh8Node),
+        tri:  @ |j| make_cpu_bvh8_tri(align(&bvh8.tris(j) as &i8, 32) as &Bvh8Tri),
         arity: 8
     }
 }
 
-fn @(true) make_cpu_bvh8_tri4(bvh84: Bvh8Tri4) -> Bvh {
+fn @make_cpu_bvh8_tri4(bvh84: Bvh8Tri4) -> Bvh {
     Bvh {
-        node: |j| make_cpu_bvh8_node(align(&bvh84.nodes(j) as &i8, 32) as &Bvh8Node),
-        tri:  |j| make_cpu_bvh4_tri(align(&bvh84.tris(j) as &i8, 16) as &Bvh4Tri),
+        node: @ |j| make_cpu_bvh8_node(align(&bvh84.nodes(j) as &i8, 32) as &Bvh8Node),
+        tri:  @ |j| make_cpu_bvh4_tri(align(&bvh84.tris(j) as &i8, 16) as &Bvh4Tri),
         arity: 8
     }
 }
 
 // Ray-box intrinsics  -------------------------------------------------------------
 
-fn @(true) make_ray_box_intrinsics_avx() -> RayBoxIntrinsics {
+fn @make_ray_box_intrinsics_avx() -> RayBoxIntrinsics {
     make_ray_box_intrinsics(cpu_intrinsics.fminf, cpu_intrinsics.fmaxf, |a, b| a <= b)
 }
 
-fn @(true) make_ray_box_intrinsics_avx2() -> RayBoxIntrinsics {
+fn @make_ray_box_intrinsics_avx2() -> RayBoxIntrinsics {
     // AVX2 intrinsics: use integer min/max instead of floating point min/max
     let fminf = |x, y| {
         let (x_, y_) = (bitcast[int](x), bitcast[int](y));
@@ -234,16 +234,16 @@ fn @(true) make_ray_box_intrinsics_avx2() -> RayBoxIntrinsics {
 
 // Ray layouts  --------------------------------------------------------------------
 
-fn @(true) make_cpu_ray1_layout(rays: &[Ray1AoS], hits: &mut [Hit1AoS]) -> RayLayout {
+fn @make_cpu_ray1_layout(rays: &[Ray1AoS], hits: &mut [Hit1AoS]) -> RayLayout {
     RayLayout {
         packet_size: 1,
-        input: |i, j| {
+        input: @ |i, j| {
             let ray = &rays(i + j);
             make_ray(make_vec3(ray.org(0), ray.org(1), ray.org(2)),
                      make_vec3(ray.dir(0), ray.dir(1), ray.dir(2)),
                      ray.tmin, ray.tmax)
         },
-        output: |i, j, result| {
+        output: @ |i, j, result| {
             let hit = &mut hits(i + j);
             hit.tri_id = result.prim_id;
             hit.t = result.distance;
@@ -253,16 +253,16 @@ fn @(true) make_cpu_ray1_layout(rays: &[Ray1AoS], hits: &mut [Hit1AoS]) -> RayLa
     }
 }
 
-fn @(true) make_cpu_ray4_layout(rays: &[Ray4SoA], hits: &mut [Hit4SoA]) -> RayLayout {
+fn @make_cpu_ray4_layout(rays: &[Ray4SoA], hits: &mut [Hit4SoA]) -> RayLayout {
     RayLayout {
         packet_size: 4,
-        input: |i, j| {
+        input: @ |i, j| {
             let ray = &rays(i);
             make_ray(make_vec3(ray.org(0)(j), ray.org(1)(j), ray.org(2)(j)),
                      make_vec3(ray.dir(0)(j), ray.dir(1)(j), ray.dir(2)(j)),
                      ray.tmin(j), ray.tmax(j))
         },
-        output: |i, j, result| {
+        output: @ |i, j, result| {
             let hit = &mut hits(i);
             hit.tri_id(j) = result.prim_id;
             hit.t(j) = result.distance;
@@ -272,16 +272,16 @@ fn @(true) make_cpu_ray4_layout(rays: &[Ray4SoA], hits: &mut [Hit4SoA]) -> RayLa
     }
 }
 
-fn @(true) make_cpu_ray8_layout(rays: &[Ray8SoA], hits: &mut [Hit8SoA]) -> RayLayout {
+fn @make_cpu_ray8_layout(rays: &[Ray8SoA], hits: &mut [Hit8SoA]) -> RayLayout {
     RayLayout {
         packet_size: 8,
-        input: |i, j| {
+        input: @ |i, j| {
             let ray = &rays(i);
             make_ray(make_vec3(ray.org(0)(j), ray.org(1)(j), ray.org(2)(j)),
                      make_vec3(ray.dir(0)(j), ray.dir(1)(j), ray.dir(2)(j)),
                      ray.tmin(j), ray.tmax(j))
         },
-        output: |i, j, result| {
+        output: @ |i, j, result| {
             let hit = &mut hits(i);
             hit.tri_id(j) = result.prim_id;
             hit.t(j) = result.distance;
@@ -293,22 +293,25 @@ fn @(true) make_cpu_ray8_layout(rays: &[Ray8SoA], hits: &mut [Hit8SoA]) -> RayLa
 
 // Mappings  -----------------------------------------------------------------------
 
-fn @(true) make_cpu_single_mapping( ray_box_intrinsics: RayBoxIntrinsics
-                                  , config: TraversalConfig
-                                  , bvh: Bvh
-                                  , k: int
-                                  , octant: int
-                                  ) -> TraversalMapping {
+fn @make_cpu_single_mapping( ray_box_intrinsics: RayBoxIntrinsics
+                           , config: TraversalConfig
+                           , bvh: Bvh
+                           , k: int
+                           , octant: int
+                           ) -> TraversalMapping {
     // Parameters that define how nodes are sorted on the stack
     let sorting_network =
         match bvh.arity {
             8 => batcher_sort,
             _ => bose_nelson_sort
         };
-    let branchless = bvh.arity > 4;
+    let branchless = false;//bvh.arity > 4;
 
-    let iterate_primitives = @(true) |leaf_ref, ray, body, exit| -> ! {
-        if unlikely(leaf_ref.tmin >= ray.tmax) { exit() }
+    fn iterate_primitives( leaf_ref: NodeRef
+                         , ray: Ray
+                         , body: fn (Intersector) -> ()
+                         ) -> () {
+        if unlikely(leaf_ref.tmin >= ray.tmax) { return() }
 
         let mut tri_id = !leaf_ref.node;
         while true {
@@ -336,13 +339,16 @@ fn @(true) make_cpu_single_mapping( ray_box_intrinsics: RayBoxIntrinsics
                 body(closest_intr);
             }
 
-            if (tri.id(tri.size - 1) & bitcast[i32](0x80000000u)) != 0 { exit() }
+            if (tri.id(tri.size - 1) & bitcast[i32](0x80000000u)) != 0 { return() }
         }
-        exit()
-    };
+    }
 
-    let iterate_children = @(true) |stack, ray, hit, body| {
-        while likely(is_inner(stack.top())) {
+    fn iterate_children( stack: Stack
+                       , ray: &mut Ray
+                       , hit: &mut Hit
+                       , body: fn (BBox) -> (bool, float, float)
+                       ) -> () {
+        while $likely(is_inner(stack.top())) {
             let node_ref = stack.top();
             stack.pop();
             if unlikely(node_ref.tmin >= ray.tmax) { continue() }
@@ -373,15 +379,15 @@ fn @(true) make_cpu_single_mapping( ray_box_intrinsics: RayBoxIntrinsics
             }
 
             // Sort them
-            /*if !config.any_hit && unlikely(n >= 2) {
+            if !config.any_hit && unlikely(n >= 2) {
                 // Generate a specialized sorting network for lengths [2..bvh.arity] (included)
                 for i in range(2, bvh.arity + 1) {
                     if i == bvh.arity || likely(n == i) {
-                        stack.sort_n(i, @(true) |a, b| a < b, sorting_network, branchless);
+                        stack.sort_n(i, @ |a, b| a < b, sorting_network, branchless);
                         break()
                     }
                 }
-            }*/
+            }
         }
     };
 
@@ -393,12 +399,12 @@ fn @(true) make_cpu_single_mapping( ray_box_intrinsics: RayBoxIntrinsics
     }
 }
 
-fn @(true) make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics
-                                  , config: TraversalConfig
-                                  , bvh: Bvh
-                                  , packet_only: bool
-                                  , vector_width: int
-                                  ) -> TraversalMapping {
+fn @make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics
+                           , config: TraversalConfig
+                           , bvh: Bvh
+                           , packet_only: bool
+                           , vector_width: int
+                           ) -> TraversalMapping {
     let switch_threshold = match vector_width {
         4  =>  3,
         8  =>  5,
@@ -406,29 +412,35 @@ fn @(true) make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics
         _  => vector_width // Be conservative with unknown SIMD widths
     };
 
-    let iterate_primitives = @(true) |leaf_ref, ray, body, exit| -> ! {
-        if all(leaf_ref.tmin >= ray.tmax) { exit() }
+    fn iterate_primitives( leaf_ref: NodeRef
+                         , ray: Ray
+                         , body: fn (Intersector) -> ()
+                         ) -> () {
+        if all(leaf_ref.tmin >= ray.tmax) { return() }
 
         let mut tri_id = !leaf_ref.node;
         while true {
             let tri = bvh.tri(tri_id++);
             for k in range(0, $tri.size) {
                 let tri_id = tri.id(k);
-                if tri_id == bitcast[int](0xFFFFFFFFu) { exit() }
+                if tri_id == bitcast[int](0xFFFFFFFFu) { return() }
 
                 body(make_ray_tri_intersector(cpu_intrinsics, tri.load(k), tri_id & 0x7FFFFFFF));
             }
-            if (tri.id(tri.size - 1) & bitcast[i32](0x80000000u)) != 0 { exit() }
+            if (tri.id(tri.size - 1) & bitcast[i32](0x80000000u)) != 0 { return() }
         }
-        exit()
-    };
+    }
 
-    let iterate_children = @(true) |stack, ray: &mut Ray, hit: &mut Hit, body, exit| -> ! {
+    fn iterate_children( stack: Stack
+                       , ray: &mut Ray
+                       , hit: &mut Hit
+                       , body: fn (BBox) -> (bool, float, float)
+                       ) -> () {
         let node_ref = stack.top();
         stack.pop();
 
         let mask = ballot(node_ref.tmin < ray.tmax);
-        if unlikely(mask == 0) { exit() }
+        if unlikely(mask == 0) { return() }
 
         if !packet_only && unlikely(cpu_popcount32(mask) <= switch_threshold) {
             // Switch to single ray tracing when SIMD utilization is too low
@@ -468,8 +480,7 @@ fn @(true) make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics
                 }
             }
         }
-        exit()
-    };
+    }
 
     TraversalMapping {
         iterate_children: iterate_children,
@@ -481,12 +492,12 @@ fn @(true) make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics
 
 // Variants  -----------------------------------------------------------------------
 
-fn @(true) cpu_traverse_packet( ray_box_intrinsics: RayBoxIntrinsics
-                              , config: TraversalConfig
-                              , bvh: Bvh
-                              , ray_layout: RayLayout
-                              , ray_count: int
-                              ) -> () {
+fn cpu_traverse_packet( ray_box_intrinsics: RayBoxIntrinsics
+                      , config: TraversalConfig
+                      , bvh: Bvh
+                      , ray_layout: RayLayout
+                      , ray_count: int
+                      ) -> () {
     let inc = ray_layout.packet_size;
     for i in range(0, $(ray_count / inc)) {
         for j in vectorize(inc, inc * sizeof[float](), 0, inc) {
@@ -501,12 +512,12 @@ fn @(true) cpu_traverse_packet( ray_box_intrinsics: RayBoxIntrinsics
     }
 }
 
-fn @(true) cpu_traverse_hybrid( ray_box_intrinsics: RayBoxIntrinsics
-                              , config: TraversalConfig
-                              , bvh: Bvh
-                              , ray_layout: RayLayout
-                              , ray_count: int
-                              ) -> () {
+fn cpu_traverse_hybrid( ray_box_intrinsics: RayBoxIntrinsics
+                      , config: TraversalConfig
+                      , bvh: Bvh
+                      , ray_layout: RayLayout
+                      , ray_count: int
+                      ) -> () {
     let inc = ray_layout.packet_size;
     for i in range(0, $(ray_count / inc)) {
         for j in vectorize(inc, inc * sizeof[float](), 0, inc) {
@@ -521,12 +532,12 @@ fn @(true) cpu_traverse_hybrid( ray_box_intrinsics: RayBoxIntrinsics
     }
 }
 
-fn @(true) cpu_traverse_single( ray_box_intrinsics: RayBoxIntrinsics
-                              , config: TraversalConfig
-                              , bvh: Bvh
-                              , ray_layout: RayLayout
-                              , ray_count: int
-                              ) -> () {
+fn cpu_traverse_single( ray_box_intrinsics: RayBoxIntrinsics
+                      , config: TraversalConfig
+                      , bvh: Bvh
+                      , ray_layout: RayLayout
+                      , ray_count: int
+                      ) -> () {
     let inc = ray_layout.packet_size;
     for i in range(0, $ray_count) {
         let (packet_id, ray_id) = (i / inc, i % inc);

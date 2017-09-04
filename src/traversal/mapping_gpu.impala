@@ -1,7 +1,7 @@
 // Misc. ---------------------------------------------------------------------------
 
 // Make a bounding box ordered by octant
-fn @(true) make_gpu_ordered_bbox(bbox: BBox, octant: int) -> BBox {
+fn @make_gpu_ordered_bbox(bbox: BBox, octant: int) -> BBox {
     let (inv_x, inv_y, inv_z) = ((octant & 1) == 0, (octant & 2) == 0, (octant & 3) == 0);
     make_bbox(
         make_vec3(
@@ -46,73 +46,77 @@ struct Bvh2Node {
     pad2:  int
 }
 
-fn @(true) make_bvh2_nvvm(bvh2: Bvh2) -> Bvh {
-    Bvh {
-        node: |j| {
-            let node_ptr = &bvh2.nodes(j) as &[1][simd[float * 4]];
-            let bb0 = nvvm_ldg4_f32(&node_ptr(0));
-            let bb1 = nvvm_ldg4_f32(&node_ptr(1));
-            let bb2 = nvvm_ldg4_f32(&node_ptr(2));
-            let children = nvvm_ldg4_i32(&node_ptr(3) as &[1]simd[int * 4]);
+fn @make_bvh2_tri_nvvm(tri_ptr: &Bvh2Tri) -> BvhTri {
+    let simd_ptr = tri_ptr as &[1][simd[float * 4]];
+    let tri0 = nvvm_ldg4_f32(&simd_ptr(0));
+    let tri1 = nvvm_ldg4_f32(&simd_ptr(1));
+    let tri2 = nvvm_ldg4_f32(&simd_ptr(2));
+    BvhTri {
+        load: @ |i| {
+            let v0 = make_vec3(tri0(0), tri0(1), tri0(2));
+            let e1 = make_vec3(tri1(0), tri1(1), tri1(2));
+            let e2 = make_vec3(tri2(0), tri2(1), tri2(2));
+            let n  = make_vec3(tri0(3), tri1(3), vec3_cross(e1, e2).z);
+            make_tri(v0, e1, e2, n)
+        },
+        id: @ |i| bitcast[int](tri2(3)),
+        size: 1
+    }
+}
 
-            BvhNode {
-                bbox: |i, octant| {
-                    let bbox =
-                        if i == 0 {
-                            make_bbox(make_vec3(bb0(0), bb0(2), bb1(0)),
-                                      make_vec3(bb0(1), bb0(3), bb1(1)))
-                        } else {
-                            make_bbox(make_vec3(bb1(2), bb2(0), bb2(2)),
-                                      make_vec3(bb1(3), bb2(1), bb2(3)))
-                        };
-                    if octant >= 0 { make_gpu_ordered_bbox(bbox, octant) } else { bbox }
-                },
-                child: |i| children(i),
-                prefetch: || {} // No-op
-            }
+fn @make_bvh2_node_nvvm(node_ptr: &Bvh2Node) -> BvhNode {
+    let simd_ptr = node_ptr as &[1][simd[float * 4]];
+    let bb0 = nvvm_ldg4_f32(&simd_ptr(0));
+    let bb1 = nvvm_ldg4_f32(&simd_ptr(1));
+    let bb2 = nvvm_ldg4_f32(&simd_ptr(2));
+    let children = nvvm_ldg4_i32(&simd_ptr(3) as &[1]simd[int * 4]);
+
+    BvhNode {
+        bbox: @ |i, octant| {
+            let bbox =
+                if i == 0 {
+                    make_bbox(make_vec3(bb0(0), bb0(2), bb1(0)),
+                              make_vec3(bb0(1), bb0(3), bb1(1)))
+                } else {
+                    make_bbox(make_vec3(bb1(2), bb2(0), bb2(2)),
+                              make_vec3(bb1(3), bb2(1), bb2(3)))
+                };
+            if octant >= 0 { make_gpu_ordered_bbox(bbox, octant) } else { bbox }
         },
-        tri: |j| {
-            let tri_ptr = &bvh2.tris(j) as &[1][simd[float * 4]];
-            let tri0 = nvvm_ldg4_f32(&tri_ptr(0));
-            let tri1 = nvvm_ldg4_f32(&tri_ptr(1));
-            let tri2 = nvvm_ldg4_f32(&tri_ptr(2));
-            BvhTri {
-                load: |i| {
-                    let v0 = make_vec3(tri0(0), tri0(1), tri0(2));
-                    let e1 = make_vec3(tri1(0), tri1(1), tri1(2));
-                    let e2 = make_vec3(tri2(0), tri2(1), tri2(2));
-                    let n  = make_vec3(tri0(3), tri1(3), vec3_cross(e1, e2).z);
-                    make_tri(v0, e1, e2, n)
-                },
-                id: |i| bitcast[int](tri2(3)),
-                size: 1
-            }
-        },
+        child: @ |i| children(i),
+        prefetch: @ || {} // No-op
+    }
+}
+
+fn @make_bvh2_nvvm(bvh2: Bvh2) -> Bvh {
+    Bvh {
+        node: @ |j| make_bvh2_node_nvvm(&bvh2.nodes(j)),
+        tri:  @ |j| make_bvh2_tri_nvvm(&bvh2.tris(j)),
         arity: 2
     }
 }
 
 // Ray-box intrinsics  -------------------------------------------------------------
 
-fn @(true) make_ray_box_intrinsics_nvvm() -> RayBoxIntrinsics {
+fn @make_ray_box_intrinsics_nvvm() -> RayBoxIntrinsics {
     // Use video instructions to speed-up the ray-box test
     RayBoxIntrinsics {
         fminf: nvvm_fminf,
         fmaxf: nvvm_fmaxf,
-        fminminf: |a, b, c| bitcast[float](nvvm_minmin(bitcast[int](a), bitcast[int](b), bitcast[int](c))),
-        fmaxmaxf: |a, b, c| bitcast[float](nvvm_maxmax(bitcast[int](a), bitcast[int](b), bitcast[int](c))),
-        fminmaxf: |a, b, c| bitcast[float](nvvm_minmax(bitcast[int](a), bitcast[int](b), bitcast[int](c))),
-        fmaxminf: |a, b, c| bitcast[float](nvvm_maxmin(bitcast[int](a), bitcast[int](b), bitcast[int](c))),
-        fcmp_le: |a, b| a <= b
+        fminminf: @ |a, b, c| bitcast[float](nvvm_minmin(bitcast[int](a), bitcast[int](b), bitcast[int](c))),
+        fmaxmaxf: @ |a, b, c| bitcast[float](nvvm_maxmax(bitcast[int](a), bitcast[int](b), bitcast[int](c))),
+        fminmaxf: @ |a, b, c| bitcast[float](nvvm_minmax(bitcast[int](a), bitcast[int](b), bitcast[int](c))),
+        fmaxminf: @ |a, b, c| bitcast[float](nvvm_maxmin(bitcast[int](a), bitcast[int](b), bitcast[int](c))),
+        fcmp_le: @ |a, b| a <= b
     }
 }
 
 // Ray layouts  --------------------------------------------------------------------
 
-fn @(true) make_ray_layout_nvvm(rays: &[Ray1AoS], hits: &mut[Hit1AoS]) -> RayLayout {
+fn @make_ray_layout_nvvm(rays: &[Ray1AoS], hits: &mut[Hit1AoS]) -> RayLayout {
     RayLayout {
         packet_size: 1,
-        input: |i, j| {
+        input: @ |i, j| {
             let ray_ptr = &rays(i + j) as &[1][simd[float * 4]];
             let ray0 = nvvm_ldg4_f32(&ray_ptr(0));
             let ray1 = nvvm_ldg4_f32(&ray_ptr(1));
@@ -120,7 +124,7 @@ fn @(true) make_ray_layout_nvvm(rays: &[Ray1AoS], hits: &mut[Hit1AoS]) -> RayLay
                      make_vec3(ray1(0), ray1(1), ray1(2)),
              ray0(3), ray1(3))
         },
-        output: |i, j, hit| {
+        output: @ |i, j, hit| {
             *(&hits(i + j) as &mut simd[float * 4]) =
                 simd[bitcast[float](hit.prim_id), hit.distance, hit.uv_coords.x, hit.uv_coords.y];
         }
@@ -129,12 +133,16 @@ fn @(true) make_ray_layout_nvvm(rays: &[Ray1AoS], hits: &mut[Hit1AoS]) -> RayLay
 
 // Mappings  -----------------------------------------------------------------------
 
-fn @(true) make_gpu_mapping_single( config: TraversalConfig
-                                  , bvh: Bvh
-                                  , gpu_intrinsics: Intrinsics
-                                  , ray_box_intrinsics: RayBoxIntrinsics
-                                  ) -> TraversalMapping {
-    let iterate_primitives = |leaf_ref, ray, body| {
+fn @make_gpu_mapping_single( config: TraversalConfig
+                           , bvh: Bvh
+                           , gpu_intrinsics: Intrinsics
+                           , ray_box_intrinsics: RayBoxIntrinsics
+                           ) -> TraversalMapping {
+
+    fn iterate_primitives( leaf_ref: NodeRef
+                         , ray: Ray
+                         , body: fn (Intersector) -> ()
+                         ) -> () {
         let mut tri_id = !leaf_ref.node;
         while true {
             let tri = bvh.tri(tri_id++);
@@ -145,9 +153,13 @@ fn @(true) make_gpu_mapping_single( config: TraversalConfig
 
             if (bitcast[uint](tri.id(tri.size - 1)) & 0x80000000u) != 0u { break() }
         }
-    };
+    }
 
-    let iterate_children = |stack, ray, hit, body| {
+    fn iterate_children( stack: Stack
+                       , ray: &mut Ray
+                       , hit: &mut Hit
+                       , body: fn (BBox) -> (bool, float, float)
+                       ) -> () {
         let node_ref = stack.top();
         let node = bvh.node(node_ref.node - 1);
 
@@ -195,7 +207,7 @@ fn @(true) make_gpu_mapping_single( config: TraversalConfig
                 }
             }
         }
-    };
+    }
 
     TraversalMapping {
         iterate_children: iterate_children,
@@ -207,14 +219,14 @@ fn @(true) make_gpu_mapping_single( config: TraversalConfig
 
 // Variants  -----------------------------------------------------------------------
 
-fn @(true) gpu_traverse( acc: Accelerator
-                       , gpu_intrinsics: Intrinsics
-                       , ray_box_intrinsics: RayBoxIntrinsics
-                       , config: TraversalConfig
-                       , bvh: Bvh
-                       , ray_layout: RayLayout
-                       , ray_count: int
-                       ) -> () {
+fn gpu_traverse( acc: Accelerator
+               , gpu_intrinsics: Intrinsics
+               , ray_box_intrinsics: RayBoxIntrinsics
+               , config: TraversalConfig
+               , bvh: Bvh
+               , ray_layout: RayLayout
+               , ray_count: int
+               ) -> () {
     let block_size = 64;
     let grid  = (ray_count, ray_layout.packet_size, 1);
     let block = (block_size, ray_layout.packet_size, 1);
