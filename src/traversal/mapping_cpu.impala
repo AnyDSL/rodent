@@ -6,6 +6,8 @@ extern "C" {
     fn "rv_ballot"  ballot(bool) -> int;
     fn "rv_extract" extract(float, int) -> float;
     fn "rv_insert"  insert(float, int, float) -> float;
+    fn "rv_load"    load(&float, int) -> float;
+    fn "rv_store"   store(&mut float, int, float) -> ();
     fn "rv_shuffle" shuffle(float, int) -> float;
     fn "rv_align"   align(&i8, int)-> &i8;
 }
@@ -55,42 +57,25 @@ fn index_of(value: float, lane: float) -> int {
     cpu_ctz32(ballot(value == lane), true)
 }
 
-// Lane extraction from vectorized structures
-fn extract_int(i: int, lane: int) -> int { bitcast[int](extract(bitcast[float](i), lane)) }
-fn extract_vec2(v: Vec2, lane: int) -> Vec2 { vec2_map(v, |x| extract(x, lane)) }
-fn extract_vec3(v: Vec3, lane: int) -> Vec3 { vec3_map(v, |x| extract(x, lane)) }
-fn extract_vec4(v: Vec4, lane: int) -> Vec4 { vec4_map(v, |x| extract(x, lane)) }
-fn extract_hit(hit: Hit, lane: int) -> Hit {
-    Hit {
-        inst_id:   extract_int(hit.inst_id, lane),
-        prim_id:   extract_int(hit.prim_id, lane),
-        distance:  extract(hit.distance, lane),
-        uv_coords: extract_vec2(hit.uv_coords, lane)
-    }
-}
-fn extract_ray(ray: Ray, lane: int) -> Ray {
+// Load one ray from a packet of rays
+fn load_ray(ray_ptr: &Ray, lane: int) -> Ray {
     Ray {
-        org: extract_vec3(ray.org, lane),
-        dir: extract_vec3(ray.dir, lane),
-        inv_dir: extract_vec3(ray.inv_dir, lane),
-        inv_org: extract_vec3(ray.inv_org, lane),
-        tmin: extract(ray.tmin, lane),
-        tmax: extract(ray.tmax, lane)
+        org: make_vec3(load(&ray_ptr.org.x, lane), load(&ray_ptr.org.y, lane), load(&ray_ptr.org.z, lane)),
+        dir: make_vec3(load(&ray_ptr.dir.x, lane), load(&ray_ptr.dir.y, lane), load(&ray_ptr.dir.z, lane)),
+        inv_org: make_vec3(load(&ray_ptr.inv_org.x, lane), load(&ray_ptr.inv_org.y, lane), load(&ray_ptr.inv_org.z, lane)),
+        inv_dir: make_vec3(load(&ray_ptr.inv_dir.x, lane), load(&ray_ptr.inv_dir.y, lane), load(&ray_ptr.inv_dir.z, lane)),
+        tmin: load(&ray_ptr.tmin, lane),
+        tmax: load(&ray_ptr.tmax, lane)
     }
 }
 
-// Lane insertion into vectorized structures
-fn insert_int(i: int, lane: int, j: int) -> int { bitcast[int](insert(bitcast[float](i), lane, bitcast[float](j))) }
-fn insert_vec2(v: Vec2, lane: int, w: Vec2) -> Vec2 { vec2_zip(v, w, |x, y| insert(x, lane, y)) }
-fn insert_vec3(v: Vec3, lane: int, w: Vec3) -> Vec3 { vec3_zip(v, w, |x, y| insert(x, lane, y)) }
-fn insert_vec4(v: Vec4, lane: int, w: Vec4) -> Vec4 { vec4_zip(v, w, |x, y| insert(x, lane, y)) }
-fn insert_hit(hit: Hit, lane: int, elem: Hit) -> Hit {
-    Hit {
-        inst_id:   insert_int(hit.inst_id, lane, elem.inst_id),
-        prim_id:   insert_int(hit.prim_id, lane, elem.prim_id),
-        distance:  insert(hit.distance, lane, elem.distance),
-        uv_coords: insert_vec2(hit.uv_coords, lane, elem.uv_coords)
-    }
+// Store one hit in a packet of hits
+fn store_hit(hit_ptr: &mut Hit, lane: int, hit: Hit) -> () {
+    store(&mut hit_ptr.distance, lane, hit.distance);
+    store(&mut hit_ptr.uv_coords.x, lane, hit.uv_coords.x);
+    store(&mut hit_ptr.uv_coords.y, lane, hit.uv_coords.y);
+    store(bitcast[&mut float](&mut hit_ptr.prim_id), lane, bitcast[float](hit.prim_id));
+    store(bitcast[&mut float](&mut hit_ptr.inst_id), lane, bitcast[float](hit.inst_id));
 }
 
 // BVH4 ----------------------------------------------------------------------------
@@ -330,9 +315,9 @@ fn @(true) make_cpu_single_mapping( ray_box_intrinsics: RayBoxIntrinsics
             let tri = bvh.tri(tri_id++);
 
             for i in vectorize(tri.size, tri.size * sizeof[float](), 0, tri.size) {
-                let closest_intr : Intersector = @(true) |math, ray, intr| {
+                let closest_intr : Intersector = |ray, intr| {
                     // Compute the intersection for each lane
-                    let (found, t, u, v) = intersect_ray_tri(math, ray, tri.load(i));
+                    let (found, t, u, v) = intersect_ray_tri(cpu_intrinsics, ray, tri.load(i));
 
                     // Find the closest intersection
                     if any(found) {
@@ -403,7 +388,6 @@ fn @(true) make_cpu_single_mapping( ray_box_intrinsics: RayBoxIntrinsics
     TraversalMapping {
         iterate_children: iterate_children,
         iterate_primitives: iterate_primitives,
-        intrinsics: cpu_intrinsics,
         ray_box_intrinsics: ray_box_intrinsics,
         ray_box_ordered: true
     }
@@ -428,18 +412,18 @@ fn @(true) make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics
         let mut tri_id = !leaf_ref.node;
         while true {
             let tri = bvh.tri(tri_id++);
-            for k in range(0, tri.size) {
+            for k in range(0, $tri.size) {
                 let tri_id = tri.id(k);
                 if tri_id == bitcast[int](0xFFFFFFFFu) { exit() }
 
-                body(make_ray_tri_intersector(tri.load(k), tri_id & 0x7FFFFFFF));
+                body(make_ray_tri_intersector(cpu_intrinsics, tri.load(k), tri_id & 0x7FFFFFFF));
             }
             if (tri.id(tri.size - 1) & bitcast[i32](0x80000000u)) != 0 { exit() }
         }
         exit()
     };
 
-    let iterate_children = @(true) |stack, ray, hit, body, exit| -> ! {
+    let iterate_children = @(true) |stack, ray: &mut Ray, hit: &mut Hit, body, exit| -> ! {
         let node_ref = stack.top();
         stack.pop();
 
@@ -450,7 +434,7 @@ fn @(true) make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics
             // Switch to single ray tracing when SIMD utilization is too low
             for lane in one_bits(mask) {
                 // Traverse the current BVH node using single ray traversal
-                let lane_ray = extract_ray(*ray, lane);
+                let lane_ray = load_ray(ray, lane);
                 let mut lane_hit = empty_hit(lane_ray.tmax);
 
                 for k in vectorize(bvh.arity, bvh.arity * sizeof[float](), 0, bvh.arity) {
@@ -462,14 +446,14 @@ fn @(true) make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics
                 }
 
                 if lane_hit.prim_id >= 0 {
-                    *hit = insert_hit(*hit, lane, lane_hit);
-                    ray.tmax = insert(ray.tmax, lane, lane_hit.distance);
+                    store_hit(hit, lane, lane_hit);
+                    store(&mut ray.tmax, lane, lane_hit.distance);
                 }
             }
         } else {
             // Intersect the node with the packet of rays
             let node = bvh.node(node_ref.node - 1);
-            for k in range(0, bvh.arity) {
+            for k in range(0, $bvh.arity) {
                 let child_id = node.child(k);
                 if unlikely(child_id == 0) { break() }
 
@@ -490,7 +474,6 @@ fn @(true) make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics
     TraversalMapping {
         iterate_children: iterate_children,
         iterate_primitives: iterate_primitives,
-        intrinsics: cpu_intrinsics,
         ray_box_intrinsics: ray_box_intrinsics,
         ray_box_ordered: false
     }

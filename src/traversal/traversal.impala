@@ -3,7 +3,6 @@ type IteratePrimitivesFn = fn (NodeRef, Ray, fn (Intersector) -> ()) -> ();
 
 // Structure containing the mapping of the traversal algorithm for a particular device.
 struct TraversalMapping {
-    intrinsics:         Intrinsics,
     ray_box_intrinsics: RayBoxIntrinsics,
     ray_box_ordered:    bool,
 
@@ -31,7 +30,7 @@ fn @(true) traverse_bvh(mapping: TraversalMapping, config: TraversalConfig, stac
         while unlikely(is_leaf(stack.top())) {
             // Process primitives, if any
             for intersector in mapping.iterate_primitives(stack.top(), ray) {
-                with intr in intersector(mapping.intrinsics, ray) {
+                with intr in intersector(ray) {
                     hit.prim_id   = intr.prim_id;
                     hit.distance  = intr.distance;
                     hit.uv_coords = intr.uv_coords;

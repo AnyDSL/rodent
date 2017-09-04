@@ -57,7 +57,7 @@ struct RayBoxIntrinsics {
     fcmp_le:  fn (float, float) -> bool
 }
 
-type Intersector = fn (Intrinsics, Ray, fn (Hit) -> ()) -> ();
+type Intersector = fn (Ray, fn (Hit) -> ()) -> ();
 
 // Constructs a set of intrinsics from min and max functions.
 // May not be the optimal intrinsics if the hardware provides a combined min/max instruction.
@@ -176,8 +176,8 @@ fn @(true) intersect_ray_box(math: RayBoxIntrinsics, ordered: bool, ray: Ray, bb
 }
 
 // Helper function to create a ray-triangle intersector
-fn @(true) make_ray_tri_intersector(tri: Tri, prim_id: int) -> Intersector {
-    |math, ray, intr| {
+fn @(true) make_ray_tri_intersector(math: Intrinsics, tri: Tri, prim_id: int) -> Intersector {
+    @(true) |ray, intr| {
         let (mask, t, u, v) = intersect_ray_tri(math, ray, tri);
         if mask {
             intr(Hit {
