@@ -136,7 +136,7 @@ fn make_gpu_mapping_single(config: TraversalConfig, bvh: Bvh, gpu_intrinsics: In
             let tri = bvh.tri(tri_id++);
 
             for k in @unroll(0, tri.size) @{
-                @body(make_ray_tri_intersector(tri.load(k), tri.id(k) & 0x7FFFFFFF));
+                @body(make_ray_tri_intersector(gpu_intrinsics, tri.load(k), tri.id(k) & 0x7FFFFFFF));
             }
 
             if (bitcast[uint](tri.id(tri.size - 1)) & 0x80000000u) != 0u { break() }
@@ -196,7 +196,6 @@ fn make_gpu_mapping_single(config: TraversalConfig, bvh: Bvh, gpu_intrinsics: In
     TraversalMapping {
         iterate_children: iterate_children,
         iterate_primitives: iterate_primitives,
-        intrinsics: gpu_intrinsics,
         ray_box_intrinsics: ray_box_intrinsics,
         ray_box_ordered: false
     }

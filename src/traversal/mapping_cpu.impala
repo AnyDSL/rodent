@@ -310,9 +310,9 @@ fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
             let tri = bvh.tri(tri_id++);
 
             for i in vectorize(tri.size, tri.size * sizeof[float](), 0, tri.size) @{
-                let closest_intr : Intersector = |math, ray, intr| @{
+                let closest_intr : Intersector = |ray, intr| @{
                     // Compute the intersection for each lane
-                    let (found, t, u, v) = @intersect_ray_tri(math, ray, tri.load(i));
+                    let (found, t, u, v) = @intersect_ray_tri(cpu_intrinsics, ray, tri.load(i));
 
                     // Find the closest intersection
                     if any(found) {
@@ -350,7 +350,7 @@ fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
 
             // Push intersected nodes on the stack
             let mut n = 0;
-            for bit in $one_bits(mask) {
+            for bit in $one_bits(mask) @{
                 let child_id = node.child(bit);
                 if unlikely(child_id == 0) { break() }
 
@@ -383,7 +383,6 @@ fn make_cpu_single_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
     TraversalMapping {
         iterate_children: iterate_children,
         iterate_primitives: iterate_primitives,
-        intrinsics: cpu_intrinsics,
         ray_box_intrinsics: ray_box_intrinsics,
         ray_box_ordered: true
     }
@@ -407,7 +406,7 @@ fn make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
                 let tri_id = tri.id(k);
                 if tri_id == bitcast[int](0xFFFFFFFFu) { exit() }
 
-                body(make_ray_tri_intersector(tri.load(k), tri_id & 0x7FFFFFFF));
+                body(make_ray_tri_intersector(cpu_intrinsics, tri.load(k), tri_id & 0x7FFFFFFF));
             }
             if (tri.id(tri.size - 1) & bitcast[i32](0x80000000u)) != 0 { exit() }
         }
@@ -465,7 +464,6 @@ fn make_cpu_hybrid_mapping(ray_box_intrinsics: RayBoxIntrinsics, config: Travers
     TraversalMapping {
         iterate_children: iterate_children,
         iterate_primitives: iterate_primitives,
-        intrinsics: cpu_intrinsics,
         ray_box_intrinsics: ray_box_intrinsics,
         ray_box_ordered: false
     }
