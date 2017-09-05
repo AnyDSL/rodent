@@ -37,18 +37,12 @@ fn @batcher_sort(n: int, cmp_swap: fn (int, int) -> ()) -> () {
         if step < len {
             merge(i, len, step);
             merge(i + r, len, step);
-            /*for j in range_step(i + r, i + len - r, step) {
+            for j in range_step(i + r, i + len - r, step) @{
                 // Remove comparators for non-existing elements
                 if j < n && j + r < n {
                     cmp_swap(j, j + r)
                 }
-            }*/
-            range_step(i + r, i + len - r, step, @ |j| {
-                // Remove comparators for non-existing elements
-                if j < n && j + r < n {
-                    cmp_swap(j, j + r)
-                }
-            });
+            }
         } else {
             // idem
             if i < n && i + r < n {
@@ -77,7 +71,7 @@ fn @bitonic_sort(n: int, cmp_swap: fn (int, int) -> ()) -> () {
             // Compute greatest power of two lower than len
             let m = 1 << (ilog2(len) - 1);
 
-            for j in range(i, i + len - m) {
+            for j in range(i, i + len - m) @{
                 cmp_swap(select(dir, j, j + m), select(dir, j + m, j));
             }
 

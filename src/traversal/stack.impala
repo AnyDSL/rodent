@@ -79,9 +79,9 @@ fn @allocate_stack() -> Stack {
         sort_n: @ |n, cmp, sorting_network, branchless| {
             let (read_val, write_val) = vals_accessor(ptr - n + 1);
             let (read_key, write_key) = keys_accessor(ptr - n + 1);
-            if branchless { ()
-                /*let tmp = make_small_stack(n);
-                for i in range(0, n) {
+            /*if branchless {
+                let tmp = make_small_stack(n);
+                for i in range(0, n) @{
                     tmp.write(i, (read_val(i), read_key(i)))
                 }
                 sorting_network(n, @ |i, j| {
@@ -91,12 +91,12 @@ fn @allocate_stack() -> Stack {
                     tmp.write(i, select(swp, (v1, k1), (v0, k0)));
                     tmp.write(j, select(swp, (v0, k0), (v1, k1)));
                 });
-                for i in range(0, n) {
+                for i in range(0, n) @{
                     let (v, k) = tmp.read(i);
                     write_val(i, v);
                     write_key(i, k);
-                }*/
-            } else {
+                }
+            } else {*/
                 sorting_network(n, @ |i, j| {
                     let (k0, k1) = (read_key(i), read_key(j));
                     if cmp(k0, k1) {
@@ -107,7 +107,7 @@ fn @allocate_stack() -> Stack {
                         write_val(j, v0);
                     }
                 });
-            }
+            //}
         },
         pop: @ || {
             node = nodes(ptr);
