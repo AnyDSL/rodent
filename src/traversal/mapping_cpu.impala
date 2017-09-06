@@ -370,7 +370,7 @@ fn @make_cpu_single_mapping( ray_box_intrinsics: RayBoxIntrinsics
                 }
 
                 let t = extract(tentry, bit);
-                if t < stack.top().tmin {
+                if config.any_hit || t < stack.top().tmin {
                     stack.push(child_id, t);
                 } else {
                     stack.push_after(child_id, t);

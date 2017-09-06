@@ -71,7 +71,7 @@ fn @bitonic_sort(n: int, cmp_swap: fn (int, int) -> ()) -> () {
             // Compute greatest power of two lower than len
             let m = 1 << (ilog2(len) - 1);
 
-            for j in range(i, i + len - m) {
+            for j in range(i, i + len - m) @{
                 cmp_swap(select(dir, j, j + m), select(dir, j + m, j));
             }
 
