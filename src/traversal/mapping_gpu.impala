@@ -139,10 +139,10 @@ fn @make_gpu_mapping_single( config: TraversalConfig
                            , ray_box_intrinsics: RayBoxIntrinsics
                            ) -> TraversalMapping {
 
-    fn iterate_primitives( leaf_ref: NodeRef
-                         , ray: Ray
-                         , body: fn (Intersector) -> ()
-                         ) -> () {
+    fn @iterate_primitives( leaf_ref: NodeRef
+                          , ray: Ray
+                          , body: fn (Intersector) -> ()
+                          ) -> () {
         let mut tri_id = !leaf_ref.node;
         while true {
             let tri = bvh.tri(tri_id++);
@@ -155,11 +155,11 @@ fn @make_gpu_mapping_single( config: TraversalConfig
         }
     }
 
-    fn iterate_children( stack: Stack
-                       , ray: &mut Ray
-                       , hit: &mut Hit
-                       , body: fn (BBox) -> (bool, float, float)
-                       ) -> () {
+    fn @iterate_children( stack: Stack
+                        , ray: &mut Ray
+                        , hit: &mut Hit
+                        , body: fn (BBox) -> (bool, float, float)
+                        ) -> () {
         let node_ref = stack.top();
         let node = bvh.node(node_ref.node - 1);
 
@@ -219,14 +219,14 @@ fn @make_gpu_mapping_single( config: TraversalConfig
 
 // Variants  -----------------------------------------------------------------------
 
-fn gpu_traverse( acc: Accelerator
-               , gpu_intrinsics: Intrinsics
-               , ray_box_intrinsics: RayBoxIntrinsics
-               , config: TraversalConfig
-               , bvh: Bvh
-               , ray_layout: RayLayout
-               , ray_count: int
-               ) -> () {
+fn @gpu_traverse( acc: Accelerator
+                , gpu_intrinsics: Intrinsics
+                , ray_box_intrinsics: RayBoxIntrinsics
+                , config: TraversalConfig
+                , bvh: Bvh
+                , ray_layout: RayLayout
+                , ray_count: int
+                ) -> () {
     let block_size = 64;
     let grid  = (ray_count, ray_layout.packet_size, 1);
     let block = (block_size, ray_layout.packet_size, 1);

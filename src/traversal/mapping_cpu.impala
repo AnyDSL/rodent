@@ -34,7 +34,7 @@ fn @make_cpu_ordered_bbox(bounds_ptr: &[i8], k: int, octant: int, size: int) -> 
 }
 
 // Iterate over the bit that are set in a mask
-fn one_bits(mask: int, @ body: fn (int) -> ()) -> () {
+fn one_bits(mask: int, body: fn (int) -> ()) -> () {
     if mask != 0 {
         let lane = cpu_ctz32(mask, true);
         body(lane);
@@ -43,7 +43,7 @@ fn one_bits(mask: int, @ body: fn (int) -> ()) -> () {
 }
 
 // Performs a horizontal reduction over vector lanes
-fn reduce(value: float, @ n: int, @ op: fn (float, float) -> float) -> float {
+fn reduce(value: float, @ n: int, op: fn (float, float) -> float) -> float {
     if (n >= 2) {
         let m = n / 2;
         reduce(op(value, shuffle(value, m)), m, op)
@@ -305,12 +305,12 @@ fn @make_cpu_single_mapping( ray_box_intrinsics: RayBoxIntrinsics
             8 => batcher_sort,
             _ => bose_nelson_sort
         };
-    let branchless = false;//bvh.arity > 4;
+    let branchless = bvh.arity > 4;
 
-    fn iterate_primitives( leaf_ref: NodeRef
-                         , ray: Ray
-                         , body: fn (Intersector) -> ()
-                         ) -> () {
+    fn @iterate_primitives( leaf_ref: NodeRef
+                          , ray: Ray
+                          , body: fn (Intersector) -> ()
+                          ) -> () {
         if unlikely(leaf_ref.tmin >= ray.tmax) { return() }
 
         let mut tri_id = !leaf_ref.node;
@@ -318,7 +318,7 @@ fn @make_cpu_single_mapping( ray_box_intrinsics: RayBoxIntrinsics
             let tri = bvh.tri(tri_id++);
 
             for i in vectorize(tri.size, tri.size * sizeof[float](), 0, tri.size) {
-                let closest_intr : Intersector = |ray, intr| {
+                let closest_intr : Intersector = @ |ray, intr| {
                     // Compute the intersection for each lane
                     let (found, t, u, v) = intersect_ray_tri(cpu_intrinsics, ray, tri.load(i));
 
@@ -343,11 +343,11 @@ fn @make_cpu_single_mapping( ray_box_intrinsics: RayBoxIntrinsics
         }
     }
 
-    fn iterate_children( stack: Stack
-                       , ray: &mut Ray
-                       , hit: &mut Hit
-                       , body: fn (BBox) -> (bool, float, float)
-                       ) -> () {
+    fn @iterate_children( stack: Stack
+                        , ray: &mut Ray
+                        , hit: &mut Hit
+                        , body: fn (BBox) -> (bool, float, float)
+                        ) -> () {
         while likely(is_inner(stack.top())) {
             let node_ref = stack.top();
             stack.pop();
@@ -381,7 +381,7 @@ fn @make_cpu_single_mapping( ray_box_intrinsics: RayBoxIntrinsics
             // Sort them
             if !config.any_hit && unlikely(n >= 2) {
                 // Generate a specialized sorting network for lengths [2..bvh.arity] (included)
-                for i in range(2, bvh.arity + 1) {
+                for i in range(2, bvh.arity + 1) @{
                     if i == bvh.arity || likely(n == i) {
                         stack.sort_n(i, @ |a, b| a < b, sorting_network, branchless);
                         break()
@@ -389,7 +389,7 @@ fn @make_cpu_single_mapping( ray_box_intrinsics: RayBoxIntrinsics
                 }
             }
         }
-    };
+    }
 
     TraversalMapping {
         iterate_children: iterate_children,
@@ -412,10 +412,10 @@ fn @make_cpu_hybrid_mapping( ray_box_intrinsics: RayBoxIntrinsics
         _  => vector_width // Be conservative with unknown SIMD widths
     };
 
-    fn iterate_primitives( leaf_ref: NodeRef
-                         , ray: Ray
-                         , body: fn (Intersector) -> ()
-                         ) -> () {
+    fn @iterate_primitives( leaf_ref: NodeRef
+                          , ray: Ray
+                          , body: fn (Intersector) -> ()
+                          ) -> () {
         if all(leaf_ref.tmin >= ray.tmax) { return() }
 
         let mut tri_id = !leaf_ref.node;
@@ -431,11 +431,11 @@ fn @make_cpu_hybrid_mapping( ray_box_intrinsics: RayBoxIntrinsics
         }
     }
 
-    fn iterate_children( stack: Stack
-                       , ray: &mut Ray
-                       , hit: &mut Hit
-                       , body: fn (BBox) -> (bool, float, float)
-                       ) -> () {
+    fn @iterate_children( stack: Stack
+                        , ray: &mut Ray
+                        , hit: &mut Hit
+                        , body: fn (BBox) -> (bool, float, float)
+                        ) -> () {
         let node_ref = stack.top();
         stack.pop();
 
@@ -492,12 +492,12 @@ fn @make_cpu_hybrid_mapping( ray_box_intrinsics: RayBoxIntrinsics
 
 // Variants  -----------------------------------------------------------------------
 
-fn cpu_traverse_packet( ray_box_intrinsics: RayBoxIntrinsics
-                      , config: TraversalConfig
-                      , bvh: Bvh
-                      , ray_layout: RayLayout
-                      , ray_count: int
-                      ) -> () {
+fn @cpu_traverse_packet( ray_box_intrinsics: RayBoxIntrinsics
+                       , config: TraversalConfig
+                       , bvh: Bvh
+                       , ray_layout: RayLayout
+                       , ray_count: int
+                       ) -> () {
     let inc = ray_layout.packet_size;
     for i in range(0, $(ray_count / inc)) {
         for j in vectorize(inc, inc * sizeof[float](), 0, inc) {
@@ -512,12 +512,12 @@ fn cpu_traverse_packet( ray_box_intrinsics: RayBoxIntrinsics
     }
 }
 
-fn cpu_traverse_hybrid( ray_box_intrinsics: RayBoxIntrinsics
-                      , config: TraversalConfig
-                      , bvh: Bvh
-                      , ray_layout: RayLayout
-                      , ray_count: int
-                      ) -> () {
+fn @cpu_traverse_hybrid( ray_box_intrinsics: RayBoxIntrinsics
+                       , config: TraversalConfig
+                       , bvh: Bvh
+                       , ray_layout: RayLayout
+                       , ray_count: int
+                       ) -> () {
     let inc = ray_layout.packet_size;
     for i in range(0, $(ray_count / inc)) {
         for j in vectorize(inc, inc * sizeof[float](), 0, inc) {
@@ -532,12 +532,12 @@ fn cpu_traverse_hybrid( ray_box_intrinsics: RayBoxIntrinsics
     }
 }
 
-fn cpu_traverse_single( ray_box_intrinsics: RayBoxIntrinsics
-                      , config: TraversalConfig
-                      , bvh: Bvh
-                      , ray_layout: RayLayout
-                      , ray_count: int
-                      ) -> () {
+fn @cpu_traverse_single( ray_box_intrinsics: RayBoxIntrinsics
+                       , config: TraversalConfig
+                       , bvh: Bvh
+                       , ray_layout: RayLayout
+                       , ray_count: int
+                       ) -> () {
     let inc = ray_layout.packet_size;
     for i in range(0, $ray_count) {
         let (packet_id, ray_id) = (i / inc, i % inc);
