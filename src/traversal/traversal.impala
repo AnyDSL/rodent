@@ -29,7 +29,7 @@ fn @traverse_bvh(mapping: TraversalMapping, config: TraversalConfig, stack: Stac
         // Process leaves
         while unlikely(is_leaf(stack.top())) {
             // Process primitives, if any
-            for intersector in mapping.iterate_primitives(stack.top(), ray) @{
+            for intersector in mapping.iterate_primitives(stack.top(), &ray) @{
                 with intr in intersector(ray) @{
                     hit.prim_id   = intr.prim_id;
                     hit.distance  = intr.distance;
