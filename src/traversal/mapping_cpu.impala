@@ -373,13 +373,14 @@ fn @make_cpu_single_mapping( ray_box_intrinsics: RayBoxIntrinsics
                 let child_id = node.child(bit);
                 if unlikely(child_id == 0) { break() }
 
-                let ptr   = select(child_id > 0, bvh.node(child_id - 1).ptr, bvh.tri(!child_id).ptr);
-                let bytes = select(bvh.node_bytes < bvh.tri_bytes, bvh.node_bytes, bvh.tri_bytes);
-                prefetch_bytes(ptr, bytes);
-
                 let t = extract(tentry, bit);
                 if config.any_hit || t < stack.top().tmin {
                     stack.push(child_id, t);
+
+                    // Prefetch only when the child is closer than what is on the stack
+                    let ptr   = select(child_id > 0, bvh.node(child_id - 1).ptr, bvh.tri(!child_id).ptr);
+                    let bytes = select(bvh.node_bytes < bvh.tri_bytes, bvh.node_bytes, bvh.tri_bytes);
+                    prefetch_bytes(ptr, bytes);
                 } else {
                     stack.push_after(child_id, t);
                 }
