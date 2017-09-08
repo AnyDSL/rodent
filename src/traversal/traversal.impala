@@ -1,5 +1,5 @@
 type IterateChildrenFn   = fn (Stack, &mut Ray, &mut Hit, fn (BBox) -> (bool, float, float)) -> ();
-type IteratePrimitivesFn = fn (NodeRef, Ray, fn (Intersector) -> ()) -> ();
+type IteratePrimitivesFn = fn (NodeRef, &Ray, fn (Intersector) -> ()) -> ();
 
 // Structure containing the mapping of the traversal algorithm for a particular device.
 struct TraversalMapping {
@@ -22,15 +22,15 @@ fn @traverse_bvh(mapping: TraversalMapping, config: TraversalConfig, stack: Stac
     while !stack.is_empty() {
         // Intersect the bounding box of every child of the current node
         // This may require to update the current traversal result
-        for bbox in mapping.iterate_children(stack, &mut ray, &mut hit) {
+        for bbox in mapping.iterate_children(stack, &mut ray, &mut hit) @{
             intersect_ray_box(mapping.ray_box_intrinsics, mapping.ray_box_ordered, ray, bbox)
         }
 
         // Process leaves
         while unlikely(is_leaf(stack.top())) {
             // Process primitives, if any
-            for intersector in mapping.iterate_primitives(stack.top(), ray) {
-                with intr in intersector(ray) {
+            for intersector in mapping.iterate_primitives(stack.top(), ray) @{
+                with intr in intersector(ray) @{
                     hit.prim_id   = intr.prim_id;
                     hit.distance  = intr.distance;
                     hit.uv_coords = intr.uv_coords;

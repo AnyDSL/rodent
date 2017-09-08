@@ -52,6 +52,13 @@ fn reduce(value: float, @ n: int, op: fn (float, float) -> float) -> float {
     }
 }
 
+// Prefetches a chunk of memory
+fn prefetch_bytes(ptr: &[u8], @(?bytes) bytes: int) -> () {
+    for i in range_step(0, bytes, 64) {
+        cpu_prefetch(&ptr(i),  0 /* read */, 3 /* closest locality */, 1 /* data */);
+    }
+}
+
 // Returns the first vector lane index i for which value[i] == lane
 fn @index_of(value: float, lane: float) -> int {
     cpu_ctz32(ballot(value == lane), true)
@@ -108,24 +115,21 @@ fn @make_cpu_bvh4_node(node_ptr: &Bvh4Node) -> BvhNode {
                       make_vec3(node_ptr.bounds(1)(i), node_ptr.bounds(3)(i), node_ptr.bounds(5)(i)))
         },
         child: @ |i| node_ptr.child(i),
-        prefetch: @ || {
-            let ptr = node_ptr as &[u8];
-            cpu_prefetch(&ptr(0),  0 /* read */, 3 /* closest locality */, 1 /* data */);
-            cpu_prefetch(&ptr(64), 0 /* read */, 3 /* closest locality */, 1 /* data */);
-        }
+        ptr: node_ptr as &[u8]
     }
 }
 
 fn @make_cpu_bvh4_tri(tri_ptr: &Bvh4Tri) -> BvhTri {
     BvhTri {
         load: @ |i| {
-            make_tri(make_vec3(tri_ptr.v0(0)(i), tri_ptr.v0(1)(i), tri_ptr.v0(2)(i)),
-                     make_vec3(tri_ptr.e1(0)(i), tri_ptr.e1(1)(i), tri_ptr.e1(2)(i)),
-                     make_vec3(tri_ptr.e2(0)(i), tri_ptr.e2(1)(i), tri_ptr.e2(2)(i)),
-                     make_vec3(tri_ptr. n(0)(i), tri_ptr. n(1)(i), tri_ptr. n(2)(i)))
+            let v0 = make_vec3(tri_ptr.v0(0)(i), tri_ptr.v0(1)(i), tri_ptr.v0(2)(i));
+            let e1 = make_vec3(tri_ptr.e1(0)(i), tri_ptr.e1(1)(i), tri_ptr.e1(2)(i));
+            let e2 = make_vec3(tri_ptr.e2(0)(i), tri_ptr.e2(1)(i), tri_ptr.e2(2)(i));
+            let n  = make_vec3(tri_ptr. n(0)(i), tri_ptr. n(1)(i), tri_ptr. n(2)(i));
+            make_tri(v0, e1, e2, n)
         },
         id: @ |i| tri_ptr.id(i),
-        size: 4
+        ptr: tri_ptr as &[u8]
     }
 }
 
@@ -133,7 +137,10 @@ fn @make_cpu_bvh4(bvh4: Bvh4) -> Bvh {
     Bvh {
         node: @ |j| make_cpu_bvh4_node(align(&bvh4.nodes(j) as &i8, 16) as &Bvh4Node),
         tri:  @ |j| make_cpu_bvh4_tri(align(&bvh4.tris(j) as &i8, 16) as &Bvh4Tri),
-        arity: 4
+        arity: 4,
+        tri_size: 4,
+        node_bytes: 128,
+        tri_bytes:  208,
     }
 }
 
@@ -173,26 +180,21 @@ fn @make_cpu_bvh8_node(node_ptr: &Bvh8Node) -> BvhNode {
                       make_vec3(node_ptr.bounds(1)(i), node_ptr.bounds(3)(i), node_ptr.bounds(5)(i)))
         },
         child: @ |i| node_ptr.child(i),
-        prefetch: @ || {
-            let ptr = node_ptr as &[u8];
-            cpu_prefetch(&ptr(0),   0 /* read */, 3 /* closest locality */, 1 /* data */);
-            cpu_prefetch(&ptr(64),  0 /* read */, 3 /* closest locality */, 1 /* data */);
-            cpu_prefetch(&ptr(128), 0 /* read */, 3 /* closest locality */, 1 /* data */);
-            cpu_prefetch(&ptr(192), 0 /* read */, 3 /* closest locality */, 1 /* data */);
-        }
+        ptr: node_ptr as &[u8]
     }
 }
 
 fn @make_cpu_bvh8_tri(tri_ptr: &Bvh8Tri) -> BvhTri {
     BvhTri {
         load: @ |i| {
-            make_tri(make_vec3(tri_ptr.v0(0)(i), tri_ptr.v0(1)(i), tri_ptr.v0(2)(i)),
-                     make_vec3(tri_ptr.e1(0)(i), tri_ptr.e1(1)(i), tri_ptr.e1(2)(i)),
-                     make_vec3(tri_ptr.e2(0)(i), tri_ptr.e2(1)(i), tri_ptr.e2(2)(i)),
-                     make_vec3(tri_ptr. n(0)(i), tri_ptr. n(1)(i), tri_ptr. n(2)(i)))
+            let v0 = make_vec3(tri_ptr.v0(0)(i), tri_ptr.v0(1)(i), tri_ptr.v0(2)(i));
+            let e1 = make_vec3(tri_ptr.e1(0)(i), tri_ptr.e1(1)(i), tri_ptr.e1(2)(i));
+            let e2 = make_vec3(tri_ptr.e2(0)(i), tri_ptr.e2(1)(i), tri_ptr.e2(2)(i));
+            let n  = make_vec3(tri_ptr. n(0)(i), tri_ptr. n(1)(i), tri_ptr. n(2)(i));
+            make_tri(v0, e1, e2, n)
         },
         id: @ |i| tri_ptr.id(i),
-        size: 8
+        ptr: tri_ptr as &[u8]
     }
 }
 
@@ -200,7 +202,10 @@ fn @make_cpu_bvh8_tri8(bvh8: Bvh8) -> Bvh {
     Bvh {
         node: @ |j| make_cpu_bvh8_node(align(&bvh8.nodes(j) as &i8, 32) as &Bvh8Node),
         tri:  @ |j| make_cpu_bvh8_tri(align(&bvh8.tris(j) as &i8, 32) as &Bvh8Tri),
-        arity: 8
+        arity: 8,
+        tri_size: 8,
+        node_bytes: 256,
+        tri_bytes:  416,
     }
 }
 
@@ -208,7 +213,10 @@ fn @make_cpu_bvh8_tri4(bvh84: Bvh8Tri4) -> Bvh {
     Bvh {
         node: @ |j| make_cpu_bvh8_node(align(&bvh84.nodes(j) as &i8, 32) as &Bvh8Node),
         tri:  @ |j| make_cpu_bvh4_tri(align(&bvh84.tris(j) as &i8, 16) as &Bvh4Tri),
-        arity: 8
+        arity: 8,
+        tri_size: 4,
+        node_bytes: 256,
+        tri_bytes:  208,
     }
 }
 
@@ -308,26 +316,26 @@ fn @make_cpu_single_mapping( ray_box_intrinsics: RayBoxIntrinsics
     let branchless = bvh.arity > 4;
 
     fn @iterate_primitives( leaf_ref: NodeRef
-                          , ray: Ray
+                          , ray: &Ray
                           , body: fn (Intersector) -> ()
                           ) -> () {
         if unlikely(leaf_ref.tmin >= ray.tmax) { return() }
 
-        let mut tri_id = !leaf_ref.node;
-        while true {
-            let tri = bvh.tri(tri_id++);
+        for i in vectorize(bvh.tri_size, bvh.tri_size * sizeof[float](), 0, bvh.tri_size) {
+            let mut tri_id = !leaf_ref.node;
+            while true {
+                let tri = bvh.tri(tri_id++);
 
-            for i in vectorize(tri.size, tri.size * sizeof[float](), 0, tri.size) {
-                let closest_intr : Intersector = @ |ray, intr| {
+                let closest_intr : Intersector = @ |ray, record_hit| {
                     // Compute the intersection for each lane
-                    let (found, t, u, v) = intersect_ray_tri(cpu_intrinsics, ray, tri.load(i));
+                    let (found, t, u, v) = intersect_ray_tri(cpu_intrinsics, false, ray, tri.load(i));
 
                     // Find the closest intersection
                     if any(found) {
                         let found_t = select(found, t, flt_max);
-                        let min_t = reduce(found_t, tri.size, ray_box_intrinsics.fminf);
+                        let min_t = reduce(found_t, bvh.tri_size, ray_box_intrinsics.fminf);
                         let lane = index_of(found_t, min_t);
-                        intr(make_hit(
+                        record_hit(make_hit(
                             -1,
                             tri.id(lane) & 0x7FFFFFFF,
                             extract(found_t, lane),
@@ -337,9 +345,9 @@ fn @make_cpu_single_mapping( ray_box_intrinsics: RayBoxIntrinsics
                 };
 
                 body(closest_intr);
-            }
 
-            if (tri.id(tri.size - 1) & bitcast[i32](0x80000000u)) != 0 { return() }
+                if (tri.id(bvh.tri_size - 1) & bitcast[i32](0x80000000u)) != 0 { break() }
+            }
         }
     }
 
@@ -361,13 +369,13 @@ fn @make_cpu_single_mapping( ray_box_intrinsics: RayBoxIntrinsics
 
             // Push intersected nodes on the stack
             let mut n = 0;
-            for bit in one_bits(mask) {
+            for bit in one_bits(mask) @{
                 let child_id = node.child(bit);
                 if unlikely(child_id == 0) { break() }
 
-                if likely(child_id > 0) {
-                    bvh.node(child_id - 1).prefetch();
-                }
+                let ptr   = select(child_id > 0, bvh.node(child_id - 1).ptr, bvh.tri(!child_id).ptr);
+                let bytes = select(bvh.node_bytes < bvh.tri_bytes, bvh.node_bytes, bvh.tri_bytes);
+                prefetch_bytes(ptr, bytes);
 
                 let t = extract(tentry, bit);
                 if config.any_hit || t < stack.top().tmin {
@@ -413,7 +421,7 @@ fn @make_cpu_hybrid_mapping( ray_box_intrinsics: RayBoxIntrinsics
     };
 
     fn @iterate_primitives( leaf_ref: NodeRef
-                          , ray: Ray
+                          , ray: &Ray
                           , body: fn (Intersector) -> ()
                           ) -> () {
         if all(leaf_ref.tmin >= ray.tmax) { return() }
@@ -421,13 +429,25 @@ fn @make_cpu_hybrid_mapping( ray_box_intrinsics: RayBoxIntrinsics
         let mut tri_id = !leaf_ref.node;
         while true {
             let tri = bvh.tri(tri_id++);
-            for k in range(0, $tri.size) {
+            for k in range(0, $bvh.tri_size) {
                 let tri_id = tri.id(k);
                 if tri_id == bitcast[int](0xFFFFFFFFu) { return() }
 
-                body(make_ray_tri_intersector(cpu_intrinsics, tri.load(k), tri_id & 0x7FFFFFFF));
+                let intr : Intersector = @ |ray, record_hit| {
+                    let (mask, t, u, v) = intersect_ray_tri(cpu_intrinsics, false, ray, tri.load(k));
+                    if mask {
+                        record_hit(Hit {
+                            distance:  t,
+                            uv_coords: make_vec2(u, v),
+                            prim_id:   tri_id & 0x7FFFFFFF,
+                            inst_id:   undef[int]()
+                        })
+                    }
+                };
+
+                body(intr);
             }
-            if (tri.id(tri.size - 1) & bitcast[i32](0x80000000u)) != 0 { return() }
+            if (tri.id(bvh.tri_size - 1) & bitcast[i32](0x80000000u)) != 0 { return() }
         }
     }
 
@@ -449,12 +469,15 @@ fn @make_cpu_hybrid_mapping( ray_box_intrinsics: RayBoxIntrinsics
                 let lane_ray = load_ray(ray, lane);
                 let mut lane_hit = empty_hit(lane_ray.tmax);
 
+                let ray_ptr = &lane_ray;
+                let hit_ptr = &mut lane_hit;
+
                 for k in vectorize(bvh.arity, bvh.arity * sizeof[float](), 0, bvh.arity) {
-                    let single_mapping = make_cpu_single_mapping(ray_box_intrinsics, config, bvh, k, ray_octant(lane_ray));
+                    let single_mapping = make_cpu_single_mapping(ray_box_intrinsics, config, bvh, k, ray_octant(*ray_ptr));
                     let lane_stack = allocate_stack();
 
-                    lane_stack.push(node_ref.node, lane_ray.tmin);
-                    lane_hit = traverse_bvh(single_mapping, config, lane_stack, lane_ray);
+                    lane_stack.push(node_ref.node, ray_ptr.tmin);
+                    *hit_ptr = traverse_bvh(single_mapping, config, lane_stack, *ray_ptr);
                 }
 
                 if lane_hit.prim_id >= 0 {
@@ -465,7 +488,7 @@ fn @make_cpu_hybrid_mapping( ray_box_intrinsics: RayBoxIntrinsics
         } else {
             // Intersect the node with the packet of rays
             let node = bvh.node(node_ref.node - 1);
-            for k in range(0, $bvh.arity) {
+            for k in range(0, bvh.arity) @{
                 let child_id = node.child(k);
                 if unlikely(child_id == 0) { break() }
 

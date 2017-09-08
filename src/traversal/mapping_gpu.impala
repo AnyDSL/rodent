@@ -60,7 +60,7 @@ fn @make_bvh2_tri_nvvm(tri_ptr: &Bvh2Tri) -> BvhTri {
             make_tri(v0, e1, e2, n)
         },
         id: @ |i| bitcast[int](tri2(3)),
-        size: 1
+        ptr: tri_ptr as &[u8]
     }
 }
 
@@ -84,7 +84,7 @@ fn @make_bvh2_node_nvvm(node_ptr: &Bvh2Node) -> BvhNode {
             if octant >= 0 { make_gpu_ordered_bbox(bbox, octant) } else { bbox }
         },
         child: @ |i| children(i),
-        prefetch: @ || {} // No-op
+        ptr: node_ptr as &[u8]
     }
 }
 
@@ -92,7 +92,10 @@ fn @make_bvh2_nvvm(bvh2: Bvh2) -> Bvh {
     Bvh {
         node: @ |j| make_bvh2_node_nvvm(&bvh2.nodes(j)),
         tri:  @ |j| make_bvh2_tri_nvvm(&bvh2.tris(j)),
-        arity: 2
+        arity: 2,
+        tri_size: 1,
+        node_bytes: 64,
+        tri_bytes:  12
     }
 }
 
@@ -140,18 +143,30 @@ fn @make_gpu_mapping_single( config: TraversalConfig
                            ) -> TraversalMapping {
 
     fn @iterate_primitives( leaf_ref: NodeRef
-                          , ray: Ray
+                          , ray: &Ray
                           , body: fn (Intersector) -> ()
                           ) -> () {
         let mut tri_id = !leaf_ref.node;
         while true {
             let tri = bvh.tri(tri_id++);
 
-            for k in range(0, tri.size) {
-                body(make_ray_tri_intersector(gpu_intrinsics, tri.load(k), tri.id(k) & 0x7FFFFFFF));
+            for k in range(0, bvh.tri_size) {
+                let intr : Intersector = @ |ray, record_hit| {
+                    let (mask, t, u, v) = intersect_ray_tri(gpu_intrinsics, false, ray, tri.load(k));
+                    if mask {
+                        record_hit(Hit {
+                            distance:  t,
+                            uv_coords: make_vec2(u, v),
+                            prim_id:   tri.id(k) & 0x7FFFFFFF,
+                            inst_id:   undef[int]()
+                        })
+                    }
+                };
+
+                body(intr);
             }
 
-            if (bitcast[uint](tri.id(tri.size - 1)) & 0x80000000u) != 0u { break() }
+            if (bitcast[uint](tri.id(bvh.tri_size - 1)) & 0x80000000u) != 0u { break() }
         }
     }
 

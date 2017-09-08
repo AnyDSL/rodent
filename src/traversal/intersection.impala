@@ -29,21 +29,24 @@ struct BBox {
 }
 
 struct Bvh {
-    node:  fn (int) -> BvhNode,         // Access to one node of the BVH
-    tri:   fn (int) -> BvhTri,          // Access to one (possibly packed) triangle
-    arity: int                          // Arity of the BVH (number of children per node)
+    node:  fn (int) -> BvhNode,     // Access to one node of the BVH
+    tri:   fn (int) -> BvhTri,      // Access to one (possibly packed) triangle
+    arity: int,                     // Arity of the BVH (number of children per node)
+    tri_size: int,                  // Number of triangles per packet
+    node_bytes: int,                // Number of bytes per node
+    tri_bytes: int                  // Number of bytes per triangle
 }
 
 struct BvhNode {
-    bbox:     fn (int, int) -> BBox,    // Loads the bounding box of one child node (octant as second argument, -1 if no octant)
-    child:    fn (int) -> int,          // Gets the index of one child node
-    prefetch: fn () -> ()               // Prefetches this node
+    bbox:  fn (int, int) -> BBox,   // Loads the bounding box of one child node (octant as second argument, -1 if no octant)
+    child: fn (int) -> int,         // Gets the index of one child node
+    ptr:   &[u8]                    // Pointer to the node data
 }
 
 struct BvhTri {
-    load: fn (int) -> Tri,              // Loads the given triangle in the packet
-    id:   fn (int) -> int,              // Identifier of the given triangle in the packet
-    size: int                           // Number of triangles in the packet
+    load: fn (int) -> Tri,          // Loads the given triangle in the packet
+    id:   fn (int) -> int,          // Identifier of the given triangle in the packet
+    ptr:  &[u8]                     // Pointer to the triangle data
 }
 
 // Intrinsics required to perform the ray-box test
@@ -137,26 +140,38 @@ fn @empty_hit(tmax: float) -> Hit {
     make_hit(-1, -1, tmax, undef())
 }
 
-fn @intersect_ray_tri(math: Intrinsics, ray: Ray, tri: Tri) -> (bool, float, float, float) {
+fn @intersect_ray_tri(math: Intrinsics, early_exit: bool, ray: Ray, tri: Tri) -> (bool, float, float, float) {
+    let mut mask = true;
+    let no_hit = || -> ! return ((false, undef[float](), undef[float](), undef[float]()));
+    let expect = |cond: bool, _| -> ! {
+        mask &= cond;
+        if early_exit && likely(all(!mask)) { no_hit() }
+    };
+
     let c = vec3_sub(tri.v0, ray.org);
     let r = vec3_cross(ray.dir, c);
     let det = vec3_dot(tri.n, ray.dir);
     let abs_det = math.fabsf(det);
+    expect(abs_det != 0.0f);
 
     let u = prodsign(vec3_dot(r, tri.e2), det);
+    expect(u >= 0.0f);
+
     let v = prodsign(vec3_dot(r, tri.e1), det);
+    expect(v >= 0.0f);
 
-    let mut mask = (det != 0.0f) & (u >= 0.0f) & (v >= 0.0f) & (u + v <= abs_det);
-    if any(mask) {
-        let t = prodsign(vec3_dot(tri.n, c), det);
-        mask &= (t >= abs_det * ray.tmin) & (t <= abs_det * ray.tmax);
-        if any(mask) {
-            let inv_det = 1.0f / abs_det;
-            return((mask, t * inv_det, u * inv_det, v * inv_det))
-        }
-    }
+    let w = abs_det - u - v;
+    expect(w >= 0.0f);
 
-    (false, undef(), undef(), undef())
+    if !early_exit && likely(all(!mask)) { no_hit() }
+
+    let t = prodsign(vec3_dot(tri.n, c), det);
+    expect((abs_det != 0.0f) & (t >= abs_det * ray.tmin) & (t <= abs_det * ray.tmax));
+
+    if !early_exit && likely(all(!mask)) { no_hit() }
+    let inv_det = 1.0f / abs_det;
+
+    (mask, t * inv_det, u * inv_det, v * inv_det)
 }
 
 fn @intersect_ray_box(math: RayBoxIntrinsics, ordered: bool, ray: Ray, bbox: BBox) -> (bool, float, float) {
@@ -173,19 +188,4 @@ fn @intersect_ray_box(math: RayBoxIntrinsics, ordered: bool, ray: Ray, bbox: BBo
         };
 
     (math.fcmp_le(tentry, texit), tentry, texit)
-}
-
-// Helper function to create a ray-triangle intersector
-fn @make_ray_tri_intersector(math: Intrinsics, tri: Tri, prim_id: int) -> Intersector {
-    @ |ray, intr| {
-        let (mask, t, u, v) = intersect_ray_tri(math, ray, tri);
-        if mask {
-            intr(Hit {
-                distance:  t,
-                uv_coords: make_vec2(u, v),
-                prim_id:   prim_id,
-                inst_id:   undef()
-            })
-        }
-    }
 }
