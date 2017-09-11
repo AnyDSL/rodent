@@ -152,7 +152,6 @@ fn @intersect_ray_tri(math: Intrinsics, early_exit: bool, ray: Ray, tri: Tri) ->
     let r = vec3_cross(ray.dir, c);
     let det = vec3_dot(tri.n, ray.dir);
     let abs_det = math.fabsf(det);
-    expect(abs_det != 0.0f);
 
     let u = prodsign(vec3_dot(r, tri.e2), det);
     expect(u >= 0.0f);

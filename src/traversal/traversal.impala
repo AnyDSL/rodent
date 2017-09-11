@@ -1,5 +1,6 @@
+type EarlyExitFn         = fn () -> !;
 type IterateChildrenFn   = fn (Stack, &mut Ray, &mut Hit, fn (BBox) -> (bool, float, float)) -> ();
-type IteratePrimitivesFn = fn (NodeRef, &Ray, fn (Intersector) -> ()) -> ();
+type IteratePrimitivesFn = fn (NodeRef, &Ray, &Hit, EarlyExitFn, fn (Intersector) -> ()) -> ();
 
 // Structure containing the mapping of the traversal algorithm for a particular device.
 struct TraversalMapping {
@@ -10,13 +11,9 @@ struct TraversalMapping {
     iterate_primitives: IteratePrimitivesFn,
 }
 
-// Structure containing the configuration of the traversal algorithm for a particular use case.
-struct TraversalConfig {
-    any_hit: bool
-}
-
-fn @traverse_bvh(mapping: TraversalMapping, config: TraversalConfig, stack: Stack, mut ray: Ray) -> Hit {
+fn @traverse_bvh(mapping: TraversalMapping, stack: Stack, mut ray: Ray) -> Hit {
     let mut hit = empty_hit(ray.tmax);
+    let early_exit = || -> ! return(hit);
 
     // The traversal loop should not be unrolled
     while !stack.is_empty() {
@@ -29,15 +26,13 @@ fn @traverse_bvh(mapping: TraversalMapping, config: TraversalConfig, stack: Stac
         // Process leaves
         while unlikely(is_leaf(stack.top())) {
             // Process primitives, if any
-            for intersector in mapping.iterate_primitives(stack.top(), &ray) @{
-                with intr in intersector(ray) @{
+            with intersector in mapping.iterate_primitives(stack.top(), &ray, &hit, early_exit) {
+                with intr in intersector(ray) {
                     hit.prim_id   = intr.prim_id;
                     hit.distance  = intr.distance;
                     hit.uv_coords = intr.uv_coords;
                     ray.tmax      = intr.distance;
                 }
-
-                if config.any_hit && all(hit.prim_id >= 0) { return(hit) }
             }
 
             stack.pop()

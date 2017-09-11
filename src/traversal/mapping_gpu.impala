@@ -136,14 +136,16 @@ fn @make_ray_layout_nvvm(rays: &[Ray1AoS], hits: &mut[Hit1AoS]) -> RayLayout {
 
 // Mappings  -----------------------------------------------------------------------
 
-fn @make_gpu_mapping_single( config: TraversalConfig
-                           , bvh: Bvh
-                           , gpu_intrinsics: Intrinsics
+fn @make_gpu_mapping_single( gpu_intrinsics: Intrinsics
                            , ray_box_intrinsics: RayBoxIntrinsics
+                           , any_hit: bool
+                           , bvh: Bvh
                            ) -> TraversalMapping {
 
     fn @iterate_primitives( leaf_ref: NodeRef
                           , ray: &Ray
+                          , hit: &Hit
+                          , early_exit: EarlyExitFn
                           , body: fn (Intersector) -> ()
                           ) -> () {
         let mut tri_id = !leaf_ref.node;
@@ -164,6 +166,8 @@ fn @make_gpu_mapping_single( config: TraversalConfig
                 };
 
                 body(intr);
+
+                if any_hit && hit.prim_id >= 0 { early_exit() }
             }
 
             if (bitcast[uint](tri.id(bvh.tri_size - 1)) & 0x80000000u) != 0u { break() }
@@ -191,7 +195,7 @@ fn @make_gpu_mapping_single( config: TraversalConfig
             if mask == 3 {
                 let mut child1 = node.child(0);
                 let mut child2 = node.child(1);
-                if config.any_hit && tentry(1) < tentry(0) {
+                if any_hit && tentry(1) < tentry(0) {
                     let c = child1;
                     child1 = child2;
                     child2 = c;
@@ -209,7 +213,7 @@ fn @make_gpu_mapping_single( config: TraversalConfig
                 if mask & (1 << k) != 0 {
                     let child = node.child(k);
                     let t = tentry(k);
-                    if config.any_hit || t < tmin {
+                    if any_hit || t < tmin {
                         // Equivalent to stack.push(child, undef())
                         // but does not generate allocas for the stack's tmins
                         let top = stack.top();
@@ -237,7 +241,7 @@ fn @make_gpu_mapping_single( config: TraversalConfig
 fn @gpu_traverse( acc: Accelerator
                 , gpu_intrinsics: Intrinsics
                 , ray_box_intrinsics: RayBoxIntrinsics
-                , config: TraversalConfig
+                , any_hit: bool
                 , bvh: Bvh
                 , ray_layout: RayLayout
                 , ray_count: int
@@ -255,7 +259,7 @@ fn @gpu_traverse( acc: Accelerator
         let stack = allocate_stack();
         stack.push(1, undef());
 
-        let mapping = make_gpu_mapping_single(config, bvh, gpu_intrinsics, ray_box_intrinsics);
-        ray_layout.output(i, j, traverse_bvh(mapping, config, stack, ray))
+        let mapping = make_gpu_mapping_single(gpu_intrinsics, ray_box_intrinsics, any_hit, bvh);
+        ray_layout.output(i, j, traverse_bvh(mapping, stack, ray))
     }
 }
