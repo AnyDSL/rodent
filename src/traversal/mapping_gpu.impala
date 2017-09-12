@@ -138,8 +138,8 @@ fn @make_ray_layout_nvvm(rays: &[Ray1AoS], hits: &mut[Hit1AoS]) -> RayLayout {
 
 fn @make_gpu_mapping_single( gpu_intrinsics: Intrinsics
                            , ray_box_intrinsics: RayBoxIntrinsics
-                           , any_hit: bool
                            , bvh: Bvh
+                           , any_hit: bool
                            ) -> TraversalMapping {
 
     fn @iterate_primitives( leaf_ref: NodeRef
@@ -242,10 +242,10 @@ fn @make_gpu_mapping_single( gpu_intrinsics: Intrinsics
 fn @gpu_traverse( acc: Accelerator
                 , gpu_intrinsics: Intrinsics
                 , ray_box_intrinsics: RayBoxIntrinsics
-                , any_hit: bool
                 , bvh: Bvh
                 , ray_layout: RayLayout
                 , ray_count: int
+                , any_hit: bool
                 ) -> () {
     let block_size = 64;
     let grid  = (ray_count, ray_layout.packet_size, 1);
@@ -260,7 +260,7 @@ fn @gpu_traverse( acc: Accelerator
         let stack = allocate_stack();
         stack.push(1, undef());
 
-        let mapping = make_gpu_mapping_single(gpu_intrinsics, ray_box_intrinsics, any_hit, bvh);
+        let mapping = make_gpu_mapping_single(gpu_intrinsics, ray_box_intrinsics, bvh, any_hit);
         ray_layout.output(i, j, traverse_bvh(mapping, stack, ray))
     }
 }
