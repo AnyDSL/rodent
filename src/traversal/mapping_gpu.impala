@@ -177,6 +177,7 @@ fn @make_gpu_mapping_single( gpu_intrinsics: Intrinsics
     fn @iterate_children( stack: Stack
                         , ray: &mut Ray
                         , hit: &mut Hit
+                        , early_exit: EarlyExitFn
                         , body: fn (BBox) -> (bool, float, float)
                         ) -> () {
         let node_ref = stack.top();

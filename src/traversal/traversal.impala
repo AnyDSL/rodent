@@ -1,5 +1,5 @@
 type EarlyExitFn         = fn () -> !;
-type IterateChildrenFn   = fn (Stack, &mut Ray, &mut Hit, fn (BBox) -> (bool, float, float)) -> ();
+type IterateChildrenFn   = fn (Stack, &mut Ray, &mut Hit, EarlyExitFn, fn (BBox) -> (bool, float, float)) -> ();
 type IteratePrimitivesFn = fn (NodeRef, &Ray, &Hit, EarlyExitFn, fn (Intersector) -> ()) -> ();
 
 // Structure containing the mapping of the traversal algorithm for a particular device.
@@ -19,7 +19,7 @@ fn @traverse_bvh(mapping: TraversalMapping, stack: Stack, mut ray: Ray) -> Hit {
     while !stack.is_empty() {
         // Intersect the bounding box of every child of the current node
         // This may require to update the current traversal result
-        for bbox in mapping.iterate_children(stack, &mut ray, &mut hit) @{
+        for bbox in mapping.iterate_children(stack, &mut ray, &mut hit, early_exit) @{
             intersect_ray_box(mapping.ray_box_intrinsics, mapping.ray_box_ordered, ray, bbox)
         }
 

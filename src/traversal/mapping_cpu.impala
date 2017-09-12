@@ -362,6 +362,7 @@ fn @make_cpu_single_mapping( ray_box_intrinsics: RayBoxIntrinsics
     fn @iterate_children( stack: Stack
                         , ray: &mut Ray
                         , hit: &mut Hit
+                        , early_exit: EarlyExitFn
                         , body: fn (BBox) -> (bool, float, float)
                         ) -> () {
         while likely(is_inner(stack.top())) {
@@ -429,6 +430,8 @@ fn @make_cpu_hybrid_mapping( ray_box_intrinsics: RayBoxIntrinsics
         _  => vector_width // Be conservative with unknown SIMD widths
     };
 
+    let mut valid = (1 << vector_width) - 1;
+
     fn @iterate_primitives( leaf_ref: NodeRef
                           , ray: &Ray
                           , hit: &Hit
@@ -438,7 +441,6 @@ fn @make_cpu_hybrid_mapping( ray_box_intrinsics: RayBoxIntrinsics
         if all(leaf_ref.tmin >= ray.tmax) { return() }
 
         let mut tri_id = !leaf_ref.node;
-
         while true {
             let tri = bvh.tri(tri_id++);
             for k in range(0, $bvh.tri_size) {
@@ -460,8 +462,12 @@ fn @make_cpu_hybrid_mapping( ray_box_intrinsics: RayBoxIntrinsics
                 // TODO: $ is necessary here to prevent duplication of the rv_all call
                 body($intr);
 
-                if any_hit && all(hit.prim_id >= 0) { early_exit() }
+                if any_hit {
+                    valid &= ballot(hit.prim_id < 0);
+                    if valid == 0 { early_exit() }
+                }
             }
+
             if (tri.id(bvh.tri_size - 1) & bitcast[i32](0x80000000u)) != 0 { return() }
         }
     }
@@ -469,12 +475,13 @@ fn @make_cpu_hybrid_mapping( ray_box_intrinsics: RayBoxIntrinsics
     fn @iterate_children( stack: Stack
                         , ray: &mut Ray
                         , hit: &mut Hit
+                        , early_exit: EarlyExitFn
                         , body: fn (BBox) -> (bool, float, float)
                         ) -> () {
         let node_ref = stack.top();
         stack.pop();
 
-        let mask = ballot(node_ref.tmin < ray.tmax);
+        let mask = valid & ballot(node_ref.tmin < ray.tmax);
         if unlikely(mask == 0) { return() }
 
         if !packet_only && unlikely(cpu_popcount32(mask) <= switch_threshold) {
@@ -498,8 +505,12 @@ fn @make_cpu_hybrid_mapping( ray_box_intrinsics: RayBoxIntrinsics
                 if lane_hit.prim_id >= 0 {
                     store_hit(hit, lane, lane_hit);
                     store(&mut ray.tmax, lane, lane_hit.distance);
+
+                    if any_hit { valid &= !(1 << lane); }
                 }
             }
+
+            if valid == 0 { early_exit() }
         } else {
             // Intersect the node with the packet of rays
             let node = bvh.node(node_ref.node - 1);
