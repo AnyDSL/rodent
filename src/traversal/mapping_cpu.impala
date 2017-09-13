@@ -428,8 +428,8 @@ fn @make_cpu_hybrid_mapping( ray_box_intrinsics: RayBoxIntrinsics
                            , any_hit: bool
                            ) -> TraversalMapping {
     let switch_threshold = match vector_width {
-        4  =>  3,
-        8  =>  if bvh.arity == 4 { 5 } else { 6 },
+        4  => 3,
+        8  => if bvh.arity == 4 { 5 } else { 6 },
         16 => 7,
         _  => 0 // Be conservative with unknown SIMD widths
     };
@@ -533,10 +533,14 @@ fn @make_cpu_hybrid_mapping( ray_box_intrinsics: RayBoxIntrinsics
                 let (hit, tentry, _) = body(node.bbox(k));
 
                 if any(hit) {
+                    // Important: cull nodes that are too far away
+                    // from being traversed with the single ray kernel
+                    let thit = select(hit, tentry, flt_max);
+
                     if any_hit || any(stack.top().tmin > tentry) {
-                        stack.push(child_id, tentry);
+                        stack.push(child_id, thit);
                     } else {
-                        stack.push_after(child_id, tentry);
+                        stack.push_after(child_id, thit);
                     }
                 }
             }
