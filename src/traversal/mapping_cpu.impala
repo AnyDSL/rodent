@@ -493,14 +493,10 @@ fn @make_cpu_hybrid_mapping( ray_box_intrinsics: RayBoxIntrinsics
             for lane in one_bits(mask) {
                 // Traverse the current BVH node using single ray traversal
                 let lane_ray = load_ray(ray, lane);
-                let lane_order = [
-                    bitcast[int](load(bitcast[&float](&order(0)), lane)),
-                    bitcast[int](load(bitcast[&float](&order(1)), lane)),
-                    bitcast[int](load(bitcast[&float](&order(2)), lane)),
-                    bitcast[int](load(bitcast[&float](&order(3)), lane)),
-                    bitcast[int](load(bitcast[&float](&order(4)), lane)),
-                    bitcast[int](load(bitcast[&float](&order(5)), lane))
-                ];
+                let mut lane_order : [int * 6];
+                for i in range(0, 6) @{
+                    lane_order(i) = bitcast[int](load(bitcast[&float](&order(i)), lane));
+                }
                 let mut lane_hit = empty_hit(lane_ray.tmax);
 
                 let ray_ptr = &lane_ray;
