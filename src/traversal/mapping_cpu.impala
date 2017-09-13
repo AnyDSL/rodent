@@ -14,20 +14,24 @@ extern "C" {
 
 // Misc. ---------------------------------------------------------------------------
 
-// Loads a bounding box ordered by octant on the CPU
-fn @make_cpu_ordered_bbox(bounds_ptr: &[i8], k: int, octant: int, size: int) -> BBox {
+// Computes the indices of the bounding box corners for a given octant
+fn @make_cpu_octant_order(octant: int, size: int) -> [int * 6] {
     let (ox, oy, oz) = (octant & 1, (octant >> 1) & 1, (octant >> 2) & 1);
     let (ix, iy, iz) = (ox * size, 2 * size + oy * size, 4 * size + oz * size);
+    [ix ^ size, iy ^ size, iz ^ size, ix, iy, iz]
+}
 
+// Loads a bounding box ordered by octant on the CPU
+fn @make_cpu_ordered_bbox(bounds_ptr: &[i8], k: int, order: [int * 6], size: int) -> BBox {
     let (xmin, ymin, zmin) = (
-        *(align(&bounds_ptr((ix ^ size) + k), size) as &float),
-        *(align(&bounds_ptr((iy ^ size) + k), size) as &float),
-        *(align(&bounds_ptr((iz ^ size) + k), size) as &float)
+        *(align(&bounds_ptr(order(0) + k), size) as &float),
+        *(align(&bounds_ptr(order(1) + k), size) as &float),
+        *(align(&bounds_ptr(order(2) + k), size) as &float)
     );
     let (xmax, ymax, zmax) = (
-        *(align(&bounds_ptr(ix + k), size) as &float),
-        *(align(&bounds_ptr(iy + k), size) as &float),
-        *(align(&bounds_ptr(iz + k), size) as &float)
+        *(align(&bounds_ptr(order(3) + k), size) as &float),
+        *(align(&bounds_ptr(order(4) + k), size) as &float),
+        *(align(&bounds_ptr(order(5) + k), size) as &float)
     );
 
     make_bbox(make_vec3(xmin, ymin, zmin), make_vec3(xmax, ymax, zmax))
@@ -108,12 +112,10 @@ struct Bvh4Node {
 
 fn @make_cpu_bvh4_node(node_ptr: &Bvh4Node) -> BvhNode {
     BvhNode {
-        bbox: @ |i, octant| if octant >= 0 {
-            make_cpu_ordered_bbox(&node_ptr.bounds as &[i8], i, octant, 16)
-        } else {
+        bbox: @ |i|
             make_bbox(make_vec3(node_ptr.bounds(0)(i), node_ptr.bounds(2)(i), node_ptr.bounds(4)(i)),
-                      make_vec3(node_ptr.bounds(1)(i), node_ptr.bounds(3)(i), node_ptr.bounds(5)(i)))
-        },
+                      make_vec3(node_ptr.bounds(1)(i), node_ptr.bounds(3)(i), node_ptr.bounds(5)(i))),
+        ordered_bbox: @ |i, order| make_cpu_ordered_bbox(&node_ptr.bounds as &[i8], i, order, 16),
         child: @ |i| node_ptr.child(i),
         ptr: node_ptr as &[u8]
     }
@@ -137,6 +139,7 @@ fn @make_cpu_bvh4(bvh4: Bvh4) -> Bvh {
     Bvh {
         node: @ |j| make_cpu_bvh4_node(align(&bvh4.nodes(j) as &i8, 16) as &Bvh4Node),
         tri:  @ |j| make_cpu_bvh4_tri(align(&bvh4.tris(j) as &i8, 16) as &Bvh4Tri),
+        order: @ |octant| make_cpu_octant_order(octant, 16),
         arity: 4,
         tri_size: 4,
         node_bytes: 128,
@@ -173,12 +176,10 @@ struct Bvh8Node {
 
 fn @make_cpu_bvh8_node(node_ptr: &Bvh8Node) -> BvhNode {
     BvhNode {
-        bbox: @ |i, octant| if octant >= 0 {
-            make_cpu_ordered_bbox(&node_ptr.bounds as &[i8], i, octant, 32)
-        } else {
+        bbox: @ |i|
             make_bbox(make_vec3(node_ptr.bounds(0)(i), node_ptr.bounds(2)(i), node_ptr.bounds(4)(i)),
-                      make_vec3(node_ptr.bounds(1)(i), node_ptr.bounds(3)(i), node_ptr.bounds(5)(i)))
-        },
+                      make_vec3(node_ptr.bounds(1)(i), node_ptr.bounds(3)(i), node_ptr.bounds(5)(i))),
+        ordered_bbox: @ |i, order| make_cpu_ordered_bbox(&node_ptr.bounds as &[i8], i, order, 32),
         child: @ |i| node_ptr.child(i),
         ptr: node_ptr as &[u8]
     }
@@ -202,6 +203,7 @@ fn @make_cpu_bvh8_tri8(bvh8: Bvh8) -> Bvh {
     Bvh {
         node: @ |j| make_cpu_bvh8_node(align(&bvh8.nodes(j) as &i8, 32) as &Bvh8Node),
         tri:  @ |j| make_cpu_bvh8_tri(align(&bvh8.tris(j) as &i8, 32) as &Bvh8Tri),
+        order: @ |octant| make_cpu_octant_order(octant, 32),
         arity: 8,
         tri_size: 8,
         node_bytes: 256,
@@ -213,6 +215,7 @@ fn @make_cpu_bvh8_tri4(bvh84: Bvh8Tri4) -> Bvh {
     Bvh {
         node: @ |j| make_cpu_bvh8_node(align(&bvh84.nodes(j) as &i8, 32) as &Bvh8Node),
         tri:  @ |j| make_cpu_bvh4_tri(align(&bvh84.tris(j) as &i8, 16) as &Bvh4Tri),
+        order: @ |octant| make_cpu_octant_order(octant, 32),
         arity: 8,
         tri_size: 4,
         node_bytes: 256,
@@ -304,7 +307,7 @@ fn @make_cpu_ray8_layout(rays: &[Ray8SoA], hits: &mut [Hit8SoA]) -> RayLayout {
 fn @make_cpu_single_mapping( ray_box_intrinsics: RayBoxIntrinsics
                            , bvh: Bvh
                            , k: int
-                           , octant: int
+                           , order: [int * 6]
                            , any_hit: bool
                            ) -> TraversalMapping {
     // Parameters that define how nodes are sorted on the stack
@@ -371,7 +374,7 @@ fn @make_cpu_single_mapping( ray_box_intrinsics: RayBoxIntrinsics
             if unlikely(node_ref.tmin >= ray.tmax) { continue() }
 
             let node = bvh.node(node_ref.node - 1);
-            let (hit, tentry, _) = body(node.bbox(k, octant));
+            let (hit, tentry, _) = body(node.ordered_bbox(k, order));
 
             let mask = !ballot(!hit) & ((1 << bvh.arity) - 1);
             if likely(mask == 0) { continue() }
@@ -421,6 +424,7 @@ fn @make_cpu_hybrid_mapping( ray_box_intrinsics: RayBoxIntrinsics
                            , bvh: Bvh
                            , vector_width: int
                            , single: bool
+                           , order: &[int * 6]
                            , any_hit: bool
                            ) -> TraversalMapping {
     let switch_threshold = match vector_width {
@@ -489,13 +493,21 @@ fn @make_cpu_hybrid_mapping( ray_box_intrinsics: RayBoxIntrinsics
             for lane in one_bits(mask) {
                 // Traverse the current BVH node using single ray traversal
                 let lane_ray = load_ray(ray, lane);
+                let lane_order = [
+                    bitcast[int](load(bitcast[&float](&order(0)), lane)),
+                    bitcast[int](load(bitcast[&float](&order(1)), lane)),
+                    bitcast[int](load(bitcast[&float](&order(2)), lane)),
+                    bitcast[int](load(bitcast[&float](&order(3)), lane)),
+                    bitcast[int](load(bitcast[&float](&order(4)), lane)),
+                    bitcast[int](load(bitcast[&float](&order(5)), lane))
+                ];
                 let mut lane_hit = empty_hit(lane_ray.tmax);
 
                 let ray_ptr = &lane_ray;
                 let hit_ptr = &mut lane_hit;
 
                 for k in vectorize(bvh.arity, bvh.arity * sizeof[float](), 0, bvh.arity) {
-                    let single_mapping = make_cpu_single_mapping(ray_box_intrinsics, bvh, k, ray_octant(*ray_ptr), any_hit);
+                    let single_mapping = make_cpu_single_mapping(ray_box_intrinsics, bvh, k, lane_order, any_hit);
                     let lane_stack = allocate_stack();
 
                     lane_stack.push(node_ref.node, ray_ptr.tmin);
@@ -518,7 +530,7 @@ fn @make_cpu_hybrid_mapping( ray_box_intrinsics: RayBoxIntrinsics
                 let child_id = node.child(k);
                 if unlikely(child_id == 0) { break() }
 
-                let (hit, tentry, _) = body(node.bbox(k, -1));
+                let (hit, tentry, _) = body(node.bbox(k));
 
                 if any(hit) {
                     if any_hit || any(stack.top().tmin > tentry) {
@@ -552,10 +564,11 @@ fn @cpu_traverse_packet( ray_box_intrinsics: RayBoxIntrinsics
         for j in vectorize(inc, inc * sizeof[float](), 0, inc) {
             let ray = ray_layout.input(i, j);
             let stack = allocate_stack();
+            let order = bvh.order(ray_octant(ray));
 
             stack.push(1, ray.tmin);
 
-            let mapping = make_cpu_hybrid_mapping(ray_box_intrinsics, bvh, inc, false, any_hit);
+            let mapping = make_cpu_hybrid_mapping(ray_box_intrinsics, bvh, inc, false, &order, any_hit);
             ray_layout.output(i, j, traverse_bvh(mapping, stack, ray));
         }
     }
@@ -572,10 +585,11 @@ fn @cpu_traverse_hybrid( ray_box_intrinsics: RayBoxIntrinsics
         for j in vectorize(inc, inc * sizeof[float](), 0, inc) {
             let ray = ray_layout.input(i, j);
             let stack = allocate_stack();
+            let order = bvh.order(ray_octant(ray));
 
             stack.push(1, ray.tmin);
 
-            let mapping = make_cpu_hybrid_mapping(ray_box_intrinsics, bvh, inc, true, any_hit);
+            let mapping = make_cpu_hybrid_mapping(ray_box_intrinsics, bvh, inc, true, &order, any_hit);
             ray_layout.output(i, j, traverse_bvh(mapping, stack, ray));
         }
     }
@@ -592,11 +606,12 @@ fn @cpu_traverse_single( ray_box_intrinsics: RayBoxIntrinsics
         let (packet_id, ray_id) = (i / inc, i % inc);
         let ray = ray_layout.input(packet_id, ray_id);
         let stack = allocate_stack();
+        let order = bvh.order(ray_octant(ray));
 
         stack.push(1, ray.tmin);
 
         for k in vectorize(bvh.arity, bvh.arity * sizeof[float](), 0, bvh.arity) {
-            let mapping = make_cpu_single_mapping(ray_box_intrinsics, bvh, k, ray_octant(ray), any_hit);
+            let mapping = make_cpu_single_mapping(ray_box_intrinsics, bvh, k, order, any_hit);
             let hit = traverse_bvh(mapping, stack, ray);
             ray_layout.output(packet_id, ray_id, hit);
         }

@@ -23,8 +23,12 @@ fn @range(a: int, b: int, body: fn (int) -> ()) -> () {
     range_step(a, b, 1, body);
 }
 
+fn @signbit(x: float) -> int {
+    bitcast[int](x) ^ (bitcast[int](x) & 0x7FFFFFFF)
+}
+
 fn @prodsign(x: float, y: float) -> float {
-    bitcast[float](bitcast[int](x) ^ (bitcast[int](y) & bitcast[int](0x80000000u)))
+    bitcast[float](bitcast[int](x) ^ signbit(y))
 }
 
 fn safe_rcp(x: float) -> float {
