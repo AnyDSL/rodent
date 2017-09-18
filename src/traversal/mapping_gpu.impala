@@ -42,8 +42,7 @@ fn @make_bvh2_tri_nvvm(tri_ptr: &Bvh2Tri) -> BvhTri {
             let n  = make_vec3(tri0(3), tri1(3), vec3_cross(e1, e2).z);
             make_tri(v0, e1, e2, n)
         },
-        id: @ |i| bitcast[int](tri2(3)),
-        ptr: tri_ptr as &[u8]
+        id: @ |i| bitcast[int](tri2(3))
     }
 }
 
@@ -67,8 +66,7 @@ fn @make_bvh2_node_nvvm(node_ptr: &Bvh2Node) -> BvhNode {
     BvhNode {
         bbox: @ |i| bbox(i),
         ordered_bbox: @ |i, _| undef[BBox](), // Not implemented
-        child: @ |i| children(i),
-        ptr: node_ptr as &[u8]
+        child: @ |i| children(i)
     }
 }
 
@@ -76,11 +74,10 @@ fn @make_bvh2_nvvm(bvh2: Bvh2) -> Bvh {
     Bvh {
         node: @ |j| make_bvh2_node_nvvm(&bvh2.nodes(j)),
         tri:  @ |j| make_bvh2_tri_nvvm(&bvh2.tris(j)),
-        order: @ |octant| undef[[int * 6]](), // Not implemented
+        order: @ |_| undef[[int * 6]](), // Not implemented
+        prefetch: @ |_| (), // Not implemented
         arity: 2,
-        tri_size: 1,
-        node_bytes: 64,
-        tri_bytes:  12
+        tri_size: 1
     }
 }
 

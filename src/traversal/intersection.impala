@@ -32,24 +32,21 @@ struct Bvh {
     node:  fn (int) -> BvhNode,     // Access to one node of the BVH
     tri:   fn (int) -> BvhTri,      // Access to one (possibly packed) triangle
     order: fn (int) -> [int * 6],   // Orders the bounding box corners for a given octant
+    prefetch: fn (int) -> (),       // Prefetches a leaf or inner node
 
     arity: int,                     // Arity of the BVH (number of children per node)
     tri_size: int,                  // Number of triangles per packet
-    node_bytes: int,                // Number of bytes per node
-    tri_bytes: int                  // Number of bytes per triangle
 }
 
 struct BvhNode {
     bbox:         fn (int) -> BBox,             // Loads the bounding box of one child node
     ordered_bbox: fn (int, [int * 6]) -> BBox,  // Loads the bounding box of one child with the given octant order (mapping specific)
     child:        fn (int) -> int,              // Gets the index of one child node
-    ptr:          &[u8]                         // Pointer to the node data
 }
 
 struct BvhTri {
     load: fn (int) -> Tri,          // Loads the given triangle in the packet
     id:   fn (int) -> int,          // Identifier of the given triangle in the packet
-    ptr:  &[u8]                     // Pointer to the triangle data
 }
 
 // Intrinsics required to perform the ray-box test

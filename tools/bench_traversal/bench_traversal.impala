@@ -33,12 +33,12 @@ extern fn cpu_occluded_bvh4_single_avx2(bvh: &Bvh4, rays: &[Ray1AoS], hits: &mut
         true);*/
 }
 extern fn cpu_intersect_bvh4_hybrid8_avx2(bvh: &Bvh4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () {
-    /*cpu_traverse_hybrid(
+    cpu_traverse_hybrid(
         make_ray_box_intrinsics_avx2(),
         make_cpu_bvh4(*bvh),
         make_cpu_ray8_layout(rays, hits),
         ray_count,
-        false);*/
+        false);
 }
 extern fn cpu_occluded_bvh4_hybrid8_avx2(bvh: &Bvh4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () {
     /*cpu_traverse_hybrid(
