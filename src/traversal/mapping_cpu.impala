@@ -544,7 +544,7 @@ fn @make_cpu_hybrid_mapping( ray_box_intrinsics: RayBoxIntrinsics
                     // from being traversed with the single ray kernel
                     let thit = select(hit, tentry, flt_max);
 
-                    if any_hit || any(stack.top().tmin > tentry) {
+                    if any_hit || any(stack.top().tmin > thit) {
                         stack.push(child_id, thit);
 
                         // Prefetch only when the child is closer than what is on the stack
