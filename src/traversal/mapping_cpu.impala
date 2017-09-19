@@ -324,7 +324,7 @@ fn @cpu_traverse_single( ray_box_intrinsics: RayBoxIntrinsics
 
     for i in range(0, ray_count) {
         for j in vectorize(vector_width, vector_width * sizeof[float](), 0, vector_width) {
-            let (packet_id, ray_id) = (i / vector_width, i % vector_width);
+            let (packet_id, ray_id) = (i / ray_layout.packet_size, i % ray_layout.packet_size);
             let mut ray = ray_layout.input(packet_id, ray_id);
             let stack = allocate_stack();
             let order = bvh.order(ray_octant(ray));
