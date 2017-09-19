@@ -436,72 +436,95 @@ fn @cpu_traverse_hybrid( ray_box_intrinsics: RayBoxIntrinsics
 
             stack.push(root, ray.tmin);
             while !stack.is_empty() {
-                let node_ref = stack.top();
-                stack.pop();
+                let restart = continue;
+                let exit = break;
 
-                let mask = ballot(node_ref.tmin < ray.tmax);
-                if mask == 0 { continue() }
-
-                if single && unlikely(cpu_popcount32(mask) <= switch_threshold) {
-                    // Switch to single ray tracing when SIMD utilization is too low
-                    for lane in one_bits(mask) {
-                        let mut tmax = extract(ray.tmax, lane);
-                        let single_layout = RayLayout {
-                            packet_size: 1,
-                            input: |_, _| { let ray = ray_layout.input(i, lane); clip_ray(ray, ray.tmin, tmax) },
-                            output: |_, _, res| { tmax = res.distance; ray_layout.output(i, lane, res) }
-                        };
-                        cpu_traverse_single(ray_box_intrinsics, single_layout, bvh, any_hit, 1, node_ref.node);
-                        ray.tmax = insert(ray.tmax, lane, tmax);
+                // Cull nodes and test SIMD utilization
+                while true {
+                    let mask = ballot(stack.top().tmin < ray.tmax);
+                    if likely(mask != 0) {
+                        if single && unlikely(cpu_popcount32(mask) <= switch_threshold) {
+                            // Switch to single ray tracing when SIMD utilization is too low
+                            for lane in one_bits(mask) {
+                                let mut tmax = extract(ray.tmax, lane);
+                                let single_layout = RayLayout {
+                                    packet_size: 1,
+                                    input: |_, _| { let ray = ray_layout.input(i, lane); clip_ray(ray, ray.tmin, tmax) },
+                                    output: |_, _, res| { tmax = res.distance; ray_layout.output(i, lane, res) }
+                                };
+                                cpu_traverse_single(ray_box_intrinsics, single_layout, bvh, any_hit, 1, stack.top().node);
+                                ray.tmax = insert(ray.tmax, lane, tmax);
+                            }
+                        } else {
+                            break()
+                        }
                     }
-                } else {
-                    if likely(is_inner(node_ref)) {
-                        // Intersect the node with the packet of rays
-                        let node = bvh.node(node_ref.node - 1);
-                        for k in range(0, bvh.arity) @{
-                            let child_id = node.child(k);
-                            if unlikely(child_id == 0) { break() }
+                    stack.pop();
+                    if stack.is_empty() { exit() }
+                }
 
-                            let (hit, tentry, _) = intersect_ray_box(ray_box_intrinsics, false, ray, node.bbox(k));
+                while likely(is_inner(stack.top())) {
+                    let node_ref = stack.top();
+                    stack.pop();
 
-                            // Equivalent to any(hit) but use MOVMASK instead of PTEST
-                            if !ballot(!hit) & ((1 << vector_width) - 1) != 0 {
-                                // Important: cull nodes that are too far away
-                                // from being traversed with the single ray kernel
-                                let thit = select(hit, tentry, flt_max);
-                                if any_hit || any(stack.top().tmin > thit) {
-                                    stack.push(child_id, thit);
+                    // Intersect the node with the packet of rays
+                    let node = bvh.node(node_ref.node - 1);
+                    let mut n = 0;
+                    for k in range(0, bvh.arity) @{
+                        let child_id = node.child(k);
+                        if unlikely(child_id == 0) { break() }
 
-                                    // Prefetch only when the child is closer than what is on the stack
-                                    bvh.prefetch(child_id);
-                                } else {
-                                    stack.push_after(child_id, thit);
-                                }
+                        let (hit, tentry, _) = intersect_ray_box(ray_box_intrinsics, false, ray, node.bbox(k));
+
+                        // Equivalent to any(hit) but use MOVMASK instead of PTEST
+                        if !ballot(!hit) & ((1 << vector_width) - 1) != 0 {
+                            n++;
+
+                            // Important: cull nodes that are too far away
+                            // from being traversed with the single ray kernel
+                            let thit = select(hit, tentry, flt_max);
+                            if any_hit || any(stack.top().tmin > thit) {
+                                stack.push(child_id, thit);
+
+                                // Prefetch only when the child is closer than what is on the stack
+                                bvh.prefetch(child_id);
+                            } else {
+                                stack.push_after(child_id, thit);
                             }
                         }
-                    } else {
-                        // Intersect the leaf with the packet of rays
-                        let mut tri_id = !node_ref.node;
-                        while true {
-                            let tri = bvh.tri(tri_id++);
-                            for k in range(0, $bvh.tri_size) {
-                                let tri_id = tri.id(k);
-                                if tri_id == bitcast[int](0xFFFFFFFFu) { break() }
+                    }
 
-                                let (mask, t, u, v) = intersect_ray_tri(cpu_intrinsics, false, ray, tri.load(k));
-                                if mask {
-                                    ray_layout.output(i, j, make_hit(
-                                        undef[int](),
-                                        tri_id & 0x7FFFFFFF,
-                                        t,
-                                        make_vec2(u, v)
-                                    ));
-                                    ray.tmax = t;
-                                }
+                    // Trigger culling again
+                    if unlikely(n == 0) { break() }
+                }
+
+                while unlikely(is_leaf(stack.top())) {
+                    // Intersect the leaf with the packet of rays
+                    let next_triangle = continue;
+                    let leaf_ref = stack.top();
+                    stack.pop();
+
+                    let mut tri_id = !leaf_ref.node;
+                    while true {
+                        let tri = bvh.tri(tri_id++);
+
+                        for k in range(0, $bvh.tri_size) {
+                            let tri_id = tri.id(k);
+                            if tri_id == bitcast[int](0xFFFFFFFFu) { next_triangle() }
+
+                            let (mask, t, u, v) = intersect_ray_tri(cpu_intrinsics, false, ray, tri.load(k));
+                            if mask {
+                                ray_layout.output(i, j, make_hit(
+                                    undef[int](),
+                                    tri_id & 0x7FFFFFFF,
+                                    t,
+                                    make_vec2(u, v)
+                                ));
+                                ray.tmax = t;
                             }
-
-                            if (tri.id(bvh.tri_size - 1) & bitcast[i32](0x80000000u)) != 0 { break() }
                         }
+
+                        if (tri.id(bvh.tri_size - 1) & bitcast[i32](0x80000000u)) != 0 { next_triangle() }
                     }
                 }
             }

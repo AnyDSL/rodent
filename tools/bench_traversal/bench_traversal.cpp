@@ -34,6 +34,7 @@ inline void usage() {
 }
 
 static double bench_cpu_hybrid(Bvh8Tri4* bvh8, Ray8SoA* rays, Hit8SoA* hits, size_t n, bool any_hit) {
+    for (auto hit = hits; hit != hits + n/8; hit++) { for (int i = 0; i < 8; i++) hit->tri_id[i] = -1; }
     auto t0 = anydsl_get_micro_time();
     if (any_hit) cpu_occluded_bvh8_tri4_hybrid8_avx2(bvh8, rays, hits, n);
     else         cpu_intersect_bvh8_tri4_hybrid8_avx2(bvh8, rays, hits, n);
@@ -42,6 +43,7 @@ static double bench_cpu_hybrid(Bvh8Tri4* bvh8, Ray8SoA* rays, Hit8SoA* hits, siz
 }
 
 static double bench_cpu_packet(Bvh8Tri4* bvh8, Ray8SoA* rays, Hit8SoA* hits, size_t n, bool any_hit) {
+    for (auto hit = hits; hit != hits + n/8; hit++) { for (int i = 0; i < 8; i++) hit->tri_id[i] = -1; }
     auto t0 = anydsl_get_micro_time();
     if (any_hit) cpu_occluded_bvh8_tri4_packet8_avx2(bvh8, rays, hits, n);
     else         cpu_intersect_bvh8_tri4_packet8_avx2(bvh8, rays, hits, n);
@@ -50,6 +52,7 @@ static double bench_cpu_packet(Bvh8Tri4* bvh8, Ray8SoA* rays, Hit8SoA* hits, siz
 }
 
 static double bench_cpu_single(Bvh8Tri4* bvh8, Ray1AoS* rays, Hit1AoS* hits, size_t n, bool any_hit) {
+    for (auto hit = hits; hit != hits + n; hit++) { hit->tri_id = -1; }
     auto t0 = anydsl_get_micro_time();
     if (any_hit) cpu_occluded_bvh8_tri4_single_avx2(bvh8, rays, hits, n);
     else         cpu_intersect_bvh8_tri4_single_avx2(bvh8, rays, hits, n);
@@ -58,6 +61,7 @@ static double bench_cpu_single(Bvh8Tri4* bvh8, Ray1AoS* rays, Hit1AoS* hits, siz
 }
 
 static double bench_cpu_hybrid(Bvh4* bvh4, Ray8SoA* rays, Hit8SoA* hits, size_t n, bool any_hit) {
+    for (auto hit = hits; hit != hits + n/8; hit++) { for (int i = 0; i < 8; i++) hit->tri_id[i] = -1; }
     auto t0 = anydsl_get_micro_time();
     if (any_hit) cpu_occluded_bvh4_hybrid8_avx2(bvh4, rays, hits, n);
     else         cpu_intersect_bvh4_hybrid8_avx2(bvh4, rays, hits, n);
@@ -66,6 +70,7 @@ static double bench_cpu_hybrid(Bvh4* bvh4, Ray8SoA* rays, Hit8SoA* hits, size_t 
 }
 
 static double bench_cpu_packet(Bvh4* bvh4, Ray8SoA* rays, Hit8SoA* hits, size_t n, bool any_hit) {
+    for (auto hit = hits; hit != hits + n/8; hit++) { for (int i = 0; i < 8; i++) hit->tri_id[i] = -1; }
     auto t0 = anydsl_get_micro_time();
     if (any_hit) cpu_occluded_bvh4_packet8_avx2(bvh4, rays, hits, n);
     else         cpu_intersect_bvh4_packet8_avx2(bvh4, rays, hits, n);
@@ -74,6 +79,7 @@ static double bench_cpu_packet(Bvh4* bvh4, Ray8SoA* rays, Hit8SoA* hits, size_t 
 }
 
 static double bench_cpu_single(Bvh4* bvh4, Ray1AoS* rays, Hit1AoS* hits, size_t n, bool any_hit) {
+    for (auto hit = hits; hit != hits + n; hit++) { hit->tri_id = -1; }
     auto t0 = anydsl_get_micro_time();
     if (any_hit) cpu_occluded_bvh4_single_avx2(bvh4, rays, hits, n);
     else         cpu_intersect_bvh4_single_avx2(bvh4, rays, hits, n);
