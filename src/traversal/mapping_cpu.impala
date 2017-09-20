@@ -309,7 +309,7 @@ fn @make_cpu_ray8_layout(rays: &[Ray8SoA], hits: &mut [Hit8SoA]) -> RayLayout {
 fn @cpu_traverse_single_helper( ray_box_intrinsics: RayBoxIntrinsics
                               , mut ray: Ray
                               , bvh: Bvh
-                              , order: &[int * 6]
+                              , order: [int * 6]
                               , any_hit: bool
                               , root: int
                               ) -> Hit {
@@ -334,7 +334,7 @@ fn @cpu_traverse_single_helper( ray_box_intrinsics: RayBoxIntrinsics
                 if unlikely(node_ref.tmin >= ray.tmax) { continue() }
 
                 let node = bvh.node(node_ref.node - 1);
-                let (hit, tentry, _) = intersect_ray_box(ray_box_intrinsics, true, ray, node.ordered_bbox(j, *order));
+                let (hit, tentry, _) = intersect_ray_box(ray_box_intrinsics, true, ray, node.ordered_bbox(j, order));
 
                 let mask = !ballot(!hit) & ((1 << bvh.arity) - 1);
                 if likely(mask == 0) { continue() }
@@ -511,9 +511,7 @@ fn @cpu_traverse_hybrid( ray_box_intrinsics: RayBoxIntrinsics
                     if unlikely(n == 0) { break() }
                 }
 
-                while unlikely(is_leaf(stack.top())) {
-                    // Intersect the leaf with the packet of rays
-                    let next_triangle = continue;
+                fn intersect_triangles() -> () {
                     let leaf_ref = stack.top();
                     stack.pop();
 
@@ -523,7 +521,7 @@ fn @cpu_traverse_hybrid( ray_box_intrinsics: RayBoxIntrinsics
 
                         for k in range(0, $bvh.tri_size) {
                             let tri_id = tri.id(k);
-                            if tri_id == bitcast[int](0xFFFFFFFFu) { next_triangle() }
+                            if tri_id == bitcast[int](0xFFFFFFFFu) { return() }
 
                             let (mask, t, u, v) = intersect_ray_tri(cpu_intrinsics, false, ray, tri.load(k));
                             if mask {
@@ -537,8 +535,13 @@ fn @cpu_traverse_hybrid( ray_box_intrinsics: RayBoxIntrinsics
                             }
                         }
 
-                        if (tri.id(bvh.tri_size - 1) & bitcast[i32](0x80000000u)) != 0 { next_triangle() }
+                        if (tri.id(bvh.tri_size - 1) & bitcast[i32](0x80000000u)) != 0 { return() }
                     }
+                }
+
+                if unlikely(is_leaf(stack.top())) {
+                    // Intersect the leaf with the packet of rays
+                    intersect_triangles()
                 }
             }
         }
