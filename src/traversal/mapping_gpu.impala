@@ -136,7 +136,7 @@ fn @make_gpu_mapping_single( gpu_intrinsics: Intrinsics
 
             for k in range(0, bvh.tri_size) {
                 let intr : Intersector = @ |ray, record_hit| {
-                    let (mask, t, u, v) = intersect_ray_tri(gpu_intrinsics, false, ray, tri.load(k));
+                    let (mask, t, u, v) = intersect_ray_tri(gpu_intrinsics, false, true, ray, tri.load(k));
                     if mask {
                         record_hit(Hit {
                             distance:  t,

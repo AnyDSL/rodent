@@ -327,6 +327,8 @@ fn @cpu_traverse_single_helper( ray_box_intrinsics: RayBoxIntrinsics
 
     for j in vectorize(vector_width, vector_width * sizeof[float](), 0, vector_width) {
         while likely(!stack.is_empty()) {
+            let exit = break;
+
             // Process inner nodes
             while likely(is_inner(stack.top())) {
                 let node_ref = stack.top();
@@ -374,16 +376,30 @@ fn @cpu_traverse_single_helper( ray_box_intrinsics: RayBoxIntrinsics
                 stack.pop();
                 if unlikely(leaf_ref.tmin >= ray.tmax) { continue() }
 
+                let mut terminated = false;
                 for k in vectorize(bvh.tri_size, bvh.tri_size * sizeof[float](), 0, bvh.tri_size) {
                     let mut tri_id = !leaf_ref.node;
                     while true {
                         let tri = bvh.tri(tri_id++);
 
                         // Compute the intersection for each lane
-                        let (found, t, u, v) = intersect_ray_tri(cpu_intrinsics, false, ray, tri.load(k));
+                        let (found, t, u, v) = intersect_ray_tri(cpu_intrinsics, false, true, ray, tri.load(k));
 
                         // Find the closest intersection
-                        if any(found) {
+                        if any_hit {
+                            let mask = ballot(found);
+                            if mask != 0 {
+                                let lane = cpu_ctz32(mask, true);
+                                hit = make_hit(
+                                    undef[int](),
+                                    tri.id(lane) & 0x7FFFFFFF,
+                                    extract(t, lane),
+                                    make_vec2(extract(u, lane), extract(v, lane))
+                                );
+                                terminated = true;
+                                break()
+                            }
+                        } else if any(found) {
                             let found_t = select(found, t, flt_max);
                             let min_t = reduce(found_t, bvh.tri_size, ray_box_intrinsics.fminf);
                             let lane = index_of(found_t, min_t);
@@ -400,6 +416,132 @@ fn @cpu_traverse_single_helper( ray_box_intrinsics: RayBoxIntrinsics
                         if (tri.id(bvh.tri_size - 1) & bitcast[i32](0x80000000u)) != 0 { break() }
                     }
                 }
+                if any_hit && terminated { exit() }
+            }
+        }
+    }
+
+    hit
+}
+
+fn @cpu_traverse_hybrid_helper( ray_box_intrinsics: RayBoxIntrinsics
+                              , vector_width: int
+                              , mut ray: Ray
+                              , bvh: Bvh
+                              , order: &[int * 6]
+                              , single: bool
+                              , any_hit: bool
+                              , root: int
+                              ) -> Hit {
+    let switch_threshold = match vector_width {
+        4  => 3,
+        8  => if bvh.arity == 4 { 4 } else { 6 },
+        16 => 7,
+        _  => 0 // Be conservative with unknown SIMD widths
+    };
+    let mut hit = empty_hit(ray.tmax);
+    let mut valid = (1 << vector_width) - 1;
+    let stack = allocate_stack();
+
+    stack.push(root, ray.tmin);
+    while likely(!stack.is_empty()) {
+        let exit = break;
+
+        // Cull nodes and test SIMD utilization
+        while true {
+            let mask = ballot(stack.top().tmin < ray.tmax);
+            if likely(mask != 0) {
+                if single && unlikely(cpu_popcount32(mask) <= switch_threshold) {
+                    // Switch to single ray tracing when SIMD utilization is too low
+                    for lane in one_bits(mask) {
+                        let lane_ray = load_ray(&mut ray, lane);
+                        let mut lane_order : [int * 6];
+                        for i in range(0, 6) {
+                            lane_order(i) = bitcast[int](load(bitcast[&float](&order(i)), lane));
+                        }
+                        let lane_hit = cpu_traverse_single_helper(ray_box_intrinsics, lane_ray, bvh, lane_order, any_hit, stack.top().node);
+                        if lane_hit.prim_id >= 0 {
+                            store_hit(&mut hit, lane, lane_hit);
+                            ray.tmax = insert(ray.tmax, lane, select(any_hit, -flt_max, lane_hit.distance));
+
+                            if any_hit { valid &= !(1 << lane) }
+                        }
+                    }
+                    if any_hit && valid == 0 { exit() }
+                } else {
+                    break()
+                }
+            }
+            stack.pop();
+            if unlikely(stack.is_empty()) { exit() }
+        }
+
+        while likely(is_inner(stack.top())) {
+            // Intersect the node with the packet of rays
+            let node_ref = stack.top();
+            stack.pop();
+
+            let node = bvh.node(node_ref.node - 1);
+            let mut n = 0;
+            for k in range(0, bvh.arity) @{
+                let child_id = node.child(k);
+                if unlikely(child_id == 0) { break() }
+
+                let (hit, tentry, _) = intersect_ray_box(ray_box_intrinsics, false, ray, node.bbox(k));
+
+                // Equivalent to any(hit) but use MOVMASK instead of PTEST
+                if !ballot(!hit) & ((1 << vector_width) - 1) != 0 {
+                    n++;
+
+                    // Important: cull nodes that are too far away
+                    // from being traversed with the single ray kernel
+                    let thit = select(hit, tentry, flt_max);
+                    if any_hit || any(stack.top().tmin > thit) {
+                        stack.push(child_id, thit);
+
+                        // Prefetch only when the child is closer than what is on the stack
+                        bvh.prefetch(child_id);
+                    } else {
+                        stack.push_after(child_id, thit);
+                    }
+                }
+            }
+
+            // Trigger culling again
+            if unlikely(n == 0) { break() }
+        }
+
+        if unlikely(is_leaf(stack.top())) {
+            // Intersect the leaf with the packet of rays
+            let done = continue;
+            let leaf_ref = stack.top();
+            stack.pop();
+
+            let mut tri_id = !leaf_ref.node;
+            while true {
+                let tri = bvh.tri(tri_id++);
+
+                for k in range(0, $bvh.tri_size) {
+                    let tri_id = tri.id(k);
+                    if tri_id == bitcast[int](0xFFFFFFFFu) { done() }
+
+                    let (mask, t, u, v) = intersect_ray_tri(cpu_intrinsics, any_hit, select(any_hit, leaf_ref.tmin < ray.tmax, true), ray, tri.load(k));
+                    if mask {
+                        hit = make_hit(
+                            undef[int](),
+                            tri_id & 0x7FFFFFFF,
+                            t,
+                            make_vec2(u, v)
+                        );
+                        ray.tmax = select(any_hit, -flt_max, t);
+                    }
+                    if any_hit {
+                        valid &= !ballot(mask);
+                        if valid == 0 { exit() }
+                    }
+                }
+
+                if (tri.id(bvh.tri_size - 1) & bitcast[i32](0x80000000u)) != 0 { done() }
             }
         }
     }
@@ -419,7 +561,7 @@ fn @cpu_traverse_single( ray_box_intrinsics: RayBoxIntrinsics
         let ray = ray_layout.input(packet_id, ray_id);
         let order = bvh.order(ray_octant(ray));
         let hit = cpu_traverse_single_helper(ray_box_intrinsics, ray, bvh, order, any_hit, root);
-        if hit.prim_id >= 0 { ray_layout.output(packet_id, ray_id, hit) }
+        ray_layout.output(packet_id, ray_id, hit)
     }
 }
 
@@ -432,118 +574,12 @@ fn @cpu_traverse_hybrid( ray_box_intrinsics: RayBoxIntrinsics
                        , root: int
                        ) -> () {
     let vector_width = ray_layout.packet_size;
-    let switch_threshold = match vector_width {
-        4  => 3,
-        8  => if bvh.arity == 4 { 4 } else { 6 },
-        16 => 7,
-        _  => 0 // Be conservative with unknown SIMD widths
-    };
-
     for i in range(0, ray_count / vector_width) {
         for j in vectorize(vector_width, vector_width * sizeof[float](), 0, vector_width) {
-            let mut ray = ray_layout.input(i, j);
-            let mut order = bvh.order(ray_octant(ray));
-
-            let stack = allocate_stack();
-
-            stack.push(root, ray.tmin);
-            while likely(!stack.is_empty()) {
-                let exit = break;
-
-                // Cull nodes and test SIMD utilization
-                while true {
-                    let mask = ballot(stack.top().tmin < ray.tmax);
-                    if likely(mask != 0) {
-                        if single && unlikely(cpu_popcount32(mask) <= switch_threshold) {
-                            // Switch to single ray tracing when SIMD utilization is too low
-                            for lane in one_bits(mask) {
-                                let lane_ray = load_ray(&mut ray, lane);
-                                let mut lane_order : [int * 6];
-                                for i in range(0, 6) {
-                                    lane_order(i) = bitcast[int](load(bitcast[&float](&mut order(i)), lane));
-                                }
-                                let lane_hit = cpu_traverse_single_helper(ray_box_intrinsics, lane_ray, bvh, lane_order, any_hit, stack.top().node);
-                                if lane_hit.prim_id >= 0 {
-                                    ray_layout.output(i, lane, lane_hit);
-                                    ray.tmax = insert(ray.tmax, lane, lane_hit.distance)
-                                }
-                            }
-                        } else {
-                            break()
-                        }
-                    }
-                    stack.pop();
-                    if unlikely(stack.is_empty()) { exit() }
-                }
-
-                while likely(is_inner(stack.top())) {
-                    let node_ref = stack.top();
-                    stack.pop();
-
-                    // Intersect the node with the packet of rays
-                    let node = bvh.node(node_ref.node - 1);
-                    let mut n = 0;
-                    for k in range(0, bvh.arity) @{
-                        let child_id = node.child(k);
-                        if unlikely(child_id == 0) { break() }
-
-                        let (hit, tentry, _) = intersect_ray_box(ray_box_intrinsics, false, ray, node.bbox(k));
-
-                        // Equivalent to any(hit) but use MOVMASK instead of PTEST
-                        if !ballot(!hit) & ((1 << vector_width) - 1) != 0 {
-                            n++;
-
-                            // Important: cull nodes that are too far away
-                            // from being traversed with the single ray kernel
-                            let thit = select(hit, tentry, flt_max);
-                            if any_hit || any(stack.top().tmin > thit) {
-                                stack.push(child_id, thit);
-
-                                // Prefetch only when the child is closer than what is on the stack
-                                bvh.prefetch(child_id);
-                            } else {
-                                stack.push_after(child_id, thit);
-                            }
-                        }
-                    }
-
-                    // Trigger culling again
-                    if unlikely(n == 0) { break() }
-                }
-
-                fn intersect_triangles() -> () {
-                    let leaf_ref = stack.top();
-                    stack.pop();
-
-                    let mut tri_id = !leaf_ref.node;
-                    while true {
-                        let tri = bvh.tri(tri_id++);
-
-                        for k in range(0, $bvh.tri_size) {
-                            let tri_id = tri.id(k);
-                            if tri_id == bitcast[int](0xFFFFFFFFu) { return() }
-
-                            let (mask, t, u, v) = intersect_ray_tri(cpu_intrinsics, false, ray, tri.load(k));
-                            if mask {
-                                ray_layout.output(i, j, make_hit(
-                                    undef[int](),
-                                    tri_id & 0x7FFFFFFF,
-                                    t,
-                                    make_vec2(u, v)
-                                ));
-                                ray.tmax = t;
-                            }
-                        }
-
-                        if (tri.id(bvh.tri_size - 1) & bitcast[i32](0x80000000u)) != 0 { return() }
-                    }
-                }
-
-                if unlikely(is_leaf(stack.top())) {
-                    // Intersect the leaf with the packet of rays
-                    intersect_triangles()
-                }
-            }
+            let ray = ray_layout.input(i, j);
+            let order = bvh.order(ray_octant(ray));
+            let hit = cpu_traverse_hybrid_helper(ray_box_intrinsics, vector_width, ray, bvh, &order, single, any_hit, root);
+            ray_layout.output(i, j, hit);
         }
     }
 }

@@ -140,8 +140,7 @@ fn @empty_hit(tmax: float) -> Hit {
     make_hit(-1, -1, tmax, undef())
 }
 
-fn @intersect_ray_tri(math: Intrinsics, early_exit: bool, ray: Ray, tri: Tri) -> (bool, float, float, float) {
-    let mut mask = true;
+fn @intersect_ray_tri(math: Intrinsics, early_exit: bool, mut mask: bool, ray: Ray, tri: Tri) -> (bool, float, float, float) {
     let no_hit = || -> ! return ((false, undef[float](), undef[float](), undef[float]()));
     let expect = |cond: bool, _| -> ! {
         mask &= cond;
