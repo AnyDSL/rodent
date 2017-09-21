@@ -368,10 +368,11 @@ fn @cpu_traverse_single_helper( ray_box_intrinsics: RayBoxIntrinsics
                         }
                     }
                 }
+                if unlikely(n == 0) { break() }
             }
 
             // Process leaves
-            while unlikely(is_leaf(stack.top())) {
+            if unlikely(is_leaf(stack.top())) {
                 let leaf_ref = stack.top();
                 stack.pop();
                 if unlikely(leaf_ref.tmin >= ray.tmax) { continue() }
@@ -416,7 +417,7 @@ fn @cpu_traverse_single_helper( ray_box_intrinsics: RayBoxIntrinsics
                         if (tri.id(bvh.tri_size - 1) & bitcast[i32](0x80000000u)) != 0 { break() }
                     }
                 }
-                if any_hit && terminated { exit() }
+                if any_hit && unlikely(terminated) { exit() }
             }
         }
     }
@@ -467,7 +468,7 @@ fn @cpu_traverse_hybrid_helper( ray_box_intrinsics: RayBoxIntrinsics
                             if any_hit { valid &= !(1 << lane) }
                         }
                     }
-                    if any_hit && valid == 0 { exit() }
+                    if any_hit && unlikely(valid == 0) { exit() }
                 } else {
                     break()
                 }
@@ -537,7 +538,7 @@ fn @cpu_traverse_hybrid_helper( ray_box_intrinsics: RayBoxIntrinsics
                     }
                     if any_hit {
                         valid &= !ballot(mask);
-                        if valid == 0 { exit() }
+                        if unlikely(valid == 0) { exit() }
                     }
                 }
 

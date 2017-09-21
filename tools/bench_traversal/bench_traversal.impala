@@ -89,6 +89,13 @@ extern fn cpu_occluded_bvh8_tri4_single_avx2(bvh: &Bvh8Tri4, rays: &[Ray1AoS], h
         make_cpu_ray1_layout(rays, hits),
         ray_count,
         true);*/
+    /*cpu_traverse_single(
+        make_ray_box_intrinsics_avx2(),
+        make_cpu_ray1_layout(rays, hits),
+        make_cpu_bvh8_tri4(*bvh),
+        true,
+        ray_count,
+        1);*/
 }
 extern fn cpu_intersect_bvh8_tri4_hybrid8_avx2(bvh: &Bvh8Tri4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () {
     /*cpu_traverse_hybrid(

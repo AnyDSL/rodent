@@ -107,7 +107,7 @@ double intersect_scene(RTCScene scene, const anydsl::Array<RTCRay>& rays, anydsl
 
     auto t0 = high_resolution_clock::now();
     for (int i = 0; i < rays.size(); i++) {
-        rtcIntersect(scene, hits[i]);
+        f(scene, hits[i]);
     }
     auto t1 = high_resolution_clock::now();
     return duration_cast<microseconds>(t1 - t0).count() * 1.0e-3;
