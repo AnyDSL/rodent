@@ -10,7 +10,7 @@ int main(int argc, char** argv) {
 
     std::string line;
     std::vector<std::string> isa_list{
-        "neon", "sse4_2", "avx", "avx2"
+        "asimd", "neon", "sse4_2", "avx", "avx2"
     };
     std::map<std::string, bool> detected;
     while (std::getline(info, line)) {
