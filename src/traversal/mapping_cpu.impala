@@ -228,7 +228,7 @@ fn @make_cpu_bvh8_tri4(bvh84: Bvh8Tri4) -> Bvh {
 // Ray-box intrinsics  -------------------------------------------------------------
 
 fn @make_ray_box_intrinsics_avx() -> RayBoxIntrinsics {
-    make_ray_box_intrinsics(cpu_intrinsics.fminf, cpu_intrinsics.fmaxf, |a, b| a <= b)
+    make_ray_box_intrinsics(|a, b| select(a < b, a, b) , |a, b| select(a > b, a, b), |a, b| a <= b)
 }
 
 fn @make_ray_box_intrinsics_avx2() -> RayBoxIntrinsics {
