@@ -118,57 +118,26 @@ fn @make_ray_layout_nvvm(rays: &[Ray1AoS], hits: &mut[Hit1AoS]) -> RayLayout {
 
 // Mappings  -----------------------------------------------------------------------
 
-fn @make_gpu_mapping_single( gpu_intrinsics: Intrinsics
-                           , ray_box_intrinsics: RayBoxIntrinsics
-                           , bvh: Bvh
-                           , any_hit: bool
-                           ) -> TraversalMapping {
+fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
+                              , ray_box_intrinsics: RayBoxIntrinsics
+                              , ray: Ray
+                              , bvh: Bvh
+                              , any_hit: bool
+                              , root: int
+                              ) -> Hit {
+    let mut hit = empty_hit(ray.tmax);
+    let early_exit = || -> ! return(hit);
+    let stack = allocate_stack();
+    stack.push(1, undef());
 
-    fn @iterate_primitives( leaf_ref: NodeRef
-                          , ray: &Ray
-                          , hit: &Hit
-                          , early_exit: EarlyExitFn
-                          , body: fn (Intersector) -> ()
-                          ) -> () {
-        let mut tri_id = !leaf_ref.node;
-        while true {
-            let tri = bvh.tri(tri_id++);
-
-            for k in range(0, bvh.tri_size) {
-                let intr : Intersector = @ |ray, record_hit| {
-                    let (mask, t, u, v) = intersect_ray_tri(gpu_intrinsics, false, true, ray, tri.load(k));
-                    if mask {
-                        record_hit(Hit {
-                            distance:  t,
-                            uv_coords: make_vec2(u, v),
-                            prim_id:   tri.id(k) & 0x7FFFFFFF,
-                            inst_id:   undef[int]()
-                        })
-                    }
-                };
-
-                body(intr);
-
-                if any_hit && hit.prim_id >= 0 { early_exit() }
-            }
-
-            if (bitcast[uint](tri.id(bvh.tri_size - 1)) & 0x80000000u) != 0u { break() }
-        }
-    }
-
-    fn @iterate_children( stack: Stack
-                        , ray: &mut Ray
-                        , hit: &mut Hit
-                        , early_exit: EarlyExitFn
-                        , body: fn (BBox) -> (bool, float, float)
-                        ) -> () {
+    while !stack.is_empty() {
         let node_ref = stack.top();
         let node = bvh.node(node_ref.node - 1);
 
         let mut mask = 0;
         let mut tentry : [float * 8]; // Up to BVH8
         for k in range(0, bvh.arity) {
-            let (hit, t, _) = body(node.bbox(k));
+            let (hit, t, _) = intersect_ray_box(ray_box_intrinsics, false, ray, node.bbox(k));
             mask = mask | select(hit, 1 << k, 0);
             tentry(k) = t;
         }
@@ -209,26 +178,50 @@ fn @make_gpu_mapping_single( gpu_intrinsics: Intrinsics
                 }
             }
         }
+
+        // Process leaves
+        while unlikely(is_leaf(stack.top())) {
+            // Process primitives, if any
+            let leaf_ref = stack.top();
+            let mut tri_id = !leaf_ref.node;
+            while true {
+                let tri = bvh.tri(tri_id++);
+
+                for k in range(0, bvh.tri_size) {
+                    let (mask, t, u, v) = intersect_ray_tri(gpu_intrinsics, false, true, ray, tri.load(k));
+                    if mask {
+                        hit = make_hit(
+                            undef[int](),
+                            tri_id & 0x7FFFFFFF,
+                            t,
+                            make_vec2(u, v)
+                        )
+                    }
+
+                    if any_hit && hit.prim_id >= 0 { early_exit() }
+                }
+
+                if (bitcast[uint](tri.id(bvh.tri_size - 1)) & 0x80000000u) != 0u { break() }
+            }
+
+            stack.pop()
+        }
     }
 
-    TraversalMapping {
-        iterate_children: iterate_children,
-        iterate_primitives: iterate_primitives,
-        ray_box_intrinsics: ray_box_intrinsics,
-        ray_box_ordered: false
-    }
+    hit
 }
 
 // Variants  -----------------------------------------------------------------------
 
-fn @gpu_traverse( acc: Accelerator
-                , gpu_intrinsics: Intrinsics
-                , ray_box_intrinsics: RayBoxIntrinsics
-                , bvh: Bvh
-                , ray_layout: RayLayout
-                , ray_count: int
-                , any_hit: bool
-                ) -> () {
+fn @gpu_traverse_single( acc: Accelerator
+                       , gpu_intrinsics: Intrinsics
+                       , ray_box_intrinsics: RayBoxIntrinsics
+                       , ray_layout: RayLayout
+                       , bvh: Bvh
+                       , any_hit: bool
+                       , ray_count: int
+                       , root: int
+                       ) -> () {
     let block_size = 64;
     let grid  = (ray_count, ray_layout.packet_size, 1);
     let block = (block_size, ray_layout.packet_size, 1);
@@ -238,11 +231,7 @@ fn @gpu_traverse( acc: Accelerator
         if (i + j) >= ray_count { break() }
 
         let ray = ray_layout.input(i, j);
-
-        let stack = allocate_stack();
-        stack.push(1, undef());
-
-        let mapping = make_gpu_mapping_single(gpu_intrinsics, ray_box_intrinsics, bvh, any_hit);
-        ray_layout.output(i, j, traverse_bvh(mapping, stack, ray))
+        let hit = gpu_traverse_single_helper(gpu_intrinsics, ray_box_intrinsics, ray, bvh, any_hit, root);
+        ray_layout.output(i, j, hit)
     }
 }

@@ -1,6 +1,5 @@
 set(TRAVERSAL_SRCS
     bench_traversal.impala
-    ../../src/traversal/traversal.impala
     ../../src/traversal/intersection.impala
     ../../src/traversal/stack.impala
     ../../src/traversal/mapping_cpu.impala
