@@ -141,7 +141,7 @@ fn @empty_hit(tmax: float) -> Hit {
 }
 
 fn @intersect_ray_tri(math: Intrinsics, early_exit: bool, mut mask: bool, ray: Ray, tri: Tri) -> (bool, float, float, float) {
-    let no_hit = || -> ! return ((false, undef[float](), undef[float](), undef[float]()));
+    let no_hit = || -> ! return (false, undef[float](), undef[float](), undef[float]());
     let expect = |cond: bool, _| -> ! {
         mask &= cond;
         if early_exit && likely(all(!mask)) { no_hit() }
