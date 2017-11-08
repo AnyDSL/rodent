@@ -148,8 +148,8 @@ fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
             let (child1, t1) = tmp.read(0);
             let (child2, t2) = tmp.read(1);
             if mask == 3 {
-                let c = select(any_hit && t1 < t2, (child2, child1), (child1, child2));
-                let (first, second) = c;
+                let order = select(any_hit || t1 < t2, (child1, child2), (child2, child1));
+                let (first, second) = order;
                 stack.set_top(first, undef());
                 stack.push_after(second, undef());
             } else {
