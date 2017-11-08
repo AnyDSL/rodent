@@ -120,7 +120,7 @@ fn @make_ray_layout_nvvm(rays: &[Ray1AoS], hits: &mut[Hit1AoS]) -> RayLayout {
 
 fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
                               , ray_box_intrinsics: RayBoxIntrinsics
-                              , ray: Ray
+                              , mut ray: Ray
                               , bvh: Bvh
                               , any_hit: bool
                               , root: int
@@ -135,36 +135,33 @@ fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
         let node = bvh.node(node_ref.node - 1);
 
         let mut mask = 0;
-        let mut tentry : [float * 8]; // Up to BVH8
-        for k in range(0, bvh.arity) {
+        let tmp = make_small_stack(bvh.arity);
+        for k in range(0, bvh.arity) @{
             let (hit, t, _) = intersect_ray_box(ray_box_intrinsics, false, ray, node.bbox(k));
             mask = mask | select(hit, 1 << k, 0);
-            tentry(k) = t;
+            tmp.write(k, (node.child(k), t));
         }
+
         if mask == 0 { stack.pop() }
         else if bvh.arity == 2 {
             // Special case for N=2
+            let (child1, t1) = tmp.read(0);
+            let (child2, t2) = tmp.read(1);
             if mask == 3 {
-                let mut child1 = node.child(0);
-                let mut child2 = node.child(1);
-                if any_hit && tentry(1) < tentry(0) {
-                    let c = child1;
-                    child1 = child2;
-                    child2 = c;
-                }
-                stack.set_top(child1, undef());
-                stack.push_after(child2, undef());
+                let c = select(any_hit && t1 < t2, (child2, child1), (child1, child2));
+                let (first, second) = c;
+                stack.set_top(first, undef());
+                stack.push_after(second, undef());
             } else {
-                stack.set_top(select(mask == 1, node.child(0), node.child(1)), undef());
+                stack.set_top(select(mask == 1, child1, child2), undef());
             }
         } else {
             // General case - slow
             stack.pop();
             let mut tmin = flt_max;
-            for k in range(0, bvh.arity) {
+            for k in range(0, bvh.arity) @{
                 if mask & (1 << k) != 0 {
-                    let child = node.child(k);
-                    let t = tentry(k);
+                    let (child, t) = tmp.read(k);
                     if any_hit || t < tmin {
                         // Equivalent to stack.push(child, undef())
                         // but does not generate allocas for the stack's tmins
@@ -180,14 +177,14 @@ fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
         }
 
         // Process leaves
-        while unlikely(is_leaf(stack.top())) {
+        while is_leaf(stack.top()) {
             // Process primitives, if any
             let leaf_ref = stack.top();
             let mut tri_id = !leaf_ref.node;
             while true {
                 let tri = bvh.tri(tri_id++);
 
-                for k in range(0, bvh.tri_size) {
+                for k in range(0, bvh.tri_size) @{
                     let (mask, t, u, v) = intersect_ray_tri(gpu_intrinsics, false, true, ray, tri.load(k));
                     if mask {
                         hit = make_hit(
@@ -195,7 +192,8 @@ fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
                             tri_id & 0x7FFFFFFF,
                             t,
                             make_vec2(u, v)
-                        )
+                        );
+                        ray.tmax = t;
                     }
 
                     if any_hit && hit.prim_id >= 0 { early_exit() }
@@ -226,9 +224,11 @@ fn @gpu_traverse_single( acc: Accelerator
     let grid  = (ray_count, ray_layout.packet_size, 1);
     let block = (block_size, ray_layout.packet_size, 1);
 
-    with acc.exec(grid, block) {
-        let (i, j) = (acc.tidx() + acc.bidx() * acc.bdimx(), acc.tidy());
-        if (i + j) >= ray_count { break() }
+    for tid, bid, bdim, gdim, gid in acc.exec(grid, block) {
+        let (tidx, tidy, _) = tid;
+        let (bidx, bidy, _) = bid;
+        let (i, j) = (tidx() + bidx() * block_size, tidy());
+        if (i + j) >= ray_count { continue() }
 
         let ray = ray_layout.input(i, j);
         let hit = gpu_traverse_single_helper(gpu_intrinsics, ray_box_intrinsics, ray, bvh, any_hit, root);
