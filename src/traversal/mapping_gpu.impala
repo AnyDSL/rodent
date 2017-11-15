@@ -176,9 +176,7 @@ fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
             }
         }
 
-        // Process leaves
         while is_leaf(stack.top()) {
-            // Process primitives, if any
             let leaf_ref = stack.top();
             let mut tri_id = !leaf_ref.node;
             while true {
@@ -221,7 +219,7 @@ fn @gpu_traverse_single( acc: Accelerator
                        , root: int
                        ) -> () {
     let block_size = 64;
-    let grid  = (ray_count, ray_layout.packet_size, 1);
+    let grid  = ((ray_count / block_size) * block_size, ray_layout.packet_size, 1);
     let block = (block_size, ray_layout.packet_size, 1);
 
     for tid, bid, bdim, gdim, gid in acc.exec(grid, block) {
