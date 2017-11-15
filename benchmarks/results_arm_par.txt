@@ -1,0 +1,24 @@
+sponza : primary : -w 4 : None : 2.7481
+sponza : ao : -w 4 : None : 5.35983
+sponza : bounces : -w 4 : None : 0.953911
+sponza : primary : -w 4 -s : None : 1.3769
+sponza : ao : -w 4 -s : None : 2.66208
+sponza : bounces : -w 4 -s : None : 0.99925
+crown : primary : -w 4 : None : 9.81564
+crown : ao : -w 4 : None : 3.64903
+crown : bounces : -w 4 : None : 1.86756
+crown : primary : -w 4 -s : None : 5.8034
+crown : ao : -w 4 -s : None : 3.00981
+crown : bounces : -w 4 -s : None : 1.90784
+san-miguel : primary : -w 4 : None : 2.07353
+san-miguel : ao : -w 4 : None : 1.49059
+san-miguel : bounces : -w 4 : None : 0.720948
+san-miguel : primary : -w 4 -s : None : 1.06802
+san-miguel : ao : -w 4 -s : None : 1.31238
+san-miguel : bounces : -w 4 -s : None : 0.781979
+powerplant : primary : -w 4 : None : 4.44325
+powerplant : ao : -w 4 : None : 8.19047
+powerplant : bounces : -w 4 : None : 1.09488
+powerplant : primary : -w 4 -s : None : 2.59246
+powerplant : ao : -w 4 -s : None : 4.05906
+powerplant : bounces : -w 4 -s : None : 1.22522
