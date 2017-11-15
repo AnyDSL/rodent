@@ -1,0 +1,12 @@
+sponza : primary : 336.505 : 330.414
+sponza : ao : 899.622 : 884.326
+sponza : bounces : 135.804 : 123.456
+crown : primary : 778.52 : 695.41
+crown : ao : 366.28 : 315.093
+crown : bounces : 165.71 : 133.846
+san-miguel : primary : 190.78 : 181.668
+san-miguel : ao : 142.132 : 132.848
+san-miguel : bounces : 63.4015 : 54.0558
+powerplant : primary : 528.212 : 465.423
+powerplant : ao : 1040.93 : 998.021
+powerplant : bounces : 155.567 : 138.566
