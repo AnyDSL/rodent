@@ -514,7 +514,6 @@ fn @cpu_traverse_hybrid_helper( ray_box_intrinsics: RayBoxIntrinsics
 
         if unlikely(is_leaf(stack.top())) {
             // Intersect the leaf with the packet of rays
-            let done = continue;
             let leaf_ref = stack.top();
             stack.pop();
 
@@ -524,7 +523,7 @@ fn @cpu_traverse_hybrid_helper( ray_box_intrinsics: RayBoxIntrinsics
 
                 for k in range(0, $bvh.tri_size) {
                     let tri_id = tri.id(k);
-                    if tri_id == bitcast[int](0xFFFFFFFFu) { done() }
+                    if unlikely(tri_id == bitcast[int](0xFFFFFFFFu)) { break() }
 
                     let (mask, t, u, v) = intersect_ray_tri(cpu_intrinsics, any_hit, select(any_hit, leaf_ref.tmin < ray.tmax, true), ray, tri.load(k));
                     if mask {
@@ -542,7 +541,7 @@ fn @cpu_traverse_hybrid_helper( ray_box_intrinsics: RayBoxIntrinsics
                     }
                 }
 
-                if (tri.id(bvh.tri_size - 1) & bitcast[i32](0x80000000u)) != 0 { done() }
+                if (tri.id(bvh.tri_size - 1) & bitcast[i32](0x80000000u)) != 0 { break() }
             }
         }
     }
