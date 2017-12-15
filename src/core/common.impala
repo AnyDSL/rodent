@@ -12,17 +12,6 @@ extern "device" {
 fn @  likely(cond: bool) -> bool { expect(cond,  true) }
 fn @unlikely(cond: bool) -> bool { expect(cond, false) }
 
-fn @(?a & ?b) range_step(a: int, b: int, @ c: int, @ body: fn (int) -> ()) -> () {
-    if a < b {
-        body(a);
-        range_step(a + c, b, c, body, return)
-    }
-}
-
-fn @range(a: int, b: int, body: fn (int) -> ()) -> () {
-    range_step(a, b, 1, body);
-}
-
 fn @prodsign(x: float, y: float) -> float {
     bitcast[float](bitcast[int](x) ^ (bitcast[int](y) & bitcast[int](0x80000000u)))
 }

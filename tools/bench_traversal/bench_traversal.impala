@@ -100,14 +100,14 @@ extern fn cpu_occluded_bvh8_tri4_single_avx2(bvh: &Bvh8Tri4, rays: &[Ray1AoS], h
         1);*/
 }
 extern fn cpu_intersect_bvh8_tri4_hybrid8_avx2(bvh: &Bvh8Tri4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () {
-    /*cpu_traverse_hybrid(
+    cpu_traverse_hybrid(
         make_ray_box_intrinsics_avx2(),
         make_cpu_ray8_layout(rays, hits),
         make_cpu_bvh8_tri4(*bvh),
         true,
         false,
         ray_count,
-        1);*/
+        1);
 }
 extern fn cpu_occluded_bvh8_tri4_hybrid8_avx2(bvh: &Bvh8Tri4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () {
     /*cpu_traverse_hybrid(
@@ -123,7 +123,7 @@ extern fn cpu_occluded_bvh8_tri4_hybrid8_avx2(bvh: &Bvh8Tri4, rays: &[Ray8SoA], 
 // GPU variants --------------------------------------------------------------------
 
 extern fn gpu_intersect_nvvm(bvh: &Bvh2, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () {
-    gpu_traverse_single(
+    /*gpu_traverse_single(
         nvvm_accelerator(0),
         nvvm_intrinsics,
         make_ray_box_intrinsics_nvvm(),
@@ -131,10 +131,10 @@ extern fn gpu_intersect_nvvm(bvh: &Bvh2, rays: &[Ray1AoS], hits: &mut [Hit1AoS],
         make_bvh2_nvvm(*bvh),
         false,
         ray_count,
-        1);
+        1);*/
 }
 extern fn gpu_occluded_nvvm(bvh: &Bvh2, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () {
-    gpu_traverse_single(
+    /*gpu_traverse_single(
         nvvm_accelerator(0),
         nvvm_intrinsics,
         make_ray_box_intrinsics_nvvm(),
@@ -142,5 +142,5 @@ extern fn gpu_occluded_nvvm(bvh: &Bvh2, rays: &[Ray1AoS], hits: &mut [Hit1AoS], 
         make_bvh2_nvvm(*bvh),
         true,
         ray_count,
-        1);
+        1);*/
 }

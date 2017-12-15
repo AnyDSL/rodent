@@ -136,7 +136,7 @@ fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
 
         let mut mask = 0;
         let tmp = make_small_stack(bvh.arity);
-        for k in range(0, bvh.arity) @{
+        for k in unroll(0, bvh.arity) @{
             let (hit, t, _) = intersect_ray_box(ray_box_intrinsics, false, ray, node.bbox(k));
             mask = mask | select(hit, 1 << k, 0);
             tmp.write(k, (node.child(k), t));
@@ -159,7 +159,7 @@ fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
             // General case - slow
             stack.pop();
             let mut tmin = flt_max;
-            for k in range(0, bvh.arity) @{
+            for k in unroll(0, bvh.arity) @{
                 if mask & (1 << k) != 0 {
                     let (child, t) = tmp.read(k);
                     if any_hit || t < tmin {
@@ -182,7 +182,7 @@ fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
             while true {
                 let tri = bvh.tri(tri_id++);
 
-                for k in range(0, bvh.tri_size) @{
+                for k in unroll(0, bvh.tri_size) @{
                     let (mask, t, u, v) = intersect_ray_tri(gpu_intrinsics, false, true, ray, tri.load(k));
                     if mask {
                         hit = make_hit(

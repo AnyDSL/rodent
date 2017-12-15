@@ -41,7 +41,7 @@ fn @make_cpu_ordered_bbox(bounds_ptr: &[i8], k: int, order: [int * 6], size: int
 fn one_bits(mask: int, body: fn (int) -> ()) -> () {
     if mask != 0 {
         let lane = cpu_ctz32(mask, true);
-        body(lane);
+        @@body(lane);
         one_bits(mask & (mask - 1), body, return)
     }
 }
@@ -58,7 +58,7 @@ fn reduce(value: float, @ n: int, op: fn (float, float) -> float) -> float {
 
 // Prefetches a chunk of memory
 fn prefetch_bytes(ptr: &[u8], @(?bytes) bytes: int) -> () {
-    for i in range_step(0, bytes, 64) {
+    for i in unroll_step(0, bytes, 64) @{
         cpu_prefetch(&ptr(i),  0 /* read */, 3 /* closest locality */, 1 /* data */);
     }
 }
@@ -343,7 +343,7 @@ fn @cpu_traverse_single_helper( ray_box_intrinsics: RayBoxIntrinsics
 
                 // Push intersected nodes on the stack
                 let mut n = 0;
-                for bit in one_bits(mask) @{
+                for bit in one_bits(mask) {
                     let child_id = node.child(bit);
                     if unlikely(child_id == 0) { break() }
 
@@ -361,7 +361,7 @@ fn @cpu_traverse_single_helper( ray_box_intrinsics: RayBoxIntrinsics
                 // Sort them
                 if !any_hit && unlikely(n >= 2) {
                     // Generate a specialized sorting network for lengths [2..bvh.arity] (included)
-                    for size in range(2, bvh.arity + 1) @{
+                    for size in unroll(2, bvh.arity + 1) @{
                         if size == bvh.arity || likely(n == size) {
                             stack.sort_n(size, @ |a, b| a < b, sorting_network, branchless);
                             break()
@@ -414,7 +414,7 @@ fn @cpu_traverse_single_helper( ray_box_intrinsics: RayBoxIntrinsics
                             ray.tmax = hit.distance;
                         }
 
-                        if (tri.id(bvh.tri_size - 1) & bitcast[i32](0x80000000u)) != 0 { break() }
+                        if unlikely((tri.id(bvh.tri_size - 1) & bitcast[i32](0x80000000u)) != 0) { break() }
                     }
                 }
                 if any_hit && unlikely(terminated) { exit() }
@@ -457,7 +457,7 @@ fn @cpu_traverse_hybrid_helper( ray_box_intrinsics: RayBoxIntrinsics
                     for lane in one_bits(mask) {
                         let lane_ray = load_ray(&mut ray, lane);
                         let mut lane_order : [int * 6];
-                        for i in range(0, 6) {
+                        for i in unroll(0, 6) @{
                             lane_order(i) = bitcast[int](load(bitcast[&float](&order(i)), lane));
                         }
                         let lane_hit = cpu_traverse_single_helper(ray_box_intrinsics, lane_ray, bvh, lane_order, any_hit, stack.top().node);
@@ -484,7 +484,7 @@ fn @cpu_traverse_hybrid_helper( ray_box_intrinsics: RayBoxIntrinsics
 
             let node = bvh.node(node_ref.node - 1);
             let mut n = 0;
-            for k in range(0, bvh.arity) @{
+            for k in range(0, bvh.arity) {
                 let child_id = node.child(k);
                 if unlikely(child_id == 0) { break() }
 
@@ -521,7 +521,7 @@ fn @cpu_traverse_hybrid_helper( ray_box_intrinsics: RayBoxIntrinsics
             while true {
                 let tri = bvh.tri(tri_id++);
 
-                for k in range(0, $bvh.tri_size) {
+                for k in range(0, bvh.tri_size) {
                     let tri_id = tri.id(k);
                     if unlikely(tri_id == bitcast[int](0xFFFFFFFFu)) { break() }
 
@@ -541,7 +541,7 @@ fn @cpu_traverse_hybrid_helper( ray_box_intrinsics: RayBoxIntrinsics
                     }
                 }
 
-                if (tri.id(bvh.tri_size - 1) & bitcast[i32](0x80000000u)) != 0 { break() }
+                if unlikely((tri.id(bvh.tri_size - 1) & bitcast[i32](0x80000000u)) != 0) { break() }
             }
         }
     }
