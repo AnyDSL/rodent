@@ -58,7 +58,7 @@ fn reduce(value: float, @ n: int, op: fn (float, float) -> float) -> float {
 
 // Prefetches a chunk of memory
 fn prefetch_bytes(ptr: &[u8], @(?bytes) bytes: int) -> () {
-    for i in unroll_step(0, bytes, 64) @{
+    for i in unroll_step(0, bytes, 64) {
         cpu_prefetch(&ptr(i),  0 /* read */, 3 /* closest locality */, 1 /* data */);
     }
 }
@@ -361,7 +361,7 @@ fn @cpu_traverse_single_helper( ray_box_intrinsics: RayBoxIntrinsics
                 // Sort them
                 if !any_hit && unlikely(n >= 2) {
                     // Generate a specialized sorting network for lengths [2..bvh.arity] (included)
-                    for size in unroll(2, bvh.arity + 1) @{
+                    for size in unroll(2, bvh.arity + 1) {
                         if size == bvh.arity || likely(n == size) {
                             stack.sort_n(size, @ |a, b| a < b, sorting_network, branchless);
                             break()
@@ -457,7 +457,7 @@ fn @cpu_traverse_hybrid_helper( ray_box_intrinsics: RayBoxIntrinsics
                     for lane in one_bits(mask) {
                         let lane_ray = load_ray(&mut ray, lane);
                         let mut lane_order : [int * 6];
-                        for i in unroll(0, 6) @{
+                        for i in unroll(0, 6) {
                             lane_order(i) = bitcast[int](load(bitcast[&float](&order(i)), lane));
                         }
                         let lane_hit = cpu_traverse_single_helper(ray_box_intrinsics, lane_ray, bvh, lane_order, any_hit, stack.top().node);
