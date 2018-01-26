@@ -144,7 +144,7 @@ fn @intersect_ray_tri(math: Intrinsics, early_exit: bool, mut mask: bool, ray: R
     let no_hit = || -> ! return (false, undef[float](), undef[float](), undef[float]());
     let expect = |cond: bool, _| -> ! {
         mask &= cond;
-        if early_exit && likely(all(!mask)) { no_hit() }
+        if early_exit && likely(rv_all(!mask)) { no_hit() }
     };
 
     let c = vec3_sub(tri.v0, ray.org);
@@ -159,12 +159,12 @@ fn @intersect_ray_tri(math: Intrinsics, early_exit: bool, mut mask: bool, ray: R
     expect(v >= 0.0f);
     expect(u + v <= abs_det);
 
-    if !early_exit && likely(all(!mask)) { no_hit() }
+    if !early_exit && likely(rv_all(!mask)) { no_hit() }
 
     let t = prodsign(vec3_dot(c, tri.n), det);
     expect((abs_det != 0.0f) & (t >= abs_det * ray.tmin) & (t <= abs_det * ray.tmax));
 
-    if !early_exit && likely(all(!mask)) { no_hit() }
+    if !early_exit && likely(rv_all(!mask)) { no_hit() }
     let inv_det = 1.0f / abs_det;
 
     (mask, t * inv_det, u * inv_det, v * inv_det)

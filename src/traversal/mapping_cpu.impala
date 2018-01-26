@@ -1,15 +1,15 @@
 // Vectorizer intrinsics  ----------------------------------------------------------
 
 extern "C" {
-    fn "rv_any"     any(bool) -> bool;
-    fn "rv_all"     all(bool) -> bool;
-    fn "rv_ballot"  ballot(bool) -> int;
-    fn "rv_extract" extract(float, int) -> float;
-    fn "rv_insert"  insert(float, int, float) -> float;
-    fn "rv_load"    load(&float, int) -> float;
-    fn "rv_store"   store(&mut float, int, float) -> ();
-    fn "rv_shuffle" shuffle(float, int) -> float;
-    fn "rv_align"   align(&i8, int)-> &i8;
+    fn rv_any(bool) -> bool;
+    fn rv_all(bool) -> bool;
+    fn rv_ballot(bool) -> int;
+    fn rv_extract(float, int) -> float;
+    fn rv_insert(float, int, float) -> float;
+    fn rv_load(&float, int) -> float;
+    fn rv_store(&mut float, int, float) -> ();
+    fn rv_shuffle(float, int) -> float;
+    fn rv_align(&i8, int)-> &i8;
 }
 
 // Misc. ---------------------------------------------------------------------------
@@ -24,14 +24,14 @@ fn @make_cpu_octant_order(octant: int, size: int) -> [int * 6] {
 // Loads a bounding box ordered by octant on the CPU
 fn @make_cpu_ordered_bbox(bounds_ptr: &[i8], k: int, order: [int * 6], size: int) -> BBox {
     let (xmin, ymin, zmin) = (
-        *(align(&bounds_ptr(order(0) + k), size) as &float),
-        *(align(&bounds_ptr(order(1) + k), size) as &float),
-        *(align(&bounds_ptr(order(2) + k), size) as &float)
+        *(rv_align(&bounds_ptr(order(0) + k), size) as &float),
+        *(rv_align(&bounds_ptr(order(1) + k), size) as &float),
+        *(rv_align(&bounds_ptr(order(2) + k), size) as &float)
     );
     let (xmax, ymax, zmax) = (
-        *(align(&bounds_ptr(order(3) + k), size) as &float),
-        *(align(&bounds_ptr(order(4) + k), size) as &float),
-        *(align(&bounds_ptr(order(5) + k), size) as &float)
+        *(rv_align(&bounds_ptr(order(3) + k), size) as &float),
+        *(rv_align(&bounds_ptr(order(4) + k), size) as &float),
+        *(rv_align(&bounds_ptr(order(5) + k), size) as &float)
     );
 
     make_bbox(make_vec3(xmin, ymin, zmin), make_vec3(xmax, ymax, zmax))
@@ -50,7 +50,7 @@ fn one_bits(mask: int, body: fn (int) -> ()) -> () {
 fn reduce(value: float, @ n: int, op: fn (float, float) -> float) -> float {
     if (n >= 2) {
         let m = n / 2;
-        reduce(op(value, shuffle(value, m)), m, op)
+        reduce(op(value, rv_shuffle(value, m)), m, op)
     } else {
         value
     }
@@ -65,28 +65,28 @@ fn prefetch_bytes(ptr: &[u8], @(?bytes) bytes: int) -> () {
 
 // Returns the first vector lane index i for which value[i] == lane
 fn @index_of(value: float, lane: float) -> int {
-    cpu_ctz32(ballot(value == lane), true)
+    cpu_ctz32(rv_ballot(value == lane), true)
 }
 
 // Load one ray from a packet of rays
 fn @load_ray(ray_ptr: &Ray, lane: int) -> Ray {
     Ray {
-        org: make_vec3(load(&ray_ptr.org.x, lane), load(&ray_ptr.org.y, lane), load(&ray_ptr.org.z, lane)),
-        dir: make_vec3(load(&ray_ptr.dir.x, lane), load(&ray_ptr.dir.y, lane), load(&ray_ptr.dir.z, lane)),
-        inv_org: make_vec3(load(&ray_ptr.inv_org.x, lane), load(&ray_ptr.inv_org.y, lane), load(&ray_ptr.inv_org.z, lane)),
-        inv_dir: make_vec3(load(&ray_ptr.inv_dir.x, lane), load(&ray_ptr.inv_dir.y, lane), load(&ray_ptr.inv_dir.z, lane)),
-        tmin: load(&ray_ptr.tmin, lane),
-        tmax: load(&ray_ptr.tmax, lane)
+        org: make_vec3(rv_load(&ray_ptr.org.x, lane), rv_load(&ray_ptr.org.y, lane), rv_load(&ray_ptr.org.z, lane)),
+        dir: make_vec3(rv_load(&ray_ptr.dir.x, lane), rv_load(&ray_ptr.dir.y, lane), rv_load(&ray_ptr.dir.z, lane)),
+        inv_org: make_vec3(rv_load(&ray_ptr.inv_org.x, lane), rv_load(&ray_ptr.inv_org.y, lane), rv_load(&ray_ptr.inv_org.z, lane)),
+        inv_dir: make_vec3(rv_load(&ray_ptr.inv_dir.x, lane), rv_load(&ray_ptr.inv_dir.y, lane), rv_load(&ray_ptr.inv_dir.z, lane)),
+        tmin: rv_load(&ray_ptr.tmin, lane),
+        tmax: rv_load(&ray_ptr.tmax, lane)
     }
 }
 
 // Store one hit in a packet of hits
 fn @store_hit(hit_ptr: &mut Hit, lane: int, hit: Hit) -> () {
-    store(&mut hit_ptr.distance, lane, hit.distance);
-    store(&mut hit_ptr.uv_coords.x, lane, hit.uv_coords.x);
-    store(&mut hit_ptr.uv_coords.y, lane, hit.uv_coords.y);
-    store(bitcast[&mut float](&mut hit_ptr.prim_id), lane, bitcast[float](hit.prim_id));
-    store(bitcast[&mut float](&mut hit_ptr.inst_id), lane, bitcast[float](hit.inst_id));
+    rv_store(&mut hit_ptr.distance, lane, hit.distance);
+    rv_store(&mut hit_ptr.uv_coords.x, lane, hit.uv_coords.x);
+    rv_store(&mut hit_ptr.uv_coords.y, lane, hit.uv_coords.y);
+    rv_store(bitcast[&mut float](&mut hit_ptr.prim_id), lane, bitcast[float](hit.prim_id));
+    rv_store(bitcast[&mut float](&mut hit_ptr.inst_id), lane, bitcast[float](hit.inst_id));
 }
 
 // BVH4 ----------------------------------------------------------------------------
@@ -135,8 +135,8 @@ fn @make_cpu_bvh4_tri(tri_ptr: &Bvh4Tri) -> BvhTri {
 
 fn @make_cpu_bvh4(bvh4: Bvh4) -> Bvh {
     Bvh {
-        node: @ |j| make_cpu_bvh4_node(align(&bvh4.nodes(j) as &i8, 16) as &Bvh4Node),
-        tri:  @ |j| make_cpu_bvh4_tri(align(&bvh4.tris(j) as &i8, 16) as &Bvh4Tri),
+        node: @ |j| make_cpu_bvh4_node(rv_align(&bvh4.nodes(j) as &i8, 16) as &Bvh4Node),
+        tri:  @ |j| make_cpu_bvh4_tri(rv_align(&bvh4.tris(j) as &i8, 16) as &Bvh4Tri),
         order: @ |octant| make_cpu_octant_order(octant, 16),
         prefetch: @ |id| {
             let ptr = select(id < 0, &bvh4.tris(!id) as &[u8], &bvh4.nodes(id - 1) as &[u8]);
@@ -199,8 +199,8 @@ fn @make_cpu_bvh8_tri(tri_ptr: &Bvh8Tri) -> BvhTri {
 
 fn @make_cpu_bvh8_tri8(bvh8: Bvh8) -> Bvh {
     Bvh {
-        node: @ |j| make_cpu_bvh8_node(align(&bvh8.nodes(j) as &i8, 32) as &Bvh8Node),
-        tri:  @ |j| make_cpu_bvh8_tri(align(&bvh8.tris(j) as &i8, 32) as &Bvh8Tri),
+        node: @ |j| make_cpu_bvh8_node(rv_align(&bvh8.nodes(j) as &i8, 32) as &Bvh8Node),
+        tri:  @ |j| make_cpu_bvh8_tri(rv_align(&bvh8.tris(j) as &i8, 32) as &Bvh8Tri),
         order: @ |octant| make_cpu_octant_order(octant, 32),
         prefetch: @ |id| {
             let ptr = select(id < 0, &bvh8.tris(!id) as &[u8], &bvh8.nodes(id - 1) as &[u8]);
@@ -213,8 +213,8 @@ fn @make_cpu_bvh8_tri8(bvh8: Bvh8) -> Bvh {
 
 fn @make_cpu_bvh8_tri4(bvh84: Bvh8Tri4) -> Bvh {
     Bvh {
-        node: @ |j| make_cpu_bvh8_node(align(&bvh84.nodes(j) as &i8, 32) as &Bvh8Node),
-        tri:  @ |j| make_cpu_bvh4_tri(align(&bvh84.tris(j) as &i8, 16) as &Bvh4Tri),
+        node: @ |j| make_cpu_bvh8_node(rv_align(&bvh84.nodes(j) as &i8, 32) as &Bvh8Node),
+        tri:  @ |j| make_cpu_bvh4_tri(rv_align(&bvh84.tris(j) as &i8, 16) as &Bvh4Tri),
         order: @ |octant| make_cpu_octant_order(octant, 32),
         prefetch: @ |id| {
             let ptr = select(id < 0, &bvh84.tris(!id) as &[u8], &bvh84.nodes(id - 1) as &[u8]);
@@ -338,7 +338,7 @@ fn @cpu_traverse_single_helper( ray_box_intrinsics: RayBoxIntrinsics
                 let node = bvh.node(node_ref.node - 1);
                 let (hit, tentry, _) = intersect_ray_box(ray_box_intrinsics, true, ray, node.ordered_bbox(j, order));
 
-                let mask = !ballot(!hit) & ((1 << bvh.arity) - 1);
+                let mask = !rv_ballot(!hit) & ((1 << bvh.arity) - 1);
                 if likely(mask == 0) { continue() }
 
                 // Push intersected nodes on the stack
@@ -350,7 +350,7 @@ fn @cpu_traverse_single_helper( ray_box_intrinsics: RayBoxIntrinsics
                     n++;
                     bvh.prefetch(child_id);
 
-                    let t = extract(tentry, bit);
+                    let t = rv_extract(tentry, bit);
                     if any_hit || t < stack.top().tmin {
                         stack.push(child_id, t);
                     } else {
@@ -388,19 +388,19 @@ fn @cpu_traverse_single_helper( ray_box_intrinsics: RayBoxIntrinsics
 
                         // Find the closest intersection
                         if any_hit {
-                            let mask = ballot(found);
+                            let mask = rv_ballot(found);
                             if mask != 0 {
                                 let lane = cpu_ctz32(mask, true);
                                 hit = make_hit(
                                     undef[int](),
                                     tri.id(lane) & 0x7FFFFFFF,
-                                    extract(t, lane),
-                                    make_vec2(extract(u, lane), extract(v, lane))
+                                    rv_extract(t, lane),
+                                    make_vec2(rv_extract(u, lane), rv_extract(v, lane))
                                 );
                                 terminated = true;
                                 break()
                             }
-                        } else if any(found) {
+                        } else if rv_any(found) {
                             let found_t = select(found, t, flt_max);
                             let min_t = reduce(found_t, bvh.tri_size, ray_box_intrinsics.fminf);
                             let lane = index_of(found_t, min_t);
@@ -408,8 +408,8 @@ fn @cpu_traverse_single_helper( ray_box_intrinsics: RayBoxIntrinsics
                             hit = make_hit(
                                 undef[int](),
                                 tri.id(lane) & 0x7FFFFFFF,
-                                extract(t, lane),
-                                make_vec2(extract(u, lane), extract(v, lane))
+                                rv_extract(t, lane),
+                                make_vec2(rv_extract(u, lane), rv_extract(v, lane))
                             );
                             ray.tmax = hit.distance;
                         }
@@ -450,7 +450,7 @@ fn @cpu_traverse_hybrid_helper( ray_box_intrinsics: RayBoxIntrinsics
 
         // Cull nodes and test SIMD utilization
         while true {
-            let mask = ballot(stack.top().tmin < ray.tmax);
+            let mask = rv_ballot(stack.top().tmin < ray.tmax);
             if likely(mask != 0) {
                 if single && unlikely(cpu_popcount32(mask) <= switch_threshold) {
                     // Switch to single ray tracing when SIMD utilization is too low
@@ -458,12 +458,12 @@ fn @cpu_traverse_hybrid_helper( ray_box_intrinsics: RayBoxIntrinsics
                         let lane_ray = load_ray(&mut ray, lane);
                         let mut lane_order : [int * 6];
                         for i in unroll(0, 6) {
-                            lane_order(i) = bitcast[int](load(bitcast[&float](&order(i)), lane));
+                            lane_order(i) = bitcast[int](rv_load(bitcast[&float](&order(i)), lane));
                         }
                         let lane_hit = cpu_traverse_single_helper(ray_box_intrinsics, lane_ray, bvh, lane_order, any_hit, stack.top().node);
                         if lane_hit.prim_id >= 0 {
                             store_hit(&mut hit, lane, lane_hit);
-                            ray.tmax = insert(ray.tmax, lane, select(any_hit, -flt_max, lane_hit.distance));
+                            ray.tmax = rv_insert(ray.tmax, lane, select(any_hit, -flt_max, lane_hit.distance));
 
                             if any_hit { valid &= !(1 << lane) }
                         }
@@ -490,14 +490,14 @@ fn @cpu_traverse_hybrid_helper( ray_box_intrinsics: RayBoxIntrinsics
 
                 let (hit, tentry, _) = intersect_ray_box(ray_box_intrinsics, false, ray, node.bbox(k));
 
-                // Equivalent to any(hit) but use MOVMASK instead of PTEST
-                if !ballot(!hit) & ((1 << vector_width) - 1) != 0 {
+                // Equivalent to rv_any(hit) but use MOVMASK instead of PTEST
+                if !rv_ballot(!hit) & ((1 << vector_width) - 1) != 0 {
                     n++;
 
                     // Important: cull nodes that are too far away
                     // from being traversed with the single ray kernel
                     let thit = select(hit, tentry, flt_max);
-                    if any_hit || any(stack.top().tmin > thit) {
+                    if any_hit || rv_any(stack.top().tmin > thit) {
                         stack.push(child_id, thit);
 
                         // Prefetch only when the child is closer than what is on the stack
@@ -536,7 +536,7 @@ fn @cpu_traverse_hybrid_helper( ray_box_intrinsics: RayBoxIntrinsics
                         ray.tmax = select(any_hit, -flt_max, t);
                     }
                     if any_hit {
-                        valid &= !ballot(mask);
+                        valid &= !rv_ballot(mask);
                         if unlikely(valid == 0) { exit() }
                     }
                 }
