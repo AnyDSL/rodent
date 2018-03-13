@@ -21,5 +21,5 @@ add_executable(bench_traversal
     bench_traversal.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../common/traversal.h)
 target_include_directories(bench_traversal PUBLIC ../common)
-target_link_libraries(bench_traversal ${ANYDSL_RUNTIME_LIBRARY} ${ANYDSL_RUNTIME_LIBRARIES})
+target_link_libraries(bench_traversal ${AnyDSL_runtime_LIBRARIES})
 add_custom_command(TARGET bench_traversal POST_BUILD COMMAND cp ${CMAKE_CURRENT_BINARY_DIR}/bench_traversal.nvvm.bc ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
