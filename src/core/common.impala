@@ -23,7 +23,7 @@ fn safe_rcp(x: float) -> float {
 
 fn @ilog2(i: int) -> int {
     fn @(?i) ilog2_helper(i: int, p: int) -> int {
-        if i <= 1 << p{
+        if i <= (1 << p) {
             p
         } else {
             ilog2_helper(i, p + 1)
