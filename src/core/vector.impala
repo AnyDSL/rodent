@@ -79,3 +79,29 @@ fn @vec4_len(math: Intrinsics, v: Vec4) -> f32 { math.sqrtf(vec4_len2(v)) }
 fn @vec2_normalize(math: Intrinsics, v: Vec2) -> Vec2 { vec2_mulf(v, 1.0f / vec2_len(math, v)) }
 fn @vec3_normalize(math: Intrinsics, v: Vec3) -> Vec3 { vec3_mulf(v, 1.0f / vec3_len(math, v)) }
 fn @vec4_normalize(math: Intrinsics, v: Vec4) -> Vec4 { vec4_mulf(v, 1.0f / vec4_len(math, v)) }
+
+fn @vec2_lerp(a: Vec2, b: Vec2, k: f32) -> Vec2 { vec2_zip(a, b, |x, y| lerp(x, y, k)) }
+fn @vec3_lerp(a: Vec3, b: Vec3, k: f32) -> Vec3 { vec3_zip(a, b, |x, y| lerp(x, y, k)) }
+fn @vec4_lerp(a: Vec4, b: Vec4, k: f32) -> Vec4 { vec4_zip(a, b, |x, y| lerp(x, y, k)) }
+
+fn @vec2_lerp2(a: Vec2, b: Vec2, c: Vec2, u: f32, v: f32) -> Vec2 {
+    Vec2 {
+        x: lerp2(a.x, b.x, c.x, u, v),
+        y: lerp2(a.y, b.y, c.y, u, v)
+    }
+}
+fn @vec3_lerp2(a: Vec3, b: Vec3, c: Vec3, u: f32, v: f32) -> Vec3 {
+    Vec3 {
+        x: lerp2(a.x, b.x, c.x, u, v),
+        y: lerp2(a.y, b.y, c.y, u, v),
+        z: lerp2(a.z, b.z, c.z, u, v)
+    }
+}
+fn @vec4_lerp2(a: Vec4, b: Vec4, c: Vec4, u: f32, v: f32) -> Vec4 {
+    Vec4 {
+        x: lerp2(a.x, b.x, c.x, u, v),
+        y: lerp2(a.y, b.y, c.y, u, v),
+        z: lerp2(a.z, b.z, c.z, u, v),
+        w: lerp2(a.w, b.w, c.w, u, v)
+    }
+}

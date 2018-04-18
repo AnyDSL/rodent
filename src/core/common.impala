@@ -35,3 +35,25 @@ fn @ilog2(i: i32) -> i32 {
 fn @lerp(a: f32, b: f32, k: f32) -> f32 {
     (1.0f - k) * a + k * b
 }
+
+fn @lerp2(a: f32, b: f32, c: f32, k1: f32, k2: f32) -> f32 {
+    (1.0f - k1 - k2) * a + k1 * b + k2 * c
+}
+
+fn triangle_area(math: Intrinsics, v0: Vec3, v1: Vec3, v2: Vec3) -> f32 {
+    let e1 = vec3_sub(v1, v0);
+    let e2 = vec3_sub(v2, v0);
+    let  n = vec3_cross(e1, e2);
+    0.5f * vec3_len(math, n)
+}
+
+fn fresnel_factor(n1: f32, n2: f32, cos_i: f32, cos_t: f32) -> f32 {
+    let R_s = (n1 * cos_i - n2 * cos_t) / (n1 * cos_i + n2 * cos_t);
+    let R_p = (n2 * cos_i - n1 * cos_t) / (n2 * cos_i + n1 * cos_t);
+    (R_s * R_s + R_p * R_p) * 0.5f
+}
+
+fn positive_cos(a: Vec3, b: Vec3) -> f32 {
+    let cos = vec3_dot(a, b);
+    if cos >= 0.0f { cos } else { 0.0f }
+}

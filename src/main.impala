@@ -1,0 +1,37 @@
+fn diffuse_shader(math: Intrinsics, scene: Scene, surf: SurfaceElement) -> Material {
+    let texture = make_texture(math,
+        make_repeat_border(),
+        make_bilinear_filter(),
+        scene.images(0));
+    let bsdf = make_diffuse_bsdf(surf, texture(surf.uv_coords));
+    make_material(bsdf)
+}
+
+fn render(device: Device, renderer: Renderer) -> () {
+    let image    = device.load_image("textures/wall.png");
+    let tri_mesh = device.load_mesh("cube.obj");
+    let film     = device.alloc_film(1024, 1024);
+
+    let camera = make_perspective_camera(
+        make_vec3(0.0f, 0.0f, -10.0f),
+        make_orthonormal_mat3x3(make_vec3(0.0f, 0.0f, 1.0f)),
+        1.0f,
+        1.0f
+    );
+    let light = make_point_light(
+        make_vec3(0.0f, 10.0f, 0.0f),
+        make_color(100.0f, 100.0f, 100.0f)
+    );
+
+    let scene = Scene {
+        images:     |i| [image](i),
+        shaders:    |i| [diffuse_shader](i),
+        geometries: |i| [tri_mesh](i),
+        lights:     |i| [light](i),
+        camera:     camera
+    };
+
+    renderer(scene, device, film);
+
+    device.store_film("render.png", film);
+}

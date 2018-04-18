@@ -2,8 +2,8 @@
 // can be generated procedurally or stored in memory
 struct Image {
     pixels: fn (i32, i32) -> Color,
-    width:  fn () -> i32,
-    height: fn () -> i32
+    width:  i32,
+    height: i32
 }
 
 struct BorderHandling {
@@ -14,36 +14,44 @@ struct BorderHandling {
 type ImageFilter = fn (Intrinsics, Image, Vec2) -> Color;
 type Texture = fn (Vec2) -> Color;
 
-fn make_clamp_border() -> BorderHandling {
-    BorderHandling {
-        lower: |_, _| 0.0f,
-        upper: |_, _| 1.0f
+fn @make_image(pixels: &[Color], width: i32, height: i32) -> Image {
+    Image {
+        pixels: |x, y| pixels(y * width + x),
+        width: width,
+        height: height
     }
 }
 
-fn make_repeat_border() -> BorderHandling {
-    let repeat = |math, x| x - math.floorf(x);
+fn make_clamp_border() -> BorderHandling {
+    BorderHandling {
+        lower: @ |_, _| 0.0f,
+        upper: @ |_, _| 1.0f
+    }
+}
+
+fn @make_repeat_border() -> BorderHandling {
+    let repeat = @ |math, x| x - math.floorf(x);
     BorderHandling {
         lower: repeat,
         upper: repeat
     }
 }
 
-fn make_nearest_filter() -> ImageFilter {
-    |img, uv| {
-        img.pixels(math.max((u.x * img.width())  as i32, img.width()  - 1),
-                   math.min((u.y * img.height()) as i32, img.height() - 1))
+fn @make_nearest_filter() -> ImageFilter {
+    @ |math, img, uv| {
+        img.pixels(math.max((uv.x * img.width  as f32) as i32, img.width  - 1),
+                   math.min((uv.y * img.height as f32) as i32, img.height - 1))
     }
 }
 
-fn make_bilinear_filter() -> ImageFilter {
-    |img, uv| {
-        let u = uv.x * img.width();
-        let v = uv.y * img.height();
-        let x0 = math.max(u as i32, img.width()  - 1);
-        let y0 = math.min(v as i32, img.height() - 1);
-        let x1 = math.max(u as i32 + 1, img.width()  - 1);
-        let y1 = math.min(v as i32 + 1, img.height() - 1);
+fn @make_bilinear_filter() -> ImageFilter {
+    @ |math, img, uv| {
+        let u = uv.x * img.width as f32;
+        let v = uv.y * img.height as f32;
+        let x0 = math.max(u as i32, img.width  - 1);
+        let y0 = math.min(v as i32, img.height - 1);
+        let x1 = math.max(u as i32 + 1, img.width  - 1);
+        let y1 = math.min(v as i32 + 1, img.height - 1);
         let kx  = u - math.floorf(u);
         let ky  = v - math.floorf(v);
 
@@ -52,25 +60,24 @@ fn make_bilinear_filter() -> ImageFilter {
         let p01 = img.pixels(x0, y1);
         let p11 = img.pixels(x1, y1);
 
-        let interp = |x00, x10, x01, x11| lerp(lerp(x00, x10, kx), lerp(x01, x11, kx), ky);
-        color(interp(p00.r, p10.r, p01.r, p11.r),
-              interp(p00.g, p10.g, p01.g, p11.g),
-              interp(p00.b, p10.b, p01.b, p11.b),
-              interp(p00.a, p10.a, p01.a, p11.a))
+        let interp = @ |x00, x10, x01, x11| lerp(lerp(x00, x10, kx), lerp(x01, x11, kx), ky);
+        make_color(interp(p00.r, p10.r, p01.r, p11.r),
+                   interp(p00.g, p10.g, p01.g, p11.g),
+                   interp(p00.b, p10.b, p01.b, p11.b))
     }
 }
 
-fn make_texture(math: Intrinsics, border: BorderHandling, filter: ImageFilter, image: Image) -> Texture {
-    let apply_border = |x| {
+fn @make_texture(math: Intrinsics, border: BorderHandling, filter: ImageFilter, image: Image) -> Texture {
+    let apply_border = @ |x| {
         if x < 0.0f {
             border.lower(math, x)
         } else if x > 1.0f {
             border.upper(math, x)
         } else { x }
     };
-    |uv| {
+    @ |uv| {
         let u = apply_border(uv.x);
         let v = apply_border(uv.y);
-        filter(math, image, vec2(u, v))
+        filter(math, image, make_vec2(u, v))
     }
 }
