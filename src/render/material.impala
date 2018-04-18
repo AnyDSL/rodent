@@ -17,7 +17,7 @@ struct SurfaceElement {
 // Result of sampling a BSDF
 struct BsdfSample {
     in_dir: Vec3,  // Incoming direction
-    pdf:    float, // Weight of the sample
+    pdf:    f32, // Weight of the sample
     color:  Color  // Color of the sample
 }
 
@@ -26,7 +26,7 @@ struct Bsdf {
     // Evaluates the reflectance of the material for the given set of directions at the given point on a surface
     eval: fn (Intrinsics, Vec3, Vec3) -> Color,
     // Evaluates the sampling probability density for a given direction and point on a surface
-    pdf: fn (Intrinsics, Vec3, Vec3) -> float,
+    pdf: fn (Intrinsics, Vec3, Vec3) -> f32,
     // Samples a direction at the given point on a surface
     sample: fn (Intrinsics, &mut RndState, Vec3, bool) -> BsdfSample,
     // Returns true if the material is purely specular
@@ -57,7 +57,7 @@ fn make_emissive_material(surf: SurfaceElement, light: Light) {
 }
 
 // Creates a BSDF sample and checks that it lies on the right side of the surface
-fn make_bsdf_sample(surf: SurfaceElement, in_dir: Vec3, pdf: float, color: Color, inverted: bool) -> BsdfSample {
+fn make_bsdf_sample(surf: SurfaceElement, in_dir: Vec3, pdf: f32, color: Color, inverted: bool) -> BsdfSample {
     // Checks that the sample is above the surface (or under it if inverted is true)
     let valid = pdf > 0.0f && (inverted ^ (vec3_dot(in_dir, surf.face_normal) > 0.0f));
     BsdfSample {
@@ -88,7 +88,7 @@ fn make_diffuse_bsdf(surf: SurfaceElement, kd: Color) -> Bsdf {
 }
 
 // Creates a physically-correct Phong BSDF
-fn make_phong_bsdf(surf: SurfaceElement, ks: Color, ns: float) -> Bsdf {
+fn make_phong_bsdf(surf: SurfaceElement, ks: Color, ns: f32) -> Bsdf {
     Bsdf {
         eval: |math, in_dir, out_dir| {
             let cos = positive_cos(in_dir, vec3_reflect(out_dir, surf.local.col(2)));
@@ -132,7 +132,7 @@ fn make_mirror_bsdf(surf: SurfaceElement, ks: Color) -> Bsdf {
 }
 
 // Creates a perfect glass BSDF
-fn make_glass_material(surf: SurfaceElement, n1: float, n2: float, ks: Color) -> Bsdf {
+fn make_glass_material(surf: SurfaceElement, n1: f32, n2: f32, ks: Color) -> Bsdf {
     Bsdf {
         eval: |math, in_dir, out_dir| black,
         pdf: |math, in_dir, out_dir| 0.0f,
@@ -168,7 +168,7 @@ fn make_glass_material(surf: SurfaceElement, n1: float, n2: float, ks: Color) ->
 }
 
 // Creates a BSDF that interpolates between two other BSDFs
-fn make_mix_bsdf(mat1: Bsdf, mat2: Bsdf, k: float) -> Bsdf {
+fn make_mix_bsdf(mat1: Bsdf, mat2: Bsdf, k: f32) -> Bsdf {
     Bsdf {
         eval: |math, in_dir, out_dir|
             color_lerp(mat1.eval(math, in_dir, out_dir),

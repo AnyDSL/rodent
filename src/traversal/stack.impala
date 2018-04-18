@@ -1,36 +1,36 @@
 struct NodeRef {
-    node: int,
-    tmin: float
+    node: i32,
+    tmin: f32
 }
 
 struct Stack {
-    push:       fn (int, float) -> (),
-    push_after: fn (int, float) -> (),
-    set_top:    fn (int, float) -> (),
-    sort_n:     fn (int, fn (float, float) -> bool, SortingNetwork, bool) -> (),
+    push:       fn (i32, f32) -> (),
+    push_after: fn (i32, f32) -> (),
+    set_top:    fn (i32, f32) -> (),
+    sort_n:     fn (i32, fn (f32, f32) -> bool, SortingNetwork, bool) -> (),
     pop:        fn () -> (),
     top:        fn () -> NodeRef,
     is_empty:   fn () -> bool,
-    size:       fn () -> int
+    size:       fn () -> i32
 }
 
 struct SmallStack {
-    write: fn (int, (int, float)) -> (),
-    read:  fn (int) -> (int, float)
+    write: fn (i32, (i32, f32)) -> (),
+    read:  fn (i32) -> (i32, f32)
 }
 
 fn @is_leaf (ref: NodeRef) -> bool { ref.node < 0 }
 fn @is_inner(ref: NodeRef) -> bool { ref.node > 0 }
 
-fn @make_small_stack(n: int) -> SmallStack {
-    fn @(?begin & ?end) make_small_stack_helper(begin: int, end: int) -> SmallStack {
+fn @make_small_stack(n: i32) -> SmallStack {
+    fn @(?begin & ?end) make_small_stack_helper(begin: i32, end: i32) -> SmallStack {
         if begin == end {
             SmallStack {
                 write: @ |_, _| (),
-                read:  @ |_| undef[(int, float)]()
+                read:  @ |_| undef[(i32, f32)]()
             }
         } else if begin + 1 == end {
-            let mut val : (int, float);
+            let mut val : (i32, f32);
             SmallStack {
                 write: @ |i, v| val = v,
                 read:  @ |i| val
@@ -50,8 +50,8 @@ fn @make_small_stack(n: int) -> SmallStack {
 }
 
 fn @allocate_stack() -> Stack {
-    let mut nodes : [int   * 64];
-    let mut tmins : [float * 64];
+    let mut nodes : [i32   * 64];
+    let mut tmins : [f32 * 64];
     let mut node = 0;
     let mut tmin = flt_max;
     let mut ptr = -1;

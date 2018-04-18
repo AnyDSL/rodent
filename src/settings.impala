@@ -41,7 +41,7 @@ fn make_scene() -> Scene {
     let camera = |dev| {
         let fov = 60.0f;
         let kx = dev.math.tanf(fov * flt_pi / 360.0f);
-        let ky = kx * ((height as float) / (width as float));
+        let ky = kx * ((height as f32) / (width as f32));
         make_perspective_camera(
             make_vec3(0.0f, 0.0f, -10.0f),
             make_mat3x3(

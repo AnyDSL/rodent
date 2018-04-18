@@ -4,8 +4,8 @@ struct TaskManager {
     wait_one: fn () -> ()
 }
 
-fn make_task_manager(n_tasks: int) -> TaskManager {
-    let mut task_ids = ~[int: n_tasks];
+fn make_task_manager(n_tasks: i32) -> TaskManager {
+    let mut task_ids = ~[i32: n_tasks];
     let mut cur = 0;
     TaskManager {
         enqueue: |body| {

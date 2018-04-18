@@ -29,7 +29,7 @@ fn make_surface_element(math: Intrinsics, ray: Ray, hit: Hit) -> SurfaceElement 
 }
 
 // Returns the surface area of a triangle
-fn triangle_area(math: Intrinsics, v0: Vec3, v1: Vec3, v2: Vec3) -> float {
+fn triangle_area(math: Intrinsics, v0: Vec3, v1: Vec3, v2: Vec3) -> f32 {
     let e1 = vec3_sub(v1, v0);
     let e2 = vec3_sub(v2, v0);
     let  n = vec3_cross(e1, e2);
@@ -37,20 +37,20 @@ fn triangle_area(math: Intrinsics, v0: Vec3, v1: Vec3, v2: Vec3) -> float {
 }
 
 // Evaluates the fresnel factor for a dielectric
-fn fresnel_factor(n1: float, n2: float, cos_i: float, cos_t: float) -> float {
+fn fresnel_factor(n1: f32, n2: f32, cos_i: f32, cos_t: f32) -> f32 {
     let R_s = (n1 * cos_i - n2 * cos_t) / (n1 * cos_i + n2 * cos_t);
     let R_p = (n2 * cos_i - n1 * cos_t) / (n2 * cos_i + n1 * cos_t);
     (R_s * R_s + R_p * R_p) * 0.5f
 }
 
 // Returns max(0.0, dot(a, b))
-fn positive_cos(a: Vec3, b: Vec3) -> float {
+fn positive_cos(a: Vec3, b: Vec3) -> f32 {
     let cos = vec3_dot(a, b);
     if cos >= 0.0f { cos } else { 0.0f }
 }
 
 // Returns the probability to continue given the contribution of a path
-fn russian_roulette(c: Color, clamp: float) -> float {
+fn russian_roulette(c: Color, clamp: f32) -> f32 {
     let prob = 2.0f * (c.r * 0.2126f + c.g * 0.7152f + c.b * 0.0722f);
     if prob > clamp { clamp } else { luminance }
 }

@@ -38,24 +38,24 @@ fn @make_mat4x4(c0: Vec4, c1: Vec4, c2: Vec4, c3: Vec4) -> Mat4x4 {
     }
 }
 
-fn @mat2x2_row(m: Mat2x2, i: int) -> Vec2 {
+fn @mat2x2_row(m: Mat2x2, i: i32) -> Vec2 {
     [make_vec2(m.col(0).x, m.col(1).x),
      make_vec2(m.col(0).y, m.col(1).y)](i)
 }
 
-fn @mat3x3_row(m: Mat3x3, i: int) -> Vec3 {
+fn @mat3x3_row(m: Mat3x3, i: i32) -> Vec3 {
     [make_vec3(m.col(0).x, m.col(1).x, m.col(2).x),
      make_vec3(m.col(0).y, m.col(1).y, m.col(2).y),
      make_vec3(m.col(0).z, m.col(1).z, m.col(2).z)](i)
 } 
 
-fn @mat3x4_row(m: Mat3x4, i: int) -> Vec4 {
+fn @mat3x4_row(m: Mat3x4, i: i32) -> Vec4 {
     [make_vec4(m.col(0).x, m.col(1).x, m.col(2).x, m.col(3).x),
      make_vec4(m.col(0).y, m.col(1).y, m.col(2).y, m.col(3).y),
      make_vec4(m.col(0).z, m.col(1).z, m.col(2).z, m.col(3).z)](i)
 } 
 
-fn @mat4x4_row(m: Mat4x4, i: int) -> Vec4 {
+fn @mat4x4_row(m: Mat4x4, i: i32) -> Vec4 {
     [make_vec4(m.col(0).x, m.col(1).x, m.col(2).x, m.col(3).x),
      make_vec4(m.col(0).y, m.col(1).y, m.col(2).y, m.col(3).y),
      make_vec4(m.col(0).z, m.col(1).z, m.col(2).z, m.col(3).z),

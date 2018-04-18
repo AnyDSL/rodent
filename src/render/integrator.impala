@@ -1,7 +1,7 @@
 struct PrimaryRayState {
     pixel:   Vec2,
     rnd:     RndState,
-    mis:     float,
+    mis:     f32,
     contrib: Color
 }
 
@@ -10,13 +10,13 @@ struct ShadowRayState {
     contrib: Color
 }
 
-fn path_trace(dev: Device, scene: Scene, spp: int) -> () {
+fn path_trace(dev: Device, scene: Scene, spp: i32) -> () {
     let film = scene.film(dev);
     let cam  = scene.camera(dev);
     let view = scene.viewport(dev); 
 
     // Light sampling is done uniformly
-    let pdf_lightpick = 1.0f / (scene.num_lights as float);
+    let pdf_lightpick = 1.0f / (scene.num_lights as f32);
     let sample_light = |rnd| {
         let light_id = rand(rnd);
         dev.math.min(dev.math.abs(light_id), scene.num_lights - 1)

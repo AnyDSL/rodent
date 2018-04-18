@@ -1,9 +1,9 @@
 // A ray generation process, used to start a simulation
 struct RayGen {
     // Returns the ray at the given index
-    rays: fn (int) -> (Ray, PrimaryRayState),
+    rays: fn (i32) -> (Ray, PrimaryRayState),
     // Returns the number of rays in this generator
-    num_rays: int
+    num_rays: i32
 }
 
 type ShadowRayFn = fn (Ray, ShadowRayState) -> ();
@@ -15,10 +15,10 @@ type ShadowRayShader  = fn (Ray, Hit, ShadowRayState) -> ();
 type RaySheduler = fn (RayGen, PrimaryRayShader, ShadowRayShader) -> ();
 
 fn make_camera_ray_gen(math: Intrinsics,
-                       init_state: fn (RndState, float, float) -> PrimaryRayState,
+                       init_state: fn (RndState, f32, f32) -> PrimaryRayState,
                        cam: Camera,
                        viewport: Viewport,
-                       spp: int) -> RayGen {
+                       spp: i32) -> RayGen {
     RayGenerator {
         rays: |i| {
             let j = i + cur;
@@ -26,8 +26,8 @@ fn make_camera_ray_gen(math: Intrinsics,
             let y = (j / viewport.width) % viewport.height;
             // Use FNV and the current pixel index to derive a random number generator state
             let mut rnd = fnv_hash(fnv_init(), j as u32) as RndState;
-            let u = ((x as float) + randf(&mut rnd)) / (width  as float);
-            let v = ((y as float) + randf(&mut rnd)) / (height as float);
+            let u = ((x as f32) + randf(&mut rnd)) / (width  as f32);
+            let v = ((y as f32) + randf(&mut rnd)) / (height as f32);
             let state = init_state(rnd, u, v);
             let camera.generate_ray(math, u, v);
             (ray, state)

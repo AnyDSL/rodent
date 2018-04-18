@@ -3,42 +3,42 @@
 extern "C" {
     fn rv_any(bool) -> bool;
     fn rv_all(bool) -> bool;
-    fn rv_ballot(bool) -> int;
-    fn rv_extract(float, int) -> float;
-    fn rv_insert(float, int, float) -> float;
-    fn rv_load(&float, int) -> float;
-    fn rv_store(&mut float, int, float) -> ();
-    fn rv_shuffle(float, int) -> float;
-    fn rv_align(&i8, int)-> &i8;
+    fn rv_ballot(bool) -> i32;
+    fn rv_extract(f32, i32) -> f32;
+    fn rv_insert(f32, i32, f32) -> f32;
+    fn rv_load(&f32, i32) -> f32;
+    fn rv_store(&mut f32, i32, f32) -> ();
+    fn rv_shuffle(f32, i32) -> f32;
+    fn rv_align(&i8, i32)-> &i8;
 }
 
 // Misc. ---------------------------------------------------------------------------
 
 // Computes the indices of the bounding box corners for a given octant
-fn @make_cpu_octant_order(octant: int, size: int) -> [int * 6] {
+fn @make_cpu_octant_order(octant: i32, size: i32) -> [i32 * 6] {
     let (ox, oy, oz) = (octant & 1, (octant >> 1) & 1, (octant >> 2) & 1);
     let (ix, iy, iz) = (ox * size, 2 * size + oy * size, 4 * size + oz * size);
     [ix ^ size, iy ^ size, iz ^ size, ix, iy, iz]
 }
 
 // Loads a bounding box ordered by octant on the CPU
-fn @make_cpu_ordered_bbox(bounds_ptr: &[i8], k: int, order: [int * 6], size: int) -> BBox {
+fn @make_cpu_ordered_bbox(bounds_ptr: &[i8], k: i32, order: [i32 * 6], size: i32) -> BBox {
     let (xmin, ymin, zmin) = (
-        *(rv_align(&bounds_ptr(order(0) + k), size) as &float),
-        *(rv_align(&bounds_ptr(order(1) + k), size) as &float),
-        *(rv_align(&bounds_ptr(order(2) + k), size) as &float)
+        *(rv_align(&bounds_ptr(order(0) + k), size) as &f32),
+        *(rv_align(&bounds_ptr(order(1) + k), size) as &f32),
+        *(rv_align(&bounds_ptr(order(2) + k), size) as &f32)
     );
     let (xmax, ymax, zmax) = (
-        *(rv_align(&bounds_ptr(order(3) + k), size) as &float),
-        *(rv_align(&bounds_ptr(order(4) + k), size) as &float),
-        *(rv_align(&bounds_ptr(order(5) + k), size) as &float)
+        *(rv_align(&bounds_ptr(order(3) + k), size) as &f32),
+        *(rv_align(&bounds_ptr(order(4) + k), size) as &f32),
+        *(rv_align(&bounds_ptr(order(5) + k), size) as &f32)
     );
 
     make_bbox(make_vec3(xmin, ymin, zmin), make_vec3(xmax, ymax, zmax))
 }
 
 // Iterate over the bit that are set in a mask (assumes that mask != 0)
-fn one_bits(mask: int, body: fn (int) -> ()) -> () {
+fn one_bits(mask: i32, body: fn (i32) -> ()) -> () {
     if mask != 0 {
         let lane = cpu_ctz32(mask, true);
         @@body(lane);
@@ -47,7 +47,7 @@ fn one_bits(mask: int, body: fn (int) -> ()) -> () {
 }
 
 // Performs a horizontal reduction over vector lanes
-fn reduce(value: float, @ n: int, op: fn (float, float) -> float) -> float {
+fn reduce(value: f32, @ n: i32, op: fn (f32, f32) -> f32) -> f32 {
     if (n >= 2) {
         let m = n / 2;
         reduce(op(value, rv_shuffle(value, m)), m, op)
@@ -57,19 +57,19 @@ fn reduce(value: float, @ n: int, op: fn (float, float) -> float) -> float {
 }
 
 // Prefetches a chunk of memory
-fn prefetch_bytes(ptr: &[u8], @(?bytes) bytes: int) -> () {
+fn prefetch_bytes(ptr: &[u8], @(?bytes) bytes: i32) -> () {
     for i in unroll_step(0, bytes, 64) {
         cpu_prefetch(&ptr(i),  0 /* read */, 3 /* closest locality */, 1 /* data */);
     }
 }
 
 // Returns the first vector lane index i for which value[i] == lane
-fn @index_of(value: float, lane: float) -> int {
+fn @index_of(value: f32, lane: f32) -> i32 {
     cpu_ctz32(rv_ballot(value == lane), true)
 }
 
 // Load one ray from a packet of rays
-fn @load_ray(ray_ptr: &Ray, lane: int) -> Ray {
+fn @load_ray(ray_ptr: &Ray, lane: i32) -> Ray {
     Ray {
         org: make_vec3(rv_load(&ray_ptr.org.x, lane), rv_load(&ray_ptr.org.y, lane), rv_load(&ray_ptr.org.z, lane)),
         dir: make_vec3(rv_load(&ray_ptr.dir.x, lane), rv_load(&ray_ptr.dir.y, lane), rv_load(&ray_ptr.dir.z, lane)),
@@ -81,12 +81,12 @@ fn @load_ray(ray_ptr: &Ray, lane: int) -> Ray {
 }
 
 // Store one hit in a packet of hits
-fn @store_hit(hit_ptr: &mut Hit, lane: int, hit: Hit) -> () {
+fn @store_hit(hit_ptr: &mut Hit, lane: i32, hit: Hit) -> () {
     rv_store(&mut hit_ptr.distance, lane, hit.distance);
     rv_store(&mut hit_ptr.uv_coords.x, lane, hit.uv_coords.x);
     rv_store(&mut hit_ptr.uv_coords.y, lane, hit.uv_coords.y);
-    rv_store(bitcast[&mut float](&mut hit_ptr.prim_id), lane, bitcast[float](hit.prim_id));
-    rv_store(bitcast[&mut float](&mut hit_ptr.inst_id), lane, bitcast[float](hit.inst_id));
+    rv_store(bitcast[&mut f32](&mut hit_ptr.prim_id), lane, bitcast[f32](hit.prim_id));
+    rv_store(bitcast[&mut f32](&mut hit_ptr.inst_id), lane, bitcast[f32](hit.inst_id));
 }
 
 // BVH4 ----------------------------------------------------------------------------
@@ -97,17 +97,17 @@ struct Bvh4 {
 }
 
 struct Bvh4Tri {
-    v0: [[float * 4] * 3],
-    e1: [[float * 4] * 3],
-    e2: [[float * 4] * 3],
-    n:  [[float * 4] * 3],
-    id:  [int   * 4]
+    v0: [[f32 * 4] * 3],
+    e1: [[f32 * 4] * 3],
+    e2: [[f32 * 4] * 3],
+    n:  [[f32 * 4] * 3],
+    id:  [i32 * 4]
 }
 
 struct Bvh4Node {
-    bounds: [[float * 4] * 6],
-    child:   [int   * 4],
-    pad:     [int   * 4]
+    bounds: [[f32 * 4] * 6],
+    child:   [i32 * 4],
+    pad:     [i32 * 4]
 }
 
 fn @make_cpu_bvh4_node(node_ptr: &Bvh4Node) -> BvhNode {
@@ -161,17 +161,17 @@ struct Bvh8Tri4 {
 }
 
 struct Bvh8Tri {
-    v0: [[float * 8] * 3],
-    e1: [[float * 8] * 3],
-    e2: [[float * 8] * 3],
-    n:  [[float * 8] * 3],
-    id:  [int   * 8]
+    v0: [[f32 * 8] * 3],
+    e1: [[f32 * 8] * 3],
+    e2: [[f32 * 8] * 3],
+    n:  [[f32 * 8] * 3],
+    id:  [i32 * 8]
 }
 
 struct Bvh8Node {
-    bounds: [[float * 8] * 6],
-    child:   [int   * 8],
-    pad:     [int   * 8]
+    bounds: [[f32 * 8] * 6],
+    child:   [i32 * 8],
+    pad:     [i32 * 8]
 }
 
 fn @make_cpu_bvh8_node(node_ptr: &Bvh8Node) -> BvhNode {
@@ -234,15 +234,15 @@ fn @make_ray_box_intrinsics_avx() -> RayBoxIntrinsics {
 fn @make_ray_box_intrinsics_avx2() -> RayBoxIntrinsics {
     // AVX2 intrinsics: use integer min/max instead of floating point min/max
     let fminf = |x, y| {
-        let (x_, y_) = (bitcast[int](x), bitcast[int](y));
-        bitcast[float](select(x_ < y_, x_, y_))
+        let (x_, y_) = (bitcast[i32](x), bitcast[i32](y));
+        bitcast[f32](select(x_ < y_, x_, y_))
     };
     let fmaxf = |x, y| {
-        let (x_, y_) = (bitcast[int](x), bitcast[int](y));
-        bitcast[float](select(x_ > y_, x_, y_))
+        let (x_, y_) = (bitcast[i32](x), bitcast[i32](y));
+        bitcast[f32](select(x_ > y_, x_, y_))
     };
     // There is no integer <= on AVX2, only >
-    make_ray_box_intrinsics(fminf, fmaxf, |a, b| { !(bitcast[int](a) > bitcast[int](b)) })
+    make_ray_box_intrinsics(fminf, fmaxf, |a, b| { !(bitcast[i32](a) > bitcast[i32](b)) })
 }
 
 // Ray layouts  --------------------------------------------------------------------
@@ -309,9 +309,9 @@ fn @make_cpu_ray8_layout(rays: &[Ray8SoA], hits: &mut [Hit8SoA]) -> RayLayout {
 fn @cpu_traverse_single_helper( ray_box_intrinsics: RayBoxIntrinsics
                               , mut ray: Ray
                               , bvh: Bvh
-                              , order: [int * 6]
+                              , order: [i32 * 6]
                               , any_hit: bool
-                              , root: int
+                              , root: i32
                               ) -> Hit {
     // Parameters that define how nodes are sorted on the stack
     let vector_width = bvh.arity;
@@ -325,7 +325,7 @@ fn @cpu_traverse_single_helper( ray_box_intrinsics: RayBoxIntrinsics
     let mut hit = empty_hit(ray.tmax);
     stack.push(root, ray.tmin);
 
-    for j in vectorize(vector_width, vector_width * sizeof[float](), 0, vector_width) {
+    for j in vectorize(vector_width, vector_width * sizeof[f32](), 0, vector_width) {
         while likely(!stack.is_empty()) {
             let exit = break;
 
@@ -378,7 +378,7 @@ fn @cpu_traverse_single_helper( ray_box_intrinsics: RayBoxIntrinsics
                 if unlikely(leaf_ref.tmin >= ray.tmax) { continue() }
 
                 let mut terminated = false;
-                for k in vectorize(bvh.tri_size, bvh.tri_size * sizeof[float](), 0, bvh.tri_size) {
+                for k in vectorize(bvh.tri_size, bvh.tri_size * sizeof[f32](), 0, bvh.tri_size) {
                     let mut tri_id = !leaf_ref.node;
                     while true {
                         let tri = bvh.tri(tri_id++);
@@ -392,7 +392,7 @@ fn @cpu_traverse_single_helper( ray_box_intrinsics: RayBoxIntrinsics
                             if mask != 0 {
                                 let lane = cpu_ctz32(mask, true);
                                 hit = make_hit(
-                                    undef[int](),
+                                    undef[i32](),
                                     tri.id(lane) & 0x7FFFFFFF,
                                     rv_extract(t, lane),
                                     make_vec2(rv_extract(u, lane), rv_extract(v, lane))
@@ -406,7 +406,7 @@ fn @cpu_traverse_single_helper( ray_box_intrinsics: RayBoxIntrinsics
                             let lane = index_of(found_t, min_t);
 
                             hit = make_hit(
-                                undef[int](),
+                                undef[i32](),
                                 tri.id(lane) & 0x7FFFFFFF,
                                 rv_extract(t, lane),
                                 make_vec2(rv_extract(u, lane), rv_extract(v, lane))
@@ -426,13 +426,13 @@ fn @cpu_traverse_single_helper( ray_box_intrinsics: RayBoxIntrinsics
 }
 
 fn @cpu_traverse_hybrid_helper( ray_box_intrinsics: RayBoxIntrinsics
-                              , vector_width: int
+                              , vector_width: i32
                               , mut ray: Ray
                               , bvh: Bvh
-                              , order: &[int * 6]
+                              , order: &[i32 * 6]
                               , single: bool
                               , any_hit: bool
-                              , root: int
+                              , root: i32
                               ) -> Hit {
     let switch_threshold = match vector_width {
         4  => 3,
@@ -456,9 +456,9 @@ fn @cpu_traverse_hybrid_helper( ray_box_intrinsics: RayBoxIntrinsics
                     // Switch to single ray tracing when SIMD utilization is too low
                     for lane in one_bits(mask) {
                         let lane_ray = load_ray(&mut ray, lane);
-                        let mut lane_order : [int * 6];
+                        let mut lane_order : [i32 * 6];
                         for i in unroll(0, 6) {
-                            lane_order(i) = bitcast[int](rv_load(bitcast[&float](&order(i)), lane));
+                            lane_order(i) = bitcast[i32](rv_load(bitcast[&f32](&order(i)), lane));
                         }
                         let lane_hit = cpu_traverse_single_helper(ray_box_intrinsics, lane_ray, bvh, lane_order, any_hit, stack.top().node);
                         if lane_hit.prim_id >= 0 {
@@ -523,12 +523,12 @@ fn @cpu_traverse_hybrid_helper( ray_box_intrinsics: RayBoxIntrinsics
 
                 for k in range(0, bvh.tri_size) {
                     let tri_id = tri.id(k);
-                    if unlikely(tri_id == bitcast[int](0xFFFFFFFFu)) { break() }
+                    if unlikely(tri_id == bitcast[i32](0xFFFFFFFFu)) { break() }
 
                     let (mask, t, u, v) = intersect_ray_tri(cpu_intrinsics, any_hit, select(any_hit, leaf_ref.tmin < ray.tmax, true), ray, tri.load(k));
                     if mask {
                         hit = make_hit(
-                            undef[int](),
+                            undef[i32](),
                             tri_id & 0x7FFFFFFF,
                             t,
                             make_vec2(u, v)
@@ -553,8 +553,8 @@ fn @cpu_traverse_single( ray_box_intrinsics: RayBoxIntrinsics
                        , ray_layout: RayLayout
                        , bvh: Bvh
                        , any_hit: bool
-                       , ray_count: int
-                       , root: int
+                       , ray_count: i32
+                       , root: i32
                        ) -> () {
     for i in range(0, ray_count) {
         let (packet_id, ray_id) = (i / ray_layout.packet_size, i % ray_layout.packet_size);
@@ -570,12 +570,12 @@ fn @cpu_traverse_hybrid( ray_box_intrinsics: RayBoxIntrinsics
                        , bvh: Bvh
                        , single: bool
                        , any_hit: bool
-                       , ray_count: int
-                       , root: int
+                       , ray_count: i32
+                       , root: i32
                        ) -> () {
     let vector_width = ray_layout.packet_size;
     for i in range(0, ray_count / vector_width) {
-        for j in vectorize(vector_width, vector_width * sizeof[float](), 0, vector_width) {
+        for j in vectorize(vector_width, vector_width * sizeof[f32](), 0, vector_width) {
             let ray = ray_layout.input(i, j);
             let order = bvh.order(ray_octant(ray));
             let hit = cpu_traverse_hybrid_helper(ray_box_intrinsics, vector_width, ray, bvh, &order, single, any_hit, root);
