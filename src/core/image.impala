@@ -6,6 +6,12 @@ struct Image {
     height: i32
 }
 
+struct PixelData {
+    pixels: &mut [Color],
+    width:  i32,
+    height: i32
+}
+
 struct BorderHandling {
     lower: fn (Intrinsics, f32) -> f32,
     upper: fn (Intrinsics, f32) -> f32
@@ -14,11 +20,19 @@ struct BorderHandling {
 type ImageFilter = fn (Intrinsics, Image, Vec2) -> Color;
 type Texture = fn (Vec2) -> Color;
 
-fn @make_image(pixels: &[Color], width: i32, height: i32) -> Image {
-    Image {
-        pixels: |x, y| pixels(y * width + x),
-        width: width,
+fn @make_pixel_data(pixels: &mut [Color], width: i32, height: i32) -> PixelData {
+    PixelData {
+        pixels: pixels,
+        width:  width,
         height: height
+    }
+}
+
+fn @make_image(data: PixelData) -> Image {
+    Image {
+        pixels: |x, y| data.pixels(y * data.width + x),
+        width:  data.width,
+        height: data.height
     }
 }
 

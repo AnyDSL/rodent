@@ -35,3 +35,7 @@ fn render(device: Device, renderer: Renderer) -> () {
 
     device.store_film("render.png", film);
 }
+
+fn main() -> () {
+    render(make_cpu_device(), make_path_tracer(64));
+}

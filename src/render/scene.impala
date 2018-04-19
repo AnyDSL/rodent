@@ -18,9 +18,59 @@ struct Device {
 struct Film {
     // Accumulate a sample on a film
     accumulate: fn (f32, f32, Color) -> (),
-    // The associated (read-only) image
-    image: Image
+    // The associated pixel data
+    pixel_data: PixelData
 }
 
 type Renderer = fn (Scene, Device, Film) -> ();
 type Shader   = fn (Intrinsics, Scene, SurfaceElement) -> Material;
+
+// Device --------------------------------------------------------------------------
+
+extern "C" {
+    fn load_tri_mesh(&[u8], i32) -> TriMesh;
+    fn load_pixel_data(&[u8], i32) -> PixelData;
+    fn store_pixel_data(&[u8], i32, &PixelData) -> ();
+}
+
+fn @make_mesh_loader(device_id: i32) -> fn (&[u8]) -> Geometry {
+    @ |file_name| {
+        let tri_mesh = load_tri_mesh(file_name, device_id);
+        make_tri_mesh_geometry(tri_mesh)
+    }
+}
+
+fn @make_image_loader(device_id: i32) -> fn (&[u8]) -> Image {
+    @ |file_name| {
+        let pixel_data = load_pixel_data(file_name, device_id);
+        make_image(pixel_data)
+    }
+}
+
+fn @make_film_allocator(device_id: i32, atomic_add: fn (&mut f32, f32) -> ()) -> fn (i32, i32) -> Film {
+    @ |width, height| {
+        let buf = alloc(device_id, sizeof[Color]() * width * height);
+        let pixel_data = make_pixel_data(buf.data as &mut [Color], width, height);
+        Film {
+            accumulate: @ |u, v, color| {
+                fn @clamp(x: f32, xmax: i32) -> i32 {
+                    let k = (x * (xmax as f32)) as i32;
+                    select(k < xmax - 1, k, xmax - 1)
+                }
+                let x = clamp(u, width);
+                let y = clamp(v, height);
+                let pixel = &mut pixel_data.pixels(y * width + x);
+                atomic_add(&mut pixel.r, color.r);
+                atomic_add(&mut pixel.g, color.g);
+                atomic_add(&mut pixel.b, color.b);
+            },
+            pixel_data: pixel_data
+        }
+    }
+}
+
+fn @make_film_store(device_id: i32) -> fn (&[u8], Film) -> () {
+    @ |file_name, film| {
+        store_pixel_data(file_name, device_id, film.pixel_data);
+    }
+}
