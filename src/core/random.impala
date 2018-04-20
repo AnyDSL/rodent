@@ -7,11 +7,11 @@ fn @randf(rnd: &mut RndState) -> f32 {
 }
 
 // MWC64X: http://cas.ee.ic.ac.uk/people/dt10/research/rngs-gpu-mwc64x.html
-fn @mwc64x(seed: &mut u64) -> f32 {
+fn @mwc64x(seed: &mut u64) -> i32 {
     let c = *seed >> 32u64;
     let x = *seed & 0xFFFFFFFFu64;
     *seed = x * 4294883355u64 + c;
-    bitcast[f32]((x^c) as i32)
+    (x as i32)^(c as i32)
 }
 
 // Result of sampling a direction

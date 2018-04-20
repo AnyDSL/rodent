@@ -4,7 +4,7 @@ struct Color {
     b: f32
 }
 
-fn make_color(r: f32, g: f32, b: f32) -> Color {
+fn @make_color(r: f32, g: f32, b: f32) -> Color {
     Color {
         r: r,
         g: g,
@@ -12,21 +12,21 @@ fn make_color(r: f32, g: f32, b: f32) -> Color {
     }
 }
 
-fn color_mul(a: Color, b: Color) -> Color {
+fn @color_mul(a: Color, b: Color) -> Color {
     make_color(a.r * b.r, a.g * b.g, a.b * b.b)
 }
 
-fn color_mulf(c: Color, f: f32) -> Color {
+fn @color_mulf(c: Color, f: f32) -> Color {
     make_color(c.r * f, c.g * f, c.b * f)
 }
 
-fn color_lerp(a: Color, b: Color, t: f32) -> Color {
+fn @color_lerp(a: Color, b: Color, t: f32) -> Color {
     make_color((1.0f - t) * a.r + t * b.r,
                (1.0f - t) * a.g + t * b.g,
                (1.0f - t) * a.b + t * b.b)
 }
 
-fn is_black(c: Color) -> bool {
+fn @is_black(c: Color) -> bool {
     c.r == 0.0f && c.g == 0.0f && c.b == 0.0f
 }
 

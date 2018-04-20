@@ -25,13 +25,13 @@ fn @vec3_to_2(v: Vec3) -> Vec2 { make_vec2(v.x, v.y) }
 fn @vec3_to_4(v: Vec3, w: f32) -> Vec4 { make_vec4(v.x, v.y, v.z, w) }
 fn @vec4_to_3(v: Vec4) -> Vec3 { make_vec3(v.x, v.y, v.z) }
 
-fn @vec2_map(v: Vec2, f: fn (f32) -> f32) -> Vec2 { make_vec2(f(v.x), f(v.y)) }
-fn @vec3_map(v: Vec3, f: fn (f32) -> f32) -> Vec3 { make_vec3(f(v.x), f(v.y), f(v.z)) }
-fn @vec4_map(v: Vec4, f: fn (f32) -> f32) -> Vec4 { make_vec4(f(v.x), f(v.y), f(v.z), f(v.w)) }
+fn @vec2_map(v: Vec2, f: fn (f32) -> f32) -> Vec2 { make_vec2(@@f(v.x), @@f(v.y)) }
+fn @vec3_map(v: Vec3, f: fn (f32) -> f32) -> Vec3 { make_vec3(@@f(v.x), @@f(v.y), @@f(v.z)) }
+fn @vec4_map(v: Vec4, f: fn (f32) -> f32) -> Vec4 { make_vec4(@@f(v.x), @@f(v.y), @@f(v.z), @@f(v.w)) }
 
-fn @vec2_zip(a: Vec2, b: Vec2, f: fn (f32, f32) -> f32) -> Vec2 { make_vec2(f(a.x, b.x), f(a.y, b.y)) }
-fn @vec3_zip(a: Vec3, b: Vec3, f: fn (f32, f32) -> f32) -> Vec3 { make_vec3(f(a.x, b.x), f(a.y, b.y), f(a.z, b.z)) }
-fn @vec4_zip(a: Vec4, b: Vec4, f: fn (f32, f32) -> f32) -> Vec4 { make_vec4(f(a.x, b.x), f(a.y, b.y), f(a.z, b.z), f(a.w, b.w)) }
+fn @vec2_zip(a: Vec2, b: Vec2, f: fn (f32, f32) -> f32) -> Vec2 { make_vec2(@@f(a.x, b.x), @@f(a.y, b.y)) }
+fn @vec3_zip(a: Vec3, b: Vec3, f: fn (f32, f32) -> f32) -> Vec3 { make_vec3(@@f(a.x, b.x), @@f(a.y, b.y), @@f(a.z, b.z)) }
+fn @vec4_zip(a: Vec4, b: Vec4, f: fn (f32, f32) -> f32) -> Vec4 { make_vec4(@@f(a.x, b.x), @@f(a.y, b.y), @@f(a.z, b.z), @@f(a.w, b.w)) }
 
 fn @vec2_add(a: Vec2, b: Vec2) -> Vec2 { vec2_zip(a, b, |x, y| x + y) }
 fn @vec3_add(a: Vec3, b: Vec3) -> Vec3 { vec3_zip(a, b, |x, y| x + y) }

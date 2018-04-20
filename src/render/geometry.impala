@@ -1,7 +1,9 @@
 // Abstract geometry object
 struct Geometry {
     // Computes the surface element after an intersection on this geometry
-    surface_element: fn (Intrinsics, Ray, Hit) -> SurfaceElement
+    surface_element: fn (Intrinsics, Ray, Hit) -> SurfaceElement,
+    // Returns the shader index at the given hit point
+    shader_id: fn (Hit) -> i32
 }
 
 // Triangle mesh with one UV layer
@@ -10,6 +12,7 @@ struct TriMesh {
     face_normals: &[Vec3],
     uvs:          &[Vec2],
     ids:          &[i32],
+    mats:         &[i32],
     num_tris:     i32
 }
 
@@ -23,15 +26,16 @@ fn @make_tri_mesh_geometry(tri_mesh: TriMesh) -> Geometry {
             let face_normal = tri_mesh.face_normals(hit.prim_id);
             let normal = vec3_lerp2(tri_mesh.normals(i0), tri_mesh.normals(i1), tri_mesh.normals(i2), hit.uv_coords.x, hit.uv_coords.y);
             let texcoord = vec2_lerp2(tri_mesh.uvs(i0), tri_mesh.uvs(i1), tri_mesh.uvs(i2), hit.uv_coords.x, hit.uv_coords.y);
-            let entering = vec3_dot(ray.dir, face_normal) <= 0.0f;
+            let is_entering = vec3_dot(ray.dir, face_normal) <= 0.0f;
 
             SurfaceElement {
-                entering: entering,
+                is_entering: is_entering,
                 point: vec3_add(ray.org, vec3_mulf(ray.dir, hit.distance)),
-                face_normal: if entering { face_normal } else { vec3_neg(face_normal) },
+                face_normal: if is_entering { face_normal } else { vec3_neg(face_normal) },
                 uv_coords: texcoord,
                 local: make_orthonormal_mat3x3(normal)
             }
-        }
+        },
+        shader_id: @ |hit| tri_mesh.mats(hit.prim_id)
     }
 }

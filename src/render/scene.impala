@@ -1,5 +1,10 @@
 // Compile-time scene data
 struct Scene {
+    num_shaders:    i32,
+    num_geometries: i32,
+    num_images:     i32,
+    num_lights:     i32,
+
     shaders:    fn (i32) -> Shader,
     geometries: fn (i32) -> Geometry,
     images:     fn (i32) -> Image,
@@ -9,6 +14,10 @@ struct Scene {
 
 // Rendering device
 struct Device {
+    intrinsics: Intrinsics,
+
+    render_loop: fn (OnHitFn, OnShadowFn, RayGen, i32) -> (),
+
     load_mesh:   fn (&[u8]) -> Geometry,
     load_image:  fn (&[u8]) -> Image,
     alloc_film:  fn (i32, i32) -> Film,
@@ -17,13 +26,16 @@ struct Device {
 
 struct Film {
     // Accumulate a sample on a film
-    accumulate: fn (f32, f32, Color) -> (),
+    accumulate: fn (Vec2, Color) -> (),
     // The associated pixel data
     pixel_data: PixelData
 }
 
-type Renderer = fn (Scene, Device, Film) -> ();
-type Shader   = fn (Intrinsics, Scene, SurfaceElement) -> Material;
+type OnHitFn    = fn (Ray, Hit, RayState, fn (Ray, ShadowState) -> (), fn() -> !, fn (Ray, RayState) -> !) -> !;
+type OnShadowFn = fn (Ray, Hit, ShadowState) -> ();
+type RayGen     = fn (i32) -> (Ray, RayState);
+type Renderer   = fn (Scene, Device, Film) -> ();
+type Shader     = fn (Intrinsics, Scene, SurfaceElement) -> Material;
 
 // Device --------------------------------------------------------------------------
 
@@ -52,13 +64,13 @@ fn @make_film_allocator(device_id: i32, atomic_add: fn (&mut f32, f32) -> ()) ->
         let buf = alloc(device_id, sizeof[Color]() * width * height);
         let pixel_data = make_pixel_data(buf.data as &mut [Color], width, height);
         Film {
-            accumulate: @ |u, v, color| {
+            accumulate: @ |uv, color| {
                 fn @clamp(x: f32, xmax: i32) -> i32 {
                     let k = (x * (xmax as f32)) as i32;
                     select(k < xmax - 1, k, xmax - 1)
                 }
-                let x = clamp(u, width);
-                let y = clamp(v, height);
+                let x = clamp(uv.x, width);
+                let y = clamp(uv.y, height);
                 let pixel = &mut pixel_data.pixels(y * width + x);
                 atomic_add(&mut pixel.r, color.r);
                 atomic_add(&mut pixel.g, color.g);

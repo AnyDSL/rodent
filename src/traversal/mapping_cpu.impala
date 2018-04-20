@@ -47,7 +47,7 @@ fn one_bits(mask: i32, body: fn (i32) -> ()) -> () {
 }
 
 // Performs a horizontal reduction over vector lanes
-fn reduce(value: f32, @ n: i32, op: fn (f32, f32) -> f32) -> f32 {
+fn @reduce(value: f32, n: i32, op: fn (f32, f32) -> f32) -> f32 {
     if (n >= 2) {
         let m = n / 2;
         reduce(op(value, rv_shuffle(value, m)), m, op)
@@ -57,7 +57,7 @@ fn reduce(value: f32, @ n: i32, op: fn (f32, f32) -> f32) -> f32 {
 }
 
 // Prefetches a chunk of memory
-fn prefetch_bytes(ptr: &[u8], @(?bytes) bytes: i32) -> () {
+fn @prefetch_bytes(ptr: &[u8], bytes: i32) -> () {
     for i in unroll_step(0, bytes, 64) {
         cpu_prefetch(&ptr(i),  0 /* read */, 3 /* closest locality */, 1 /* data */);
     }
@@ -86,7 +86,7 @@ fn @store_hit(hit_ptr: &mut Hit, lane: i32, hit: Hit) -> () {
     rv_store(&mut hit_ptr.uv_coords.x, lane, hit.uv_coords.x);
     rv_store(&mut hit_ptr.uv_coords.y, lane, hit.uv_coords.y);
     rv_store(bitcast[&mut f32](&mut hit_ptr.prim_id), lane, bitcast[f32](hit.prim_id));
-    rv_store(bitcast[&mut f32](&mut hit_ptr.inst_id), lane, bitcast[f32](hit.inst_id));
+    rv_store(bitcast[&mut f32](&mut hit_ptr.geom_id), lane, bitcast[f32](hit.geom_id));
 }
 
 // BVH4 ----------------------------------------------------------------------------
@@ -211,13 +211,13 @@ fn @make_cpu_bvh8_tri8(bvh8: Bvh8) -> Bvh {
     }
 }
 
-fn @make_cpu_bvh8_tri4(bvh84: Bvh8Tri4) -> Bvh {
+fn @make_cpu_bvh8_tri4(bvh8tri4: Bvh8Tri4) -> Bvh {
     Bvh {
-        node: @ |j| make_cpu_bvh8_node(rv_align(&bvh84.nodes(j) as &i8, 32) as &Bvh8Node),
-        tri:  @ |j| make_cpu_bvh4_tri(rv_align(&bvh84.tris(j) as &i8, 16) as &Bvh4Tri),
+        node: @ |j| make_cpu_bvh8_node(rv_align(&bvh8tri4.nodes(j) as &i8, 32) as &Bvh8Node),
+        tri:  @ |j| make_cpu_bvh4_tri(rv_align(&bvh8tri4.tris(j) as &i8, 16) as &Bvh4Tri),
         order: @ |octant| make_cpu_octant_order(octant, 32),
         prefetch: @ |id| {
-            let ptr = select(id < 0, &bvh84.tris(!id) as &[u8], &bvh84.nodes(id - 1) as &[u8]);
+            let ptr = select(id < 0, &bvh8tri4.tris(!id) as &[u8], &bvh8tri4.nodes(id - 1) as &[u8]);
             prefetch_bytes(ptr, 256)
         },
         arity: 8,
@@ -228,21 +228,21 @@ fn @make_cpu_bvh8_tri4(bvh84: Bvh8Tri4) -> Bvh {
 // Ray-box intrinsics  -------------------------------------------------------------
 
 fn @make_ray_box_intrinsics_avx() -> RayBoxIntrinsics {
-    make_ray_box_intrinsics(|a, b| select(a < b, a, b) , |a, b| select(a > b, a, b), |a, b| a <= b)
+    make_ray_box_intrinsics(@ |a, b| select(a < b, a, b), @ |a, b| select(a > b, a, b), @ |a, b| a <= b)
 }
 
 fn @make_ray_box_intrinsics_avx2() -> RayBoxIntrinsics {
     // AVX2 intrinsics: use integer min/max instead of floating point min/max
-    let fminf = |x, y| {
+    let fminf = @ |x, y| {
         let (x_, y_) = (bitcast[i32](x), bitcast[i32](y));
         bitcast[f32](select(x_ < y_, x_, y_))
     };
-    let fmaxf = |x, y| {
+    let fmaxf = @ |x, y| {
         let (x_, y_) = (bitcast[i32](x), bitcast[i32](y));
         bitcast[f32](select(x_ > y_, x_, y_))
     };
     // There is no integer <= on AVX2, only >
-    make_ray_box_intrinsics(fminf, fmaxf, |a, b| { !(bitcast[i32](a) > bitcast[i32](b)) })
+    make_ray_box_intrinsics(fminf, fmaxf, @ |a, b| { !(bitcast[i32](a) > bitcast[i32](b)) })
 }
 
 // Ray layouts  --------------------------------------------------------------------

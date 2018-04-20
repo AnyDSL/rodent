@@ -7,7 +7,7 @@ struct Material {
 
 // Opaque description of a point on a surface
 struct SurfaceElement {
-    entering:    bool,    // True if the path enters the surface
+    is_entering: bool,    // True if the path enters the surface
     point:       Vec3,    // Point on the surface
     face_normal: Vec3,    // Geometric normal at the surface point
     uv_coords:   Vec2,    // UV coordinates on the surface
@@ -17,7 +17,7 @@ struct SurfaceElement {
 // Result of sampling a BSDF
 struct BsdfSample {
     in_dir: Vec3,  // Incoming direction
-    pdf:    f32, // Weight of the sample
+    pdf:    f32,   // Weight of the sample
     color:  Color  // Color of the sample
 }
 
@@ -137,7 +137,7 @@ fn @make_glass_material(surf: SurfaceElement, n1: f32, n2: f32, ks: Color) -> Bs
         eval: @ |math, in_dir, out_dir| black,
         pdf:  @ |math, in_dir, out_dir| 0.0f,
         sample: @ |math, rnd, out_dir, adjoint| {
-            let (k1, k2) = if surf.entering {
+            let (k1, k2) = if surf.is_entering {
                 (n1, n2)
             } else {
                 (n2, n1)

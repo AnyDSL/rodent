@@ -1,4 +1,4 @@
-fn diffuse_shader(math: Intrinsics, scene: Scene, surf: SurfaceElement) -> Material {
+fn @diffuse_shader(math: Intrinsics, scene: Scene, surf: SurfaceElement) -> Material {
     let texture = make_texture(math,
         make_repeat_border(),
         make_bilinear_filter(),
@@ -24,10 +24,15 @@ fn render(device: Device, renderer: Renderer) -> () {
     );
 
     let scene = Scene {
-        images:     |i| [image](i),
-        shaders:    |i| [diffuse_shader](i),
-        geometries: |i| [tri_mesh](i),
-        lights:     |i| [light](i),
+        num_shaders:    1,
+        num_geometries: 1,
+        num_images:     1,
+        num_lights:     1,
+
+        shaders:    @ |i| diffuse_shader,
+        geometries: @ |i| tri_mesh,
+        images:     @ |i| image,
+        lights:     @ |i| light,
         camera:     camera
     };
 
