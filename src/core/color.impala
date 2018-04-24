@@ -12,6 +12,10 @@ fn @make_color(r: f32, g: f32, b: f32) -> Color {
     }
 }
 
+fn @color_add(a: Color, b: Color) -> Color {
+    make_color(a.r + b.r, a.g + b.g, a.b + b.b)
+}
+
 fn @color_mul(a: Color, b: Color) -> Color {
     make_color(a.r * b.r, a.g * b.g, a.b * b.b)
 }

@@ -12,6 +12,10 @@ extern "device" {
 fn @  likely(cond: bool) -> bool { expect(cond,  true) }
 fn @unlikely(cond: bool) -> bool { expect(cond, false) }
 
+fn @once(body: fn () -> ()) -> () {
+    @@body()
+}
+
 fn @atomic_add_f32(ptr: &mut f32, value: f32) -> () {
     let mut cur = *(ptr as &i32);
     while true {

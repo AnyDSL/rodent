@@ -1,0 +1,123 @@
+extern "C" {
+    fn get_bvh8_tri4() -> Bvh8Tri4;
+}
+
+fn @make_cpu_ray_packet(vector_width: i32) -> RayLayout {
+    if vector_width == 4 {
+        let mut rays : [Ray4SoA * 1];
+        let mut hits : [Hit4SoA * 1];
+        make_cpu_ray4_layout(&mut rays, &mut hits)
+    } else /* if vector_width == 8 */ {
+        let mut rays : [Ray8SoA * 1];
+        let mut hits : [Hit8SoA * 1];
+        make_cpu_ray8_layout(&mut rays, &mut hits)
+    }
+}
+
+fn @cpu_render_loop(on_hit: OnHitFn, on_shadow: OnShadowFn, ray_gen: RayGen, num_rays: i32) -> () {
+    let stream_size = 256;
+    let bvh = make_cpu_bvh8_tri4(get_bvh8_tri4());
+    for i in parallel(0, 0, round_up(num_rays, stream_size)) {
+        let vector_width = 8;
+        let single_ray = false;
+        let ray_box_intrinsics = make_ray_box_intrinsics_avx2();
+        let primary_layout = make_cpu_ray_packet(vector_width);
+        let shadow_layout  = make_cpu_ray_packet(vector_width);
+
+        for j in vectorize(vector_width, 32, 0, vector_width) { 
+            let mut state : RayState;
+            let mut alive = false;
+            let mut k = 0;
+
+            while k < stream_size {
+                // Ray regeneration
+                let num_dead = cpu_popcount32(!rv_ballot(alive) & ((1 << vector_width) - 1));
+                if !alive & ((k + j) < stream_size) {
+                    let (new_ray, new_state) = ray_gen(i + k + j);
+                    primary_layout.write_ray(0, j, new_ray);
+                    state = new_state;
+                    alive = true;
+                }
+                k += num_dead;
+
+                // Primary ray traversal
+                cpu_traverse_hybrid(
+                    ray_box_intrinsics,
+                    primary_layout,
+                    bvh,
+                    single_ray,
+                    false,
+                    vector_width,
+                    1);
+
+                // Shading
+                let loaded_ray = primary_layout.read_ray(0, j);
+                let loaded_hit = primary_layout.read_hit(0, j);
+                let loaded_state = *&state;
+                let mut shadow_needed = false;
+                let mut shadow_state : ShadowState;
+                if alive & (loaded_hit.prim_id >= 0) {
+                    for once() {
+                        @@on_hit(
+                            loaded_ray,
+                            loaded_hit,
+                            loaded_state,
+                            @ |ray, state| {
+                                shadow_layout.write_ray(0, j, ray);
+                                shadow_state = state;
+                                shadow_needed = true;
+                            },
+                            @ || -> ! {
+                                alive = true;
+                                break()
+                            },
+                            @ |new_ray, new_state| -> ! {
+                                primary_layout.write_ray(0, j, new_ray);
+                                state = new_state;
+                                break()
+                            }
+                        )
+                    }
+                }
+
+                if !rv_any(shadow_needed) {
+                    continue()
+                }
+
+                // Shadow ray traversal
+                cpu_traverse_hybrid(
+                    ray_box_intrinsics,
+                    shadow_layout,
+                    bvh,
+                    single_ray,
+                    true,
+                    vector_width,
+                    1);
+
+                // Shadow ray processing
+                let loaded_shadow_ray = shadow_layout.read_ray(0, j);
+                let loaded_shadow_hit = shadow_layout.read_hit(0, j);
+                let loaded_shadow_state = *&shadow_state;
+                if shadow_needed & (loaded_shadow_hit.prim_id >= 0) {
+                    @@on_shadow(
+                        loaded_shadow_ray,
+                        loaded_shadow_hit,
+                        loaded_shadow_state
+                    )
+                }
+            }
+        }
+    }
+}
+
+fn @make_cpu_device() -> Device {
+    Device {
+        intrinsics:  cpu_intrinsics,
+        render_loop: cpu_render_loop,
+
+        load_mesh:  make_mesh_loader(0),
+        load_image: make_image_loader(0),
+        alloc_film: make_film_allocator(0, atomic_add_f32),
+        store_film: make_film_store(0)
+    }
+}

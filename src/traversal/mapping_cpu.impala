@@ -247,59 +247,100 @@ fn @make_ray_box_intrinsics_avx2() -> RayBoxIntrinsics {
 
 // Ray layouts  --------------------------------------------------------------------
 
-fn @make_cpu_ray1_layout(rays: &[Ray1AoS], hits: &mut [Hit1AoS]) -> RayLayout {
+fn @make_cpu_ray1_layout(rays: &mut [Ray1AoS], hits: &mut [Hit1AoS]) -> RayLayout {
     RayLayout {
         packet_size: 1,
-        input: @ |i, j| {
-            let ray = &rays(i + j);
-            make_ray(make_vec3(ray.org(0), ray.org(1), ray.org(2)),
-                     make_vec3(ray.dir(0), ray.dir(1), ray.dir(2)),
-                     ray.tmin, ray.tmax)
+        read_ray: @ |i, j| {
+            let ray_ptr = &rays(i + j);
+            make_ray(make_vec3(ray_ptr.org(0), ray_ptr.org(1), ray_ptr.org(2)),
+                     make_vec3(ray_ptr.dir(0), ray_ptr.dir(1), ray_ptr.dir(2)),
+                     ray_ptr.tmin, ray_ptr.tmax)
         },
-        output: @ |i, j, result| {
-            let hit = &mut hits(i + j);
-            hit.tri_id = result.prim_id;
-            hit.t = result.distance;
-            hit.u = result.uv_coords.x;
-            hit.v = result.uv_coords.y;
+        read_hit: @ |i, j| {
+            let hit_ptr = &hits(i + j);
+            make_hit(-1, hit_ptr.tri_id, hit_ptr.t, make_vec2(hit_ptr.u, hit_ptr.v))
+        },
+        write_ray: @ |i, j, ray| {
+            let ray_ptr = &mut rays(i + j);
+            ray_ptr.org = [ray.org.x, ray.org.y, ray.org.z];
+            ray_ptr.dir = [ray.dir.x, ray.dir.y, ray.dir.z];
+            ray_ptr.tmin = ray.tmin;
+            ray_ptr.tmax = ray.tmax;
+        },
+        write_hit: @ |i, j, hit| {
+            let hit_ptr = &mut hits(i + j);
+            hit_ptr.tri_id = hit.prim_id;
+            hit_ptr.t = hit.distance;
+            hit_ptr.u = hit.uv_coords.x;
+            hit_ptr.v = hit.uv_coords.y;
         }
     }
 }
 
-fn @make_cpu_ray4_layout(rays: &[Ray4SoA], hits: &mut [Hit4SoA]) -> RayLayout {
+fn @make_cpu_ray4_layout(rays: &mut [Ray4SoA], hits: &mut [Hit4SoA]) -> RayLayout {
     RayLayout {
         packet_size: 4,
-        input: @ |i, j| {
-            let ray = &rays(i);
-            make_ray(make_vec3(ray.org(0)(j), ray.org(1)(j), ray.org(2)(j)),
-                     make_vec3(ray.dir(0)(j), ray.dir(1)(j), ray.dir(2)(j)),
-                     ray.tmin(j), ray.tmax(j))
+        read_ray: @ |i, j| {
+            let ray_ptr = &rays(i);
+            make_ray(make_vec3(ray_ptr.org(0)(j), ray_ptr.org(1)(j), ray_ptr.org(2)(j)),
+                     make_vec3(ray_ptr.dir(0)(j), ray_ptr.dir(1)(j), ray_ptr.dir(2)(j)),
+                     ray_ptr.tmin(j), ray_ptr.tmax(j))
         },
-        output: @ |i, j, result| {
-            let hit = &mut hits(i);
-            hit.tri_id(j) = result.prim_id;
-            hit.t(j) = result.distance;
-            hit.u(j) = result.uv_coords.x;
-            hit.v(j) = result.uv_coords.y;
+        read_hit: @ |i, j| {
+            let hit_ptr = &hits(i);
+            make_hit(-1, hit_ptr.tri_id(j), hit_ptr.t(j), make_vec2(hit_ptr.u(j), hit_ptr.v(j)))
+        },
+        write_ray: @ |i, j, ray| {
+            let ray_ptr = &mut rays(i);
+            ray_ptr.org(0)(j) = ray.org.x;
+            ray_ptr.org(1)(j) = ray.org.y;
+            ray_ptr.org(2)(j) = ray.org.z;
+            ray_ptr.dir(0)(j) = ray.dir.x;
+            ray_ptr.dir(1)(j) = ray.dir.y;
+            ray_ptr.dir(2)(j) = ray.dir.z;
+            ray_ptr.tmin(j) = ray.tmin;
+            ray_ptr.tmax(j) = ray.tmax;
+        },
+        write_hit: @ |i, j, hit| {
+            let hit_ptr = &mut hits(i);
+            hit_ptr.tri_id(j) = hit.prim_id;
+            hit_ptr.t(j) = hit.distance;
+            hit_ptr.u(j) = hit.uv_coords.x;
+            hit_ptr.v(j) = hit.uv_coords.y;
         }
     }
 }
 
-fn @make_cpu_ray8_layout(rays: &[Ray8SoA], hits: &mut [Hit8SoA]) -> RayLayout {
+fn @make_cpu_ray8_layout(rays: &mut [Ray8SoA], hits: &mut [Hit8SoA]) -> RayLayout {
     RayLayout {
         packet_size: 8,
-        input: @ |i, j| {
-            let ray = &rays(i);
-            make_ray(make_vec3(ray.org(0)(j), ray.org(1)(j), ray.org(2)(j)),
-                     make_vec3(ray.dir(0)(j), ray.dir(1)(j), ray.dir(2)(j)),
-                     ray.tmin(j), ray.tmax(j))
+        read_ray: @ |i, j| {
+            let ray_ptr = &rays(i);
+            make_ray(make_vec3(ray_ptr.org(0)(j), ray_ptr.org(1)(j), ray_ptr.org(2)(j)),
+                     make_vec3(ray_ptr.dir(0)(j), ray_ptr.dir(1)(j), ray_ptr.dir(2)(j)),
+                     ray_ptr.tmin(j), ray_ptr.tmax(j))
         },
-        output: @ |i, j, result| {
-            let hit = &mut hits(i);
-            hit.tri_id(j) = result.prim_id;
-            hit.t(j) = result.distance;
-            hit.u(j) = result.uv_coords.x;
-            hit.v(j) = result.uv_coords.y;
+        read_hit: @ |i, j| {
+            let hit_ptr = &hits(i);
+            make_hit(-1, hit_ptr.tri_id(j), hit_ptr.t(j), make_vec2(hit_ptr.u(j), hit_ptr.v(j)))
+        },
+        write_ray: @ |i, j, ray| {
+            let ray_ptr = &mut rays(i);
+            ray_ptr.org(0)(j) = ray.org.x;
+            ray_ptr.org(1)(j) = ray.org.y;
+            ray_ptr.org(2)(j) = ray.org.z;
+            ray_ptr.dir(0)(j) = ray.dir.x;
+            ray_ptr.dir(1)(j) = ray.dir.y;
+            ray_ptr.dir(2)(j) = ray.dir.z;
+            ray_ptr.tmin(j) = ray.tmin;
+            ray_ptr.tmax(j) = ray.tmax;
+        },
+        write_hit: @ |i, j, hit| {
+            let hit_ptr = &mut hits(i);
+            hit_ptr.tri_id(j) = hit.prim_id;
+            hit_ptr.t(j) = hit.distance;
+            hit_ptr.u(j) = hit.uv_coords.x;
+            hit_ptr.v(j) = hit.uv_coords.y;
         }
     }
 }
@@ -556,12 +597,12 @@ fn @cpu_traverse_single( ray_box_intrinsics: RayBoxIntrinsics
                        , ray_count: i32
                        , root: i32
                        ) -> () {
-    for i in range(0, ray_count) {
+    for i in unroll(0, ray_count) {
         let (packet_id, ray_id) = (i / ray_layout.packet_size, i % ray_layout.packet_size);
-        let ray = ray_layout.input(packet_id, ray_id);
+        let ray = ray_layout.read_ray(packet_id, ray_id);
         let order = bvh.order(ray_octant(ray));
         let hit = cpu_traverse_single_helper(ray_box_intrinsics, ray, bvh, order, any_hit, root);
-        ray_layout.output(packet_id, ray_id, hit)
+        ray_layout.write_hit(packet_id, ray_id, hit)
     }
 }
 
@@ -574,12 +615,12 @@ fn @cpu_traverse_hybrid( ray_box_intrinsics: RayBoxIntrinsics
                        , root: i32
                        ) -> () {
     let vector_width = ray_layout.packet_size;
-    for i in range(0, ray_count / vector_width) {
+    for i in unroll(0, ray_count / vector_width) {
         for j in vectorize(vector_width, vector_width * sizeof[f32](), 0, vector_width) {
-            let ray = ray_layout.input(i, j);
+            let ray = ray_layout.read_ray(i, j);
             let order = bvh.order(ray_octant(ray));
             let hit = cpu_traverse_hybrid_helper(ray_box_intrinsics, vector_width, ray, bvh, &order, single, any_hit, root);
-            ray_layout.output(i, j, hit);
+            ray_layout.write_hit(i, j, hit);
         }
     }
 }

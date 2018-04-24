@@ -25,8 +25,8 @@ struct Device {
 }
 
 struct Film {
-    // Accumulate a sample on a film
-    accumulate: fn (Vec2, Color) -> (),
+    // Accumulate a sample on a film, either atomically or not
+    accumulate: fn (Vec2, Color, bool) -> (),
     // The associated pixel data
     pixel_data: PixelData
 }
@@ -64,7 +64,7 @@ fn @make_film_allocator(device_id: i32, atomic_add: fn (&mut f32, f32) -> ()) ->
         let buf = alloc(device_id, sizeof[Color]() * width * height);
         let pixel_data = make_pixel_data(buf.data as &mut [Color], width, height);
         Film {
-            accumulate: @ |uv, color| {
+            accumulate: @ |uv, color, atomic| {
                 fn @clamp(x: f32, xmax: i32) -> i32 {
                     let k = (x * (xmax as f32)) as i32;
                     select(k < xmax - 1, k, xmax - 1)
@@ -72,9 +72,15 @@ fn @make_film_allocator(device_id: i32, atomic_add: fn (&mut f32, f32) -> ()) ->
                 let x = clamp(uv.x, width);
                 let y = clamp(uv.y, height);
                 let pixel = &mut pixel_data.pixels(y * width + x);
-                atomic_add(&mut pixel.r, color.r);
-                atomic_add(&mut pixel.g, color.g);
-                atomic_add(&mut pixel.b, color.b);
+                if atomic {
+                    atomic_add(&mut pixel.r, color.r);
+                    atomic_add(&mut pixel.g, color.g);
+                    atomic_add(&mut pixel.b, color.b);
+                } else {
+                    pixel.r += color.r;
+                    pixel.g += color.g;
+                    pixel.b += color.b;
+                }
             },
             pixel_data: pixel_data
         }

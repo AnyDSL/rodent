@@ -40,11 +40,10 @@ struct Hit8SoA {
     v: [f32 * 8]
 }
 
-type TraversalInput  = fn (i32, i32) -> Ray;
-type TraversalOutput = fn (i32, i32, Hit) -> ();
-
 struct RayLayout {
     packet_size: i32,
-    input:  TraversalInput,
-    output: TraversalOutput
+    read_ray: fn (i32, i32) -> Ray,
+    read_hit: fn (i32, i32) -> Hit,
+    write_ray: fn (i32, i32, Ray) -> (),
+    write_hit: fn (i32, i32, Hit) -> ()
 }
