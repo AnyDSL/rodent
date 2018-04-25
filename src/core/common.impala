@@ -5,6 +5,30 @@ static flt_pi = 3.14159265359f;
 static flt_sqrt2 = 1.41421356237f;
 static flt_sqrt3 = 1.73205080757f;
 
+struct FastDiv {
+    m: u32,
+    s1: u32,
+    s2: u32
+}
+
+fn @make_fastdiv(div: u32) -> FastDiv {
+    let log = ilog2(div as i32) as u32;
+    let max = 1u64 << 32u64;
+    let m = (max << l as u64) / (div as u64) - max + 1u64;
+    let s1 = select(l < 1u32, l, 1u32);
+    let s2 = select(l > 1u32, l - 1u32, 0);
+    FastDiv {
+        m: m as u32,
+        s1: s1,
+        s2: s2
+    }
+}
+
+fn @fastdiv(fd: FastDiv, i: u32) -> u32 {
+    let t = (((fd.m as u64) * (i as u64)) >> 32u64) as u32;
+    (t + ((i - t) >> fd.s1)) >> fd.s2
+}
+
 extern "device" {
     fn "llvm.expect.i1" expect(bool, bool) -> bool;
 }
