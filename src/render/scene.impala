@@ -16,79 +16,19 @@ struct Scene {
 struct Device {
     intrinsics: Intrinsics,
 
-    render_loop: fn (OnHitFn, OnShadowFn, RayGen, i32) -> (),
-
-    load_mesh:   fn (&[u8]) -> Geometry,
-    load_image:  fn (&[u8]) -> Image,
-    alloc_film:  fn (i32, i32) -> Film,
-    store_film:  fn (&[u8], Film) -> ()
+    eye_trace:  fn (Scene, EyeTracer) -> (),
+    load_mesh:  fn (&[u8]) -> Geometry,
+    load_image: fn (&[u8]) -> Image
 }
 
-struct Film {
-    // Accumulate a sample on a film, either atomically or not
-    accumulate: fn (Vec2, Color, bool) -> (),
-    // The associated pixel data
-    pixel_data: PixelData
+fn @compute_surface_parameters(intrinsics: Intrinsics, scene: Scene, ray: Ray, hit: Hit) -> (SurfaceElement, Material) {
+    let geom = scene.geometries(hit.geom_id);
+    let surf = geom.surface_element(intrinsics, ray, hit);
+    let shader_id = geom.shader_id(hit);
+    let shader = scene.shaders(shader_id);
+    let mat = shader(intrinsics, scene, surf);
+    (surf, mat)
 }
 
-type OnHitFn    = fn (Ray, Hit, RayState, fn (Ray, ShadowState) -> (), fn() -> !, fn (Ray, RayState) -> !) -> !;
-type OnShadowFn = fn (Ray, Hit, ShadowState) -> ();
-type RayGen     = fn (i32) -> (Ray, RayState);
-type Renderer   = fn (Scene, Device, Film) -> ();
-type Shader     = fn (Intrinsics, Scene, SurfaceElement) -> Material;
-
-// Device --------------------------------------------------------------------------
-
-extern "C" {
-    fn load_tri_mesh(&[u8], i32) -> TriMesh;
-    fn load_pixel_data(&[u8], i32) -> PixelData;
-    fn store_pixel_data(&[u8], i32, &PixelData) -> ();
-}
-
-fn @make_mesh_loader(device_id: i32) -> fn (&[u8]) -> Geometry {
-    @ |file_name| {
-        let tri_mesh = load_tri_mesh(file_name, device_id);
-        make_tri_mesh_geometry(tri_mesh)
-    }
-}
-
-fn @make_image_loader(device_id: i32) -> fn (&[u8]) -> Image {
-    @ |file_name| {
-        let pixel_data = load_pixel_data(file_name, device_id);
-        make_image(pixel_data)
-    }
-}
-
-fn @make_film_allocator(device_id: i32, atomic_add: fn (&mut f32, f32) -> ()) -> fn (i32, i32) -> Film {
-    @ |width, height| {
-        let buf = alloc(device_id, sizeof[Color]() * width * height);
-        let pixel_data = make_pixel_data(buf.data as &mut [Color], width, height);
-        Film {
-            accumulate: @ |uv, color, atomic| {
-                fn @clamp(x: f32, xmax: i32) -> i32 {
-                    let k = (x * (xmax as f32)) as i32;
-                    select(k < xmax - 1, k, xmax - 1)
-                }
-                let x = clamp(uv.x, width);
-                let y = clamp(uv.y, height);
-                let pixel = &mut pixel_data.pixels(y * width + x);
-                if atomic {
-                    atomic_add(&mut pixel.r, color.r);
-                    atomic_add(&mut pixel.g, color.g);
-                    atomic_add(&mut pixel.b, color.b);
-                } else {
-                    pixel.r += color.r;
-                    pixel.g += color.g;
-                    pixel.b += color.b;
-                }
-            },
-            pixel_data: pixel_data
-        }
-    }
-}
-
-fn @make_film_store(device_id: i32) -> fn (&[u8], Film) -> () {
-    @ |file_name, film| {
-        store_pixel_data(file_name, device_id, film.pixel_data);
-    }
-}
+type Renderer     = fn (Scene, Device) -> ();
+type Shader       = fn (Intrinsics, Scene, SurfaceElement) -> Material;

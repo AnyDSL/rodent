@@ -10,7 +10,6 @@ fn @diffuse_shader(math: Intrinsics, scene: Scene, surf: SurfaceElement) -> Mate
 fn render(device: Device, renderer: Renderer) -> () {
     let image    = device.load_image("textures/wall.png");
     let tri_mesh = device.load_mesh("cube.obj");
-    let film     = device.alloc_film(1024, 1024);
 
     let camera = make_perspective_camera(
         make_vec3(0.0f, 0.0f, -10.0f),
@@ -36,9 +35,7 @@ fn render(device: Device, renderer: Renderer) -> () {
         camera:     camera
     };
 
-    renderer(scene, device, film);
-
-    device.store_film("render.png", film);
+    renderer(scene, device);
 }
 
 fn main() -> () {

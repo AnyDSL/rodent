@@ -1,5 +1,22 @@
 extern "C" {
-    fn get_bvh8_tri4() -> Bvh8Tri4;
+    fn rodent_cpu_get_bvh8_tri4() -> Bvh8Tri4;
+    fn rodent_cpu_get_film_data() -> PixelData;
+    fn rodent_cpu_load_tri_mesh(&[u8]) -> TriMesh;
+    fn rodent_cpu_load_pixel_data(&[u8]) -> PixelData;
+}
+
+fn @make_cpu_mesh_loader() -> fn (&[u8]) -> Geometry {
+    @ |file_name| {
+        let tri_mesh = rodent_cpu_load_tri_mesh(file_name);
+        make_tri_mesh_geometry(tri_mesh)
+    }
+}
+
+fn @make_cpu_image_loader() -> fn (&[u8]) -> Image {
+    @ |file_name| {
+        let pixel_data = rodent_cpu_load_pixel_data(file_name);
+        make_image(pixel_data)
+    }
 }
 
 fn @make_cpu_ray_packet(vector_width: i32) -> RayLayout {
@@ -14,27 +31,38 @@ fn @make_cpu_ray_packet(vector_width: i32) -> RayLayout {
     }
 }
 
-fn @cpu_render_loop(on_hit: OnHitFn, on_shadow: OnShadowFn, ray_gen: RayGen, num_rays: i32) -> () {
+fn @cpu_eye_trace(scene: Scene, eye_tracer: EyeTracer) -> () {
     let stream_size = 256;
-    let bvh = make_cpu_bvh8_tri4(get_bvh8_tri4());
-    for i in parallel(0, 0, round_up(num_rays, stream_size)) {
-        let vector_width = 8;
-        let single_ray = false;
+    let vector_width = 8;
+    let single_ray = false;
+
+    let bvh = make_cpu_bvh8_tri4(rodent_cpu_get_bvh8_tri4());
+    let film_data = rodent_cpu_get_film_data();
+    let width_div = make_fast_div(film_data.width as u32);
+    for i in parallel(0, 0, round_up(film_data.width * film_data.height, stream_size)) {
         let ray_box_intrinsics = make_ray_box_intrinsics_avx2();
         let primary_layout = make_cpu_ray_packet(vector_width);
         let shadow_layout  = make_cpu_ray_packet(vector_width);
 
-        for j in vectorize(vector_width, 32, 0, vector_width) { 
+        for j in vectorize(vector_width, 32, 0, vector_width) {
+            let mut color : Color;
+            let mut pixel : i32;
             let mut state : RayState;
             let mut alive = false;
             let mut k = 0;
 
-            while k < stream_size {
+            while k < stream_size || rv_any(alive) {
                 // Ray regeneration
                 let num_dead = cpu_popcount32(!rv_ballot(alive) & ((1 << vector_width) - 1));
                 if !alive & ((k + j) < stream_size) {
-                    let (new_ray, new_state) = ray_gen(i + k + j);
+                    let new_pixel = i * stream_size + k + j;
+                    let y = fast_div(width_div, new_pixel as u32) as i32;
+                    let x = new_pixel - film_data.width * y;
+                    let (new_ray, new_state) = @@(eye_tracer.on_emit)(x, y, film_data.width, film_data.height);
+
                     primary_layout.write_ray(0, j, new_ray);
+                    color = make_color(0.0f, 0.0f, 0.0f);
+                    pixel = new_pixel;
                     state = new_state;
                     alive = true;
                 }
@@ -50,60 +78,53 @@ fn @cpu_render_loop(on_hit: OnHitFn, on_shadow: OnShadowFn, ray_gen: RayGen, num
                     vector_width,
                     1);
 
-                // Shading
                 let loaded_ray = primary_layout.read_ray(0, j);
                 let loaded_hit = primary_layout.read_hit(0, j);
-                let loaded_state = *&state;
+                let (surf, mat) = compute_surface_parameters(cpu_intrinsics, scene, loaded_ray, loaded_hit);
+
+                // Shading
                 let mut shadow_needed = false;
-                let mut shadow_state : ShadowState;
+                let mut shadow_color : Color;
                 if alive & (loaded_hit.prim_id >= 0) {
+                    color = color_add(color, @@(eye_tracer.on_hit)(loaded_ray, loaded_hit, &mut state, surf, mat));
                     for once() {
-                        @@on_hit(
-                            loaded_ray,
-                            loaded_hit,
-                            loaded_state,
-                            @ |ray, state| {
-                                shadow_layout.write_ray(0, j, ray);
-                                shadow_state = state;
-                                shadow_needed = true;
-                            },
-                            @ || -> ! {
-                                alive = true;
-                                break()
-                            },
-                            @ |new_ray, new_state| -> ! {
-                                primary_layout.write_ray(0, j, new_ray);
-                                state = new_state;
-                                break()
-                            }
-                        )
+                        @@(eye_tracer.on_shadow)(loaded_ray, loaded_hit, &mut state, surf, mat, @ |ray, color| -> ! {
+                            shadow_layout.write_ray(0, j, ray);
+                            shadow_needed = true;
+                            shadow_color  = color;
+                            break()
+                        });
                     }
                 }
 
-                if !rv_any(shadow_needed) {
-                    continue()
+                // Shadow ray traversal
+                if rv_any(shadow_needed) {
+                    cpu_traverse_hybrid(
+                        ray_box_intrinsics,
+                        shadow_layout,
+                        bvh,
+                        single_ray,
+                        true,
+                        vector_width,
+                        1);
+
+                    let loaded_shadow_hit = shadow_layout.read_hit(0, j);
+                    if shadow_needed & (loaded_shadow_hit.prim_id >= 0) {
+                        color = color_add(color, shadow_color);
+                    }
                 }
 
-                // Shadow ray traversal
-                cpu_traverse_hybrid(
-                    ray_box_intrinsics,
-                    shadow_layout,
-                    bvh,
-                    single_ray,
-                    true,
-                    vector_width,
-                    1);
-
-                // Shadow ray processing
-                let loaded_shadow_ray = shadow_layout.read_ray(0, j);
-                let loaded_shadow_hit = shadow_layout.read_hit(0, j);
-                let loaded_shadow_state = *&shadow_state;
-                if shadow_needed & (loaded_shadow_hit.prim_id >= 0) {
-                    @@on_shadow(
-                        loaded_shadow_ray,
-                        loaded_shadow_hit,
-                        loaded_shadow_state
-                    )
+                alive = false;
+                for once() {
+                    @@(eye_tracer.on_bounce)(loaded_ray, loaded_hit, &mut state, surf, mat, |new_ray, new_state| -> ! {
+                        primary_layout.write_ray(0, j, new_ray);
+                        state = new_state;
+                        alive = true;
+                        break()
+                    });
+                }
+                if !alive {
+                    film_data.pixels(pixel) = color;
                 }
             }
         }
@@ -112,12 +133,9 @@ fn @cpu_render_loop(on_hit: OnHitFn, on_shadow: OnShadowFn, ray_gen: RayGen, num
 
 fn @make_cpu_device() -> Device {
     Device {
-        intrinsics:  cpu_intrinsics,
-        render_loop: cpu_render_loop,
-
-        load_mesh:  make_mesh_loader(0),
-        load_image: make_image_loader(0),
-        alloc_film: make_film_allocator(0, atomic_add_f32),
-        store_film: make_film_store(0)
+        intrinsics: cpu_intrinsics,
+        eye_trace:  cpu_eye_trace,
+        load_mesh:  make_cpu_mesh_loader(),
+        load_image: make_cpu_image_loader()
     }
 }
