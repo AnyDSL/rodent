@@ -36,11 +36,27 @@ set(RODENT_SRCS
     traversal/mapping_cpu.impala
     traversal/mapping_gpu.impala)
 
+set(DRIVER_SRCS
+    driver/driver.cpp
+    driver/interface.cpp
+    driver/interface.h
+    driver/load_obj.cpp
+    driver/load_obj.h
+    driver/float2.h
+    driver/float3.h
+    driver/float4.h
+    driver/file_path.h
+    driver/common.h
+    driver/color.h)
+
 anydsl_runtime_wrap(RODENT_OBJS
     NAME "rodent"
     CLANG_FLAGS ${CLANG_FLAGS}
     FILES ${RODENT_SRCS}
     INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/interface)
 
-add_executable(rodent ${RODENT_OBJS} driver.cpp interface.h)
-target_link_libraries(rodent ${AnyDSL_runtime_LIBRARIES})
+find_package(SDL2 REQUIRED)
+include_directories(${SDL2_INCLUDE_DIRS})
+
+add_executable(rodent ${DRIVER_SRCS} ${RODENT_OBJS})
+target_link_libraries(rodent ${AnyDSL_runtime_LIBRARIES} ${SDL2_LIBRARY})

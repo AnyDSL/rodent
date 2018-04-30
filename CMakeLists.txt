@@ -13,5 +13,7 @@ set(CLANG_FLAGS -O3 -mavx2 -mavx -mfma -ffast-math CACHE STRING "Clang compilati
 
 set(CMAKE_CXX_STANDARD 11)
 
+set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/modules)
+
 add_subdirectory(src)
 add_subdirectory(tools)
