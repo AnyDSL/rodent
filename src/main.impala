@@ -7,7 +7,9 @@ fn @diffuse_shader(math: Intrinsics, scene: Scene, surf: SurfaceElement) -> Mate
     make_material(bsdf)
 }
 
-fn render(device: Device, renderer: Renderer) -> () {
+extern fn render() -> () {
+    let device   = make_cpu_device();
+    let renderer = make_path_tracer(64);
     let image    = device.load_image("textures/wall.png");
     let tri_mesh = device.load_mesh("cube.obj");
 
@@ -36,8 +38,4 @@ fn render(device: Device, renderer: Renderer) -> () {
     };
 
     renderer(scene, device);
-}
-
-fn main() -> () {
-    render(make_cpu_device(), make_path_tracer(64));
 }
