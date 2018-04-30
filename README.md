@@ -4,7 +4,7 @@ Rodent is a BVH traversal library implemented using the AnyDSL compiler framewor
 
 # Building
 
-The dependencies are: CMake, AnyDSL (LLVM 4.0 branch), and optionally the Embree sources for the benchmarking tools.
+The dependencies are: CMake, AnyDSL, and optionally the Embree sources for the benchmarking tools.
 Once the dependencies are installed, use the following commands to build the project:
 
     mkdir build

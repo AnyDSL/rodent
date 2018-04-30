@@ -110,10 +110,13 @@ fn @cpu_eye_trace(scene: Scene, eye_tracer: EyeTracer) -> () {
 
                     let loaded_shadow_hit = shadow_layout.read_hit(0, j);
                     if shadow_needed & (loaded_shadow_hit.prim_id >= 0) {
-                        color = color_add(color, shadow_color);
+                        color.r += shadow_color.r;
+                        color.g += shadow_color.g;
+                        color.b += shadow_color.b;
                     }
                 }
 
+                let prev_alive = alive;
                 alive = false;
                 for once() {
                     @@(eye_tracer.on_bounce)(loaded_ray, loaded_hit, &mut state, surf, mat, |new_ray, new_state| -> ! {
@@ -123,8 +126,12 @@ fn @cpu_eye_trace(scene: Scene, eye_tracer: EyeTracer) -> () {
                         break()
                     });
                 }
-                if !alive {
-                    film_data.pixels(pixel) = color;
+                // For every path that just died
+                for i in one_bits(rv_ballot(prev_alive & !alive)) {
+                    let j = bitcast[i32](rv_extract(bitcast[f32](pixel), i));
+                    film_data.pixels(j).r += rv_extract(color.r, i);
+                    film_data.pixels(j).g += rv_extract(color.g, i);
+                    film_data.pixels(j).b += rv_extract(color.b, i);
                 }
             }
         }
