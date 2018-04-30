@@ -12,16 +12,15 @@ struct TriMesh {
     face_normals: &[Vec3],
     uvs:          &[Vec2],
     ids:          &[i32],
-    mats:         &[i32],
     num_tris:     i32
 }
 
 fn @make_tri_mesh_geometry(tri_mesh: TriMesh) -> Geometry {
     Geometry {
         surface_element: @ |math, ray, hit| {
-            let i0 = tri_mesh.ids(hit.prim_id * 3 + 0);
-            let i1 = tri_mesh.ids(hit.prim_id * 3 + 1);
-            let i2 = tri_mesh.ids(hit.prim_id * 3 + 2);
+            let i0 = tri_mesh.ids(hit.prim_id * 4 + 0);
+            let i1 = tri_mesh.ids(hit.prim_id * 4 + 1);
+            let i2 = tri_mesh.ids(hit.prim_id * 4 + 2);
 
             let face_normal = tri_mesh.face_normals(hit.prim_id);
             let normal = vec3_lerp2(tri_mesh.normals(i0), tri_mesh.normals(i1), tri_mesh.normals(i2), hit.uv_coords.x, hit.uv_coords.y);
@@ -36,6 +35,6 @@ fn @make_tri_mesh_geometry(tri_mesh: TriMesh) -> Geometry {
                 local: make_orthonormal_mat3x3(normal)
             }
         },
-        shader_id: @ |hit| tri_mesh.mats(hit.prim_id)
+        shader_id: @ |hit| tri_mesh.ids(hit.prim_id * 4 + 3)
     }
 }

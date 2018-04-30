@@ -36,6 +36,7 @@ inline float int_as_float(int32_t i) {
 
 inline void error() {
     std::cerr << std::endl;
+    abort();
 }
 
 /// Outputs an error message in the console.

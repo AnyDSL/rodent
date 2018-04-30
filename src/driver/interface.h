@@ -30,20 +30,6 @@ struct Bvh8Node {
     int pad[8];
 };
 
-struct Vec2 {
-    float x;
-    float y;
-};
-
-struct TriMesh {
-    struct Vec3 const* normals;
-    struct Vec3 const* face_normals;
-    struct Vec2 const* uvs;
-    int const* ids;
-    int const* mats;
-    int num_tris;
-};
-
 struct Bvh4Tri {
     float v0[3][4];
     float e1[3][4];
@@ -55,6 +41,19 @@ struct Bvh4Tri {
 struct Bvh8Tri4 {
     struct Bvh8Node const* nodes;
     struct Bvh4Tri const* tris;
+};
+
+struct Vec2 {
+    float x;
+    float y;
+};
+
+struct TriMesh {
+    struct Vec3 const* normals;
+    struct Vec3 const* face_normals;
+    struct Vec2 const* uvs;
+    int const* ids;
+    int num_tris;
 };
 
 void render(void);

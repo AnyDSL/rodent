@@ -1,5 +1,6 @@
 #include <SDL2/SDL.h>
-#include <iostream>
+
+#include "common.h"
 
 void setup_cpu_interface(size_t, size_t);
 
@@ -20,10 +21,8 @@ int main(int argc, char** argv) {
     size_t width  = 1024;
     size_t height = 1024;
 
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-        std::cerr << "Cannot initialize SDL." << std::endl;
-        return 1;
-    }
+    if (SDL_Init(SDL_INIT_VIDEO) != 0)
+        error("Cannot initialize SDL.");
 
     SDL_Window* window = SDL_CreateWindow(
         "Rodent",
@@ -32,10 +31,8 @@ int main(int argc, char** argv) {
         width,
         height,
         0);
-    if (!window) {
-        std::cerr << "Cannot create window" << std::endl;
-        return 1;
-    }
+    if (!window)
+        error("Cannot create window.");
 
     setup_cpu_interface(width, height);
 

@@ -53,10 +53,11 @@ anydsl_runtime_wrap(RODENT_OBJS
     NAME "rodent"
     CLANG_FLAGS ${CLANG_FLAGS}
     FILES ${RODENT_SRCS}
-    INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/interface)
+    INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/driver/interface)
 
 find_package(SDL2 REQUIRED)
-include_directories(${SDL2_INCLUDE_DIRS})
+find_package(PNG REQUIRED)
 
 add_executable(rodent ${DRIVER_SRCS} ${RODENT_OBJS})
-target_link_libraries(rodent ${AnyDSL_runtime_LIBRARIES} ${SDL2_LIBRARY})
+target_include_directories(rodent PUBLIC ${PNG_INCLUDE_DIRS} ${SDL2_INCLUDE_DIRS})
+target_link_libraries(rodent ${AnyDSL_runtime_LIBRARIES} ${PNG_LIBRARIES} ${SDL2_LIBRARY})
