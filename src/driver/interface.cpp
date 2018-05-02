@@ -140,19 +140,17 @@ static TriMesh load_tri_mesh(int32_t dev, std::string file_name, std::vector<Tri
         }
 
         for (auto& p : mapping) {
-            const auto& v = obj_file.vertices[p.first.v];
-            vertices[vtx_offset + p.second].x = v.x;
-            vertices[vtx_offset + p.second].y = v.y;
-            vertices[vtx_offset + p.second].z = v.z;
+            vertices[vtx_offset + p.second] = obj_file.vertices[p.first.v];
         }
 
         if (has_texcoords) {
             for (auto& p : mapping) {
-                const auto& t = obj_file.texcoords[p.first.t];
-                texcoords[vtx_offset + p.second] = t;
+                texcoords[vtx_offset + p.second] = obj_file.texcoords[p.first.t];
             }
-        } else
+        } else {
+            warn("No texture coordinates are present, using default value.");
             std::fill(texcoords.begin() + vtx_offset, texcoords.end(), float2(0.0f));
+        }
 
         // Compute the geometric normals for this mesh
         face_normals.resize(face_normals.size() + triangles.size());

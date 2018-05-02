@@ -18,23 +18,15 @@ struct Color {
     float b;
 };
 
-struct Vec2 {
-    float x;
-    float y;
-};
-
 struct Vec3 {
     float x;
     float y;
     float z;
 };
 
-struct Bvh4Tri {
-    float v0[3][4];
-    float e1[3][4];
-    float e2[3][4];
-    float n[3][4];
-    int id[4];
+struct Vec2 {
+    float x;
+    float y;
 };
 
 struct TriMesh {
@@ -45,15 +37,23 @@ struct TriMesh {
     int num_tris;
 };
 
-struct PixelData {
-    struct Color* pixels;
-    int width;
-    int height;
+struct Bvh4Tri {
+    float v0[3][4];
+    float e1[3][4];
+    float e2[3][4];
+    float n[3][4];
+    int id[4];
 };
 
 struct Bvh8Tri4 {
     struct Bvh8Node const* nodes;
     struct Bvh4Tri const* tris;
+};
+
+struct PixelData {
+    struct Color* pixels;
+    int width;
+    int height;
 };
 
 void render(void);

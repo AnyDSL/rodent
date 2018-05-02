@@ -95,13 +95,3 @@ fn @make_texture(math: Intrinsics, border: BorderHandling, filter: ImageFilter, 
         filter(math, image, make_vec2(u, v))
     }
 }
-
-fn @pixel_at(pixel_data: PixelData, uv: Vec2) -> &mut Color {
-    fn @clamp(x: f32, xmax: i32) -> i32 {
-        let k = (x * (xmax as f32)) as i32;
-        select(k < xmax - 1, k, xmax - 1)
-    }
-    let x = clamp(uv.x, pixel_data.width);
-    let y = clamp(uv.y, pixel_data.height);
-    &mut pixel_data.pixels(y * pixel_data.width + x)
-}

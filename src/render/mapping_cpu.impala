@@ -90,10 +90,14 @@ fn @cpu_eye_trace(scene: Scene, eye_tracer: EyeTracer) -> () {
                 let loaded_hit = primary_layout.read_hit(0, j);
                 let (surf, mat) = compute_surface_parameters(cpu_intrinsics, scene, loaded_ray, loaded_hit);
 
+                // Kill rays that have not hit anything
+                let prev_alive = alive;
+                alive &= loaded_hit.prim_id >= 0;
+
                 // Shading
                 let mut shadow_needed = false;
                 let mut shadow_color : Color;
-                if alive & (loaded_hit.prim_id >= 0) {
+                if alive {
                     color = color_add(color, @@(eye_tracer.on_hit)(loaded_ray, loaded_hit, &mut state, surf, mat));
                     for once() {
                         @@(eye_tracer.on_shadow)(loaded_ray, loaded_hit, &mut state, surf, mat, @ |ray, color| -> ! {
@@ -117,22 +121,23 @@ fn @cpu_eye_trace(scene: Scene, eye_tracer: EyeTracer) -> () {
                         1);
 
                     let loaded_shadow_hit = shadow_layout.read_hit(0, j);
-                    if shadow_needed & (loaded_shadow_hit.prim_id >= 0) {
+                    if shadow_needed & (loaded_shadow_hit.prim_id < 0) {
                         color.r += shadow_color.r;
                         color.g += shadow_color.g;
                         color.b += shadow_color.b;
                     }
                 }
 
-                let prev_alive = alive;
-                alive = false;
-                for once() {
-                    @@(eye_tracer.on_bounce)(loaded_ray, loaded_hit, &mut state, surf, mat, |new_ray, new_state| -> ! {
-                        primary_layout.write_ray(0, j, new_ray);
-                        state = new_state;
-                        alive = true;
-                        break()
-                    });
+                if alive {
+                    alive = false;
+                    for once() {
+                        @@(eye_tracer.on_bounce)(loaded_ray, loaded_hit, &mut state, surf, mat, |new_ray, new_state| -> ! {
+                            primary_layout.write_ray(0, j, new_ray);
+                            state = new_state;
+                            alive = true;
+                            break()
+                        });
+                    }
                 }
 
                 // For every path that just died
