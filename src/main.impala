@@ -1,9 +1,9 @@
 fn @diffuse_shader(math: Intrinsics, scene: Scene, surf: SurfaceElement) -> Material {
     let texture = make_texture(math,
         make_clamp_border(),
-        make_nearest_filter(),
+        make_bilinear_filter(),
         scene.images(0));
-    let bsdf = make_diffuse_bsdf(surf, texture(surf.uv_coords));
+    let bsdf = make_diffuse_bsdf(surf, make_color(1.0f, 1.0f, 1.0f)/*texture(surf.uv_coords)*/);
     make_material(bsdf)
 }
 
@@ -21,7 +21,7 @@ extern fn render() -> () {
     );
     let light = make_point_light(
         make_vec3(0.0f, 0.0f, -10.0f),
-        make_color(10.0f, 10.0f, 10.0f)
+        make_color(1.0f, 1.0f, 1.0f)
     );
 
     let scene = Scene {

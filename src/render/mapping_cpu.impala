@@ -33,8 +33,29 @@ fn @make_cpu_ray_packet(vector_width: i32) -> RayLayout {
     }
 }
 
+fn @cpu_parallel_tiles( width: i32
+                      , height: i32
+                      , tile_width: i32
+                      , tile_height: i32
+                      , body: fn (i32, i32, i32, i32) -> ()) -> () {
+    let num_tiles_x = round_up(width , tile_width);
+    let num_tiles_y = round_up(height, tile_height);
+    let num_tiles = num_tiles_x * num_tiles_y;
+    let tiles_div = make_fast_div(num_tiles_x as u32);
+
+    for i in parallel(0, 0, num_tiles) {
+        let y = fast_div(tiles_div, i as u32) as i32;
+        let x = i - num_tiles_x * y;
+        let xmin = x * tile_width;
+        let ymin = y * tile_height;
+        let xmax = cpu_intrinsics.min(xmin + tile_width,  width);
+        let ymax = cpu_intrinsics.min(ymin + tile_height, height);
+        @@body(xmin, ymin, xmax, ymax);
+    }
+}
+
 fn @cpu_eye_trace(scene: Scene, eye_tracer: EyeTracer) -> () {
-    let stream_size = 256;
+    let tile_size = 32;
     let vector_width = 8;
     let single_ray = false;
 
@@ -47,10 +68,12 @@ fn @cpu_eye_trace(scene: Scene, eye_tracer: EyeTracer) -> () {
     let bvh = make_cpu_bvh8_tri4(bvh8tri4);
     let width_div = make_fast_div(film_data.width as u32);
 
-    for i in parallel(0, 0, round_up(film_data.width * film_data.height, stream_size)) {
+    for xmin, ymin, xmax, ymax in cpu_parallel_tiles(film_data.width, film_data.height, tile_size, tile_size) {
         let ray_box_intrinsics = make_ray_box_intrinsics_avx2();
         let primary_layout = make_cpu_ray_packet(vector_width);
         let shadow_layout  = make_cpu_ray_packet(vector_width);
+        let tile_div = make_fast_div((xmax - xmin) as u32);
+        let k_max = (xmax - xmin) * (ymax - ymin);
 
         for j in vectorize(vector_width, 32, 0, vector_width) {
             let mut color : Color;
@@ -59,13 +82,15 @@ fn @cpu_eye_trace(scene: Scene, eye_tracer: EyeTracer) -> () {
             let mut alive = false;
             let mut k = 0;
 
-            while k < stream_size || rv_any(alive) {
+            while k < k_max || rv_any(alive) {
                 // Ray regeneration
                 let num_dead = cpu_popcount32(!rv_ballot(alive) & ((1 << vector_width) - 1));
-                if !alive & ((k + j) < stream_size) {
-                    let new_pixel = i * stream_size + k + j;
-                    let y = fast_div(width_div, new_pixel as u32) as i32;
-                    let x = new_pixel - film_data.width * y;
+                if !alive & (k + j < k_max) {
+                    let in_tile_y = fast_div(tile_div, (k + j) as u32) as i32;
+                    let in_tile_x = k + j - (xmax - xmin) * in_tile_y;
+                    let x = xmin + in_tile_x;
+                    let y = ymin + in_tile_y;
+                    let new_pixel = y * film_data.width + x;
                     let (new_ray, new_state) = @@(eye_tracer.on_emit)(x, y, film_data.width, film_data.height);
 
                     primary_layout.write_ray(0, j, new_ray);

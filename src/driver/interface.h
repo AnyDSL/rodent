@@ -6,22 +6,10 @@
 extern "C" {
 #endif
 
-struct Bvh8Node {
-    float bounds[6][8];
-    int child[8];
-    int pad[8];
-};
-
 struct Color {
     float r;
     float g;
     float b;
-};
-
-struct Vec3 {
-    float x;
-    float y;
-    float z;
 };
 
 struct Vec2 {
@@ -29,12 +17,10 @@ struct Vec2 {
     float y;
 };
 
-struct TriMesh {
-    struct Vec3 const* normals;
-    struct Vec3 const* face_normals;
-    struct Vec2 const* uvs;
-    int const* ids;
-    int num_tris;
+struct Bvh8Node {
+    float bounds[6][8];
+    int child[8];
+    int pad[8];
 };
 
 struct Bvh4Tri {
@@ -54,6 +40,20 @@ struct PixelData {
     struct Color* pixels;
     int width;
     int height;
+};
+
+struct Vec3 {
+    float x;
+    float y;
+    float z;
+};
+
+struct TriMesh {
+    struct Vec3 const* normals;
+    struct Vec3 const* face_normals;
+    struct Vec2 const* uvs;
+    int const* ids;
+    int num_tris;
 };
 
 void render(void);
