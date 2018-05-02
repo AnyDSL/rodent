@@ -10,8 +10,8 @@ fn @diffuse_shader(math: Intrinsics, scene: Scene, surf: SurfaceElement) -> Mate
 extern fn render() -> () {
     let device   = make_cpu_device();
     let renderer = make_path_tracer(64);
-    let image    = device.load_image("textures/wall.png");
-    let tri_mesh = device.load_mesh("cube.obj");
+    let image    = device.load_image("data/textures/wall.png");
+    let tri_mesh = device.load_mesh("data/cube.obj");
 
     let camera = make_perspective_camera(
         make_vec3(0.0f, 0.0f, -10.0f),
@@ -20,8 +20,8 @@ extern fn render() -> () {
         1.0f
     );
     let light = make_point_light(
-        make_vec3(0.0f, 10.0f, 0.0f),
-        make_color(100.0f, 100.0f, 100.0f)
+        make_vec3(0.0f, 0.0f, -10.0f),
+        make_color(1000.0f, 1000.0f, 1000.0f)
     );
 
     let scene = Scene {

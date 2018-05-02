@@ -1,20 +1,22 @@
 extern "C" {
-    fn rodent_cpu_get_bvh8_tri4() -> Bvh8Tri4;
-    fn rodent_cpu_get_film_data() -> PixelData;
-    fn rodent_cpu_load_tri_mesh(&[u8]) -> TriMesh;
-    fn rodent_cpu_load_pixel_data(&[u8]) -> PixelData;
+    fn rodent_cpu_get_bvh8_tri4(&mut Bvh8Tri4) -> ();
+    fn rodent_cpu_get_film_data(&mut PixelData) -> ();
+    fn rodent_cpu_load_tri_mesh(&[u8], &mut TriMesh) -> ();
+    fn rodent_cpu_load_pixel_data(&[u8], &mut PixelData) -> ();
 }
 
 fn @make_cpu_mesh_loader() -> fn (&[u8]) -> Geometry {
     @ |file_name| {
-        let tri_mesh = rodent_cpu_load_tri_mesh(file_name);
+        let mut tri_mesh;
+        rodent_cpu_load_tri_mesh(file_name, &mut tri_mesh);
         make_tri_mesh_geometry(tri_mesh)
     }
 }
 
 fn @make_cpu_image_loader() -> fn (&[u8]) -> Image {
     @ |file_name| {
-        let pixel_data = rodent_cpu_load_pixel_data(file_name);
+        let mut pixel_data;
+        rodent_cpu_load_pixel_data(file_name, &mut pixel_data);
         make_image(pixel_data)
     }
 }
@@ -36,9 +38,15 @@ fn @cpu_eye_trace(scene: Scene, eye_tracer: EyeTracer) -> () {
     let vector_width = 8;
     let single_ray = false;
 
-    let bvh = make_cpu_bvh8_tri4(rodent_cpu_get_bvh8_tri4());
-    let film_data = rodent_cpu_get_film_data();
+    let mut film_data;
+    rodent_cpu_get_film_data(&mut film_data);
+
+    let mut bvh8tri4;
+    rodent_cpu_get_bvh8_tri4(&mut bvh8tri4);
+
+    let bvh = make_cpu_bvh8_tri4(bvh8tri4);
     let width_div = make_fast_div(film_data.width as u32);
+
     for i in parallel(0, 0, round_up(film_data.width * film_data.height, stream_size)) {
         let ray_box_intrinsics = make_ray_box_intrinsics_avx2();
         let primary_layout = make_cpu_ray_packet(vector_width);
@@ -126,6 +134,7 @@ fn @cpu_eye_trace(scene: Scene, eye_tracer: EyeTracer) -> () {
                         break()
                     });
                 }
+
                 // For every path that just died
                 for i in one_bits(rv_ballot(prev_alive & !alive)) {
                     let j = bitcast[i32](rv_extract(bitcast[f32](pixel), i));

@@ -1,8 +1,13 @@
+#include <memory>
+#include <sstream>
 #include <SDL2/SDL.h>
 
+#include "interface.h"
 #include "common.h"
 
 void setup_cpu_interface(size_t, size_t);
+Color* get_cpu_pixels();
+void cleanup_cpu_interface();
 
 static bool handle_events() {
     SDL_Event event;
@@ -24,7 +29,7 @@ int main(int argc, char** argv) {
     if (SDL_Init(SDL_INIT_VIDEO) != 0)
         error("Cannot initialize SDL.");
 
-    SDL_Window* window = SDL_CreateWindow(
+    auto window = SDL_CreateWindow(
         "Rodent",
         SDL_WINDOWPOS_UNDEFINED,
         SDL_WINDOWPOS_UNDEFINED,
@@ -34,14 +39,56 @@ int main(int argc, char** argv) {
     if (!window)
         error("Cannot create window.");
 
+    auto renderer = SDL_CreateRenderer(window, -1, 0);
+    if (!renderer)
+        error("Cannot create renderer.");
+
+    auto texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, width, height);
+    if (!texture)
+        error("Cannot create texture");
+
+    std::unique_ptr<uint32_t> buf(new uint32_t[width * height]);
+
     setup_cpu_interface(width, height);
 
     bool done = false;
+    uint64_t tick_counter = 0;
+    uint32_t frames = 0;
     while (!done) {
         done = handle_events();
-        //render();
+
+        auto ticks = SDL_GetTicks();
+        render();
+        tick_counter += SDL_GetTicks() - ticks;
+        frames++;
+        if (frames > 10 || tick_counter >= 5000) {
+            std::ostringstream os;
+            os << "Rodent [" << double(frames) * 1000.0 / double(tick_counter) << " FPS]";
+            SDL_SetWindowTitle(window, os.str().c_str());
+            frames = 0;
+            tick_counter = 0;
+        }
+
+        auto film = get_cpu_pixels();
+        for (size_t y = 0; y < height; ++y) {
+            for (size_t x = 0; x < width; ++x) {
+                auto pixel = film[y * width + x];
+                buf.get()[y * width + x] =
+                    (uint32_t(clamp(pixel.r, 0.0f, 1.0f) * 255.0f) << 16) |
+                    (uint32_t(clamp(pixel.g, 0.0f, 1.0f) * 255.0f) << 8)  |
+                     uint32_t(clamp(pixel.b, 0.0f, 1.0f) * 255.0f);
+            }
+        }
+        SDL_UpdateTexture(texture, nullptr, buf.get(), width * sizeof(uint32_t));
+        SDL_RenderClear(renderer);
+        SDL_RenderCopy(renderer, texture, nullptr, nullptr);
+        SDL_RenderPresent(renderer);
     }
 
+    cleanup_cpu_interface();
+
+    SDL_DestroyTexture(texture);
+    SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
     return 0;

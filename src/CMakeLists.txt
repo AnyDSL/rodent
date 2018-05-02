@@ -42,6 +42,7 @@ set(DRIVER_SRCS
     driver/interface.h
     driver/load_obj.cpp
     driver/load_obj.h
+    driver/bvh.h
     driver/float2.h
     driver/float3.h
     driver/float4.h
@@ -57,7 +58,8 @@ anydsl_runtime_wrap(RODENT_OBJS
 
 find_package(SDL2 REQUIRED)
 find_package(PNG REQUIRED)
+find_package(TBB REQUIRED)
 
 add_executable(rodent ${DRIVER_SRCS} ${RODENT_OBJS})
-target_include_directories(rodent PUBLIC ${PNG_INCLUDE_DIRS} ${SDL2_INCLUDE_DIRS})
-target_link_libraries(rodent ${AnyDSL_runtime_LIBRARIES} ${PNG_LIBRARIES} ${SDL2_LIBRARY})
+target_include_directories(rodent PUBLIC ${PNG_INCLUDE_DIRS} ${SDL2_INCLUDE_DIRS} ${TBB_INCLUDE_DIRS})
+target_link_libraries(rodent ${AnyDSL_runtime_LIBRARIES} ${PNG_LIBRARIES} ${SDL2_LIBRARY} ${TBB_LIBRARIES})

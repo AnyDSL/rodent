@@ -2,14 +2,16 @@
 #include <memory>
 #include <string>
 #include <fstream>
+#include <cstring>
 
 #include <anydsl_runtime.hpp>
 #include <png.h>
 
 #include "interface.h"
 #include "load_obj.h"
+#include "bvh.h"
 
-// Triangle Mesh -------------------------------------------------------------------
+// Triangle Meshes -----------------------------------------------------------------
 
 struct TriIdx {
     int32_t v0, v1, v2, m;
@@ -74,7 +76,7 @@ static void compute_vertex_normals(const std::vector<uint32_t>& indices,
     }
 }
 
-static TriMesh load_tri_mesh(int32_t dev, std::string file_name) {
+static TriMesh load_tri_mesh(int32_t dev, std::string file_name, std::vector<Tri>& tris) {
     static size_t mtl_offset = 0;
 
     obj::File obj_file;
@@ -168,6 +170,14 @@ static TriMesh load_tri_mesh(int32_t dev, std::string file_name) {
             std::fill(normals.begin() + vtx_offset, normals.end(), float3(0.0f));
             compute_vertex_normals(indices, face_normals, normals, idx_offset);
         }
+    }
+
+    // Create triangles for the BVH
+    for (size_t i = 0; i < indices.size(); i += 4) {
+        auto& v0 = vertices[indices[i + 0]];
+        auto& v1 = vertices[indices[i + 1]];
+        auto& v2 = vertices[indices[i + 2]];
+        tris.emplace_back(v0, v1, v2);
     }
 
     mtl_offset += obj_file.materials.size();
@@ -266,7 +276,7 @@ static bool load_png(int32_t dev, std::string file_name, PixelData& pixel_data) 
     else
         png_set_filler(png_ptr, 0xFF, PNG_FILLER_AFTER);
 
-    std::vector<Color> pixels;
+    std::vector<Color> pixels(width * height);
     std::vector<png_byte> row_bytes(width * 4);
     for (size_t y = 0; y < height; y++) {
         png_read_row(png_ptr, row_bytes.data(), nullptr);
@@ -300,8 +310,209 @@ static void release_image(int32_t dev, PixelData pixel_data) {
     anydsl_release(dev, const_cast<Color*>(pixel_data.pixels));
 }
 
+// BVH -----------------------------------------------------------------------------
+
+class Bvh8Tri4Adapter {
+    struct CostFn {
+        static float leaf_cost(int count, float area) {
+            return ((count - 1) / 4 + 1) * area;
+        }
+        static float traversal_cost(float area) {
+            return area * 0.5f;
+        }
+    };
+
+    struct StackElem {
+        int parent, child;
+        StackElem() {}
+        StackElem(int parent, int child) : parent(parent), child(child) {}
+    };
+
+    using BvhBuilder = SplitBvhBuilder<8, CostFn>;
+    using Adapter    = Bvh8Tri4Adapter;
+
+    std::vector<Bvh8Node>& nodes_;
+    std::vector<Bvh4Tri>&  tris_;
+    Stack<StackElem>       stack_;
+    BvhBuilder             builder_;
+
+    const Tri* in_tris;
+
+public:
+    Bvh8Tri4Adapter(std::vector<Bvh8Node>& nodes, std::vector<Bvh4Tri>& tris)
+        : nodes_(nodes), tris_(tris)
+    {}
+
+    void build(const std::vector<Tri>& tris) {
+        in_tris = tris.data();
+        builder_.build(tris, NodeWriter(*this), LeafWriter(*this), 8);
+    }
+
+#ifdef STATISTICS
+    void print_stats() const override { builder_.print_stats(); }
+#endif
+
+private:
+    struct NodeWriter {
+        Adapter& adapter;
+
+        NodeWriter(Adapter& adapter)
+            : adapter(adapter)
+        {}
+
+        template <typename BBoxFn>
+        void operator() (const BBox& parent_bb, int count, BBoxFn bboxes) {
+            auto& nodes = adapter.nodes_;
+            auto& stack = adapter.stack_;
+
+            int i = nodes.size();
+            nodes.emplace_back();
+
+            if (!stack.is_empty()) {
+                StackElem elem = stack.pop();
+                nodes[elem.parent].child[elem.child] = i;
+            }
+
+            assert(count >= 2 && count <= 4);
+
+            for (int j = count - 1; j >= 0; j--) {
+                const BBox& bbox = bboxes(j);
+                nodes[i].bounds[0][j] = bbox.min.x;
+                nodes[i].bounds[2][j] = bbox.min.y;
+                nodes[i].bounds[4][j] = bbox.min.z;
+
+                nodes[i].bounds[1][j] = bbox.max.x;
+                nodes[i].bounds[3][j] = bbox.max.y;
+                nodes[i].bounds[5][j] = bbox.max.z;
+
+                stack.push(i, j);
+            }
+
+            for (int j = 3; j >= count; j--) {
+                nodes[i].bounds[0][j] = FLT_MAX;
+                nodes[i].bounds[2][j] = FLT_MAX;
+                nodes[i].bounds[4][j] = FLT_MAX;
+
+                nodes[i].bounds[1][j] = -FLT_MAX;
+                nodes[i].bounds[3][j] = -FLT_MAX;
+                nodes[i].bounds[5][j] = -FLT_MAX;
+
+                nodes[i].child[j] = 0;
+            }
+        }
+    };
+
+    struct LeafWriter {
+        Adapter& adapter;
+
+        LeafWriter(Adapter& adapter)
+            : adapter(adapter)
+        {}
+
+        static void fill_dummy_parent(Bvh8Node& node, const BBox& leaf_bb, int index) {
+            node.child[0] = index;
+            node.child[1] = 0;
+
+            node.bounds[0][0] = leaf_bb.min.x;
+            node.bounds[2][0] = leaf_bb.min.y;
+            node.bounds[4][0] = leaf_bb.min.z;
+
+            node.bounds[1][0] = leaf_bb.max.x;
+            node.bounds[3][0] = leaf_bb.max.y;
+            node.bounds[5][0] = leaf_bb.max.z;
+        }
+
+        template <typename RefFn>
+        void operator() (const BBox& leaf_bb, int ref_count, RefFn refs) {
+            auto& nodes = adapter.nodes_;
+            auto& stack = adapter.stack_;
+            auto& tris = adapter.tris_;
+            auto  in_tris = adapter.in_tris;
+
+            if (stack.is_empty()) {
+                nodes.emplace_back();
+                fill_dummy_parent(nodes.back(), leaf_bb, ~tris.size());
+            } else {
+                const StackElem& elem = stack.pop();
+                nodes[elem.parent].child[elem.child] = ~tris.size();
+            }
+
+            // Group triangles by packets of 4
+            for (int i = 0; i < ref_count; i += 4) {
+                const int c = i + 4 <= ref_count ? 4 : ref_count - i;
+                Bvh4Tri bvh4tri;
+                memset(&bvh4tri, 0, sizeof(Bvh4Tri));
+                for (int j = 0; j < c; j++) {
+                    const int id = refs(i + j);
+                    const Tri& tri = in_tris[id];
+                    const float3 e1 = tri.v0 - tri.v1;
+                    const float3 e2 = tri.v2 - tri.v0;
+                    const float3 n = cross(e1, e2);
+                    bvh4tri.v0[0][j] = tri.v0.x;
+                    bvh4tri.v0[1][j] = tri.v0.y;
+                    bvh4tri.v0[2][j] = tri.v0.z;
+
+                    bvh4tri.e1[0][j] = e1.x;
+                    bvh4tri.e1[1][j] = e1.y;
+                    bvh4tri.e1[2][j] = e1.z;
+
+                    bvh4tri.e2[0][j] = e2.x;
+                    bvh4tri.e2[1][j] = e2.y;
+                    bvh4tri.e2[2][j] = e2.z;
+
+                    bvh4tri.n[0][j] = n.x;
+                    bvh4tri.n[1][j] = n.y;
+                    bvh4tri.n[2][j] = n.z;
+
+                    bvh4tri.id[j] = id;
+                }
+
+                for (int j = c; j < 4; j++)
+                    bvh4tri.id[j] = 0xFFFFFFFF;
+
+                tris.emplace_back(bvh4tri);
+            }
+            tris.back().id[3] |= 0x80000000;
+        }
+    };
+};
+
+template <typename BvhType>
+struct BvhTraits {};
+
+template <>
+struct BvhTraits<Bvh8Tri4> {
+    using Node = Bvh8Node;
+    using Tri  = Bvh4Tri;
+    using Adapter = Bvh8Tri4Adapter;
+};
+
+template <typename BvhType>
+BvhType build_bvh(int32_t dev, const std::vector<Tri>& in_tris) {
+    using Traits  = BvhTraits<BvhType>;
+    using Adapter = typename Traits::Adapter;
+    using Node = typename Traits::Node;
+    using Tri  = typename Traits::Tri;
+
+    std::vector<Node> nodes;
+    std::vector<Tri>  tris;
+    Adapter adapter(nodes, tris);
+    adapter.build(in_tris);
+
+    auto nodes_ptr = reinterpret_cast<Node*>(anydsl_alloc(dev, sizeof(Node) * nodes.size()));
+    auto tris_ptr  = reinterpret_cast<Tri*> (anydsl_alloc(dev, sizeof(Tri)  * tris.size()));
+    anydsl_copy(0, nodes.data(), 0, dev, nodes_ptr, 0, sizeof(Node) * nodes.size());
+    anydsl_copy(0, tris.data(),  0, dev, tris_ptr,  0, sizeof(Tri)  * tris.size());
+
+    return BvhType {
+        nodes_ptr,
+        tris_ptr
+    };
+}
+
 // Interface -----------------------------------------------------------------------
 
+template <typename BvhType>
 class Interface {
 public:
     Interface(int32_t dev, size_t width, size_t height)
@@ -328,7 +539,7 @@ public:
         auto it = tri_meshes_.find(file);
         if (it != tri_meshes_.end())
             return it->second;
-        return tri_meshes_[file] = load_tri_mesh(dev_, file);
+        return tri_meshes_[file] = load_tri_mesh(dev_, file, tris_);
     }
 
     PixelData film_data() {
@@ -340,45 +551,56 @@ public:
             static_cast<int>(width_),
             static_cast<int>(height_)
         });
+        return *film_data_;
     }
 
-    Bvh8Tri4 bvh() {
+    BvhType bvh() {
         if (bvh_)
             return *bvh_;
-        bvh_ = build_bvh(dev_);
+        bvh_.reset(new BvhType(build_bvh<BvhType>(dev_, tris_)));
+        std::vector<Tri>().swap(tris_);
     }
 
 private:
     std::unordered_map<std::string, PixelData> images_;
     std::unordered_map<std::string, TriMesh>   tri_meshes_;
     std::unique_ptr<PixelData> film_data_;
-    std::unique_ptr<Bvh8Tri4>  bvh_;
+    std::unique_ptr<BvhType> bvh_;
+    std::vector<Tri> tris_;
     size_t width_, height_;
     int32_t dev_;
 };
 
 // CPU Interface -------------------------------------------------------------------
 
-static std::unique_ptr<Interface> cpu_interface;
+static std::unique_ptr<Interface<Bvh8Tri4>> cpu_interface;
 
 void setup_cpu_interface(size_t width, size_t height) {
-    cpu_interface.reset(new Interface(0, width, height));
+    cpu_interface.reset(new Interface<Bvh8Tri4>(0, width, height));
 }
 
-extern "C" Bvh8Tri4 rodent_cpu_get_bvh8_tri4() {
-    return cpu_interface->bvh();
+Color* get_cpu_pixels() {
+    return cpu_interface->film_data().pixels;
 }
 
-extern "C" PixelData rodent_cpu_get_film_data() {
-    return cpu_interface->film_data();
+void cleanup_cpu_interface() {
+    cpu_interface.reset();
 }
 
-extern "C" TriMesh rodent_cpu_load_tri_mesh(const char* file) {
-    return cpu_interface->tri_mesh(file);
+extern "C" void rodent_cpu_get_bvh8_tri4(Bvh8Tri4* bvh) {
+    *bvh = cpu_interface->bvh();
 }
 
-extern "C" PixelData rodent_cpu_load_pixel_data(const char* file) {
-    return cpu_interface->image(file);
+extern "C" void rodent_cpu_get_film_data(PixelData* film_data) {
+    *film_data = cpu_interface->film_data();
+}
+
+extern "C" void rodent_cpu_load_tri_mesh(const char* file, TriMesh* tri_mesh) {
+    *tri_mesh = cpu_interface->tri_mesh(file);
+}
+
+extern "C" void rodent_cpu_load_pixel_data(const char* file, PixelData* pixel_data) {
+    *pixel_data = cpu_interface->image(file);
 }
 
 // GPU Interface -------------------------------------------------------------------
