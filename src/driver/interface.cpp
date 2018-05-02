@@ -557,6 +557,7 @@ public:
             return *bvh_;
         bvh_.reset(new BvhType(build_bvh<BvhType>(dev_, tris_)));
         std::vector<Tri>().swap(tris_);
+        return *bvh_;
     }
 
 private:
