@@ -1,6 +1,9 @@
 // Change these variables to use another random number generator
-type RndState = u64;
-static randi = mwc64x;
+//type RndState = u64;
+//static randi = mwc64x;
+type RndState = u32;
+static randi = xorshift;
+
 fn @randf(rnd: &mut RndState) -> f32 {
     let i = randi(rnd);
     (i as f32) / (0xFFFFFFFFu32 as f32)
@@ -12,6 +15,16 @@ fn @mwc64x(seed: &mut u64) -> i32 {
     let x = *seed & 0xFFFFFFFFu64;
     *seed = x * 4294883355u64 + c;
     (x as i32)^(c as i32)
+}
+
+fn @xorshift(seed: &mut u32) -> i32 {
+    let mut x = *seed;
+    x = select(x == 0u32, 1u32, x);
+    x ^= x << 13u32;
+    x ^= x >> 17u32;
+    x ^= x << 5u32;
+    *seed = x;
+    x as i32
 }
 
 // Result of sampling a direction
@@ -91,6 +104,6 @@ fn @fnv_hash(mut h: u32, d: u32) -> u32 {
 
 // Returns the probability to continue given the contribution of a path
 fn @russian_roulette(c: Color, clamp: f32) -> f32 {
-    let prob = 2.0f * (c.r * 0.2126f + c.g * 0.7152f + c.b * 0.0722f);
+    let prob = 2.0f * color_luminance(c);
     if prob > clamp { clamp } else { prob }
 }

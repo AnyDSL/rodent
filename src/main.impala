@@ -14,14 +14,14 @@ extern fn render(iter: i32) -> () {
     let tri_mesh = device.load_mesh("data/cube.obj");
 
     let camera = make_perspective_camera(
-        make_vec3(0.0f, 0.0f, -5.0f),
-        make_orthonormal_mat3x3(make_vec3(0.0f, 0.0f, 1.0f)),
+        make_vec3(-5.0f, -5.0f, -5.0f),
+        make_orthonormal_mat3x3(vec3_normalize(device.intrinsics, make_vec3(1.0f, 1.0f, 1.0f))),
         1.0f,
         1.0f
     );
     let light = make_point_light(
-        make_vec3(0.0f, 0.0f, -10.0f),
-        make_color(1000.0f, 1000.0f, 1000.0f)
+        make_vec3(-3.0f, -3.0f, -3.0f),
+        make_color(200.0f, 200.0f, 200.0f)
     );
 
     let scene = Scene {

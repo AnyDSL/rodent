@@ -28,9 +28,9 @@ fn @make_path_tracer(max_path_len: i32) -> Renderer {
 
         fn @on_emit(x: i32, y: i32, width: i32, height: i32) -> (Ray, RayState) {
             let mut hash = fnv_init();
+            hash = fnv_hash(hash, iter as u32);
             hash = fnv_hash(hash, x as u32);
             hash = fnv_hash(hash, y as u32);
-            hash = fnv_hash(hash, iter as u32);
             let mut rnd = hash as RndState;
             let kx = (x as f32 + randf(&mut rnd)) / (width  as f32);
             let ky = (y as f32 + randf(&mut rnd)) / (height as f32);
@@ -100,8 +100,7 @@ fn @make_path_tracer(max_path_len: i32) -> Renderer {
                      , mat: Material
                      , bounce: fn (Ray, RayState) -> !
                      ) -> () {
-            return()
-            /*// Russian roulette and maximum depth
+            // Russian roulette and maximum depth
             let rr_prob = russian_roulette(state.contrib, 0.75f);
             if state.depth >= max_path_len || randf(&mut state.rnd) >= rr_prob {
                 return()
@@ -113,8 +112,8 @@ fn @make_path_tracer(max_path_len: i32) -> Renderer {
             let mis = if mat.bsdf.is_specular { 0.0f } else { 1.0f / mat_sample.pdf };
             bounce(
                 make_ray(surf.point, mat_sample.in_dir, offset, flt_max),
-                make_ray_state(state.rnd, color_mulf(state.contrib, 1.0f / (mat_sample.pdf * rr_prob)), mis, state.depth + 1)
-            )*/
+                make_ray_state(state.rnd, color_mulf(color_mul(state.contrib, mat_sample.color), 1.0f / (mat_sample.pdf * rr_prob)), mis, state.depth + 1)
+            )
         }
 
         let eye_tracer = EyeTracer {
