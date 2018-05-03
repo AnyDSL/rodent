@@ -53,7 +53,7 @@ fn @make_repeat_border() -> BorderHandling {
 
 fn @make_nearest_filter() -> ImageFilter {
     @ |math, img, uv| {
-        img.pixels(math.max((uv.x * img.width  as f32) as i32, img.width  - 1),
+        img.pixels(math.min((uv.x * img.width  as f32) as i32, img.width  - 1),
                    math.min((uv.y * img.height as f32) as i32, img.height - 1))
     }
 }
@@ -62,12 +62,12 @@ fn @make_bilinear_filter() -> ImageFilter {
     @ |math, img, uv| {
         let u = uv.x * img.width as f32;
         let v = uv.y * img.height as f32;
-        let x0 = math.max(u as i32, img.width  - 1);
+        let x0 = math.min(u as i32, img.width  - 1);
         let y0 = math.min(v as i32, img.height - 1);
-        let x1 = math.max(u as i32 + 1, img.width  - 1);
-        let y1 = math.min(v as i32 + 1, img.height - 1);
-        let kx  = u - math.floorf(u);
-        let ky  = v - math.floorf(v);
+        let x1 = math.min(x0 + 1, img.width  - 1);
+        let y1 = math.min(y0 + 1, img.height - 1);
+        let kx = u - math.floorf(u);
+        let ky = v - math.floorf(v);
 
         let p00 = img.pixels(x0, y0);
         let p10 = img.pixels(x1, y0);

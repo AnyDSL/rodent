@@ -21,6 +21,9 @@ struct Device {
     load_image: fn (&[u8]) -> Image
 }
 
+type Renderer = fn (Scene, Device, i32) -> ();
+type Shader   = fn (Intrinsics, Scene, SurfaceElement) -> Material;
+
 fn @compute_surface_parameters(intrinsics: Intrinsics, scene: Scene, ray: Ray, hit: Hit) -> (SurfaceElement, Material) {
     let geom = scene.geometries(hit.geom_id);
     let surf = geom.surface_element(intrinsics, ray, hit);
@@ -30,5 +33,27 @@ fn @compute_surface_parameters(intrinsics: Intrinsics, scene: Scene, ray: Ray, h
     (surf, mat)
 }
 
-type Renderer     = fn (Scene, Device) -> ();
-type Shader       = fn (Intrinsics, Scene, SurfaceElement) -> Material;
+fn @make_dummy_surface_parameters() -> (SurfaceElement, Material) {
+    let surf = SurfaceElement {
+        is_entering: true,
+        point:       make_vec3(0.0f, 0.0f, 0.0f),
+        face_normal: make_vec3(0.0f, 1.0f, 0.0f),
+        uv_coords:   make_vec2(0.0f, 0.0f),
+        local:       make_orthonormal_mat3x3(make_vec3(0.0f, 1.0f, 0.0f))
+    };
+    let mat = Material {
+        bsdf: Bsdf {
+            eval: @ |_, _, _| black,
+            pdf: @ |_, _, _| 0.0f,
+            sample: @ |_, _, out_dir, _| BsdfSample {
+                in_dir: out_dir,
+                pdf: 1.0f,
+                color: black
+            },
+            is_specular: false
+        },
+        emission: @ |_, _| make_emission_value(black, 1.0f, 1.0f),
+        is_emissive: false
+    };
+    (surf, mat)
+}

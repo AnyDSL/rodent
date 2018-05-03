@@ -1,5 +1,6 @@
-# Auto generated interface
+# Auto generated interfaces
 tools/common/traversal.h
+src/driver/interface.h
 
 # Compiled Object files
 *.slo

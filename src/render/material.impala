@@ -59,7 +59,7 @@ fn @make_emissive_material(surf: SurfaceElement, light: Light) -> Material {
 // Creates a BSDF sample and checks that it lies on the right side of the surface
 fn @make_bsdf_sample(surf: SurfaceElement, in_dir: Vec3, pdf: f32, color: Color, inverted: bool) -> BsdfSample {
     // Checks that the sample is above the surface (or under it if inverted is true)
-    let valid = pdf > 0.0f && (inverted ^ (vec3_dot(in_dir, surf.face_normal) > 0.0f));
+    let valid = (pdf > 0.0f) & (inverted ^ (vec3_dot(in_dir, surf.face_normal) > 0.0f));
     BsdfSample {
         in_dir: in_dir,
         pdf: pdf,
@@ -185,6 +185,6 @@ fn @make_mix_bsdf(mat1: Bsdf, mat2: Bsdf, k: f32) -> Bsdf {
                 mat2.sample(math, rnd, out_dir, adjoint)
             }
         },
-        is_specular: mat1.is_specular && mat2.is_specular
+        is_specular: mat1.is_specular & mat2.is_specular
     }
 }

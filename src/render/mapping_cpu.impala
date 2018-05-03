@@ -113,11 +113,16 @@ fn @cpu_eye_trace(scene: Scene, eye_tracer: EyeTracer) -> () {
 
                 let loaded_ray = primary_layout.read_ray(0, j);
                 let loaded_hit = primary_layout.read_hit(0, j);
-                let (surf, mat) = compute_surface_parameters(cpu_intrinsics, scene, loaded_ray, loaded_hit);
 
                 // Kill rays that have not hit anything
                 let prev_alive = alive;
                 alive &= loaded_hit.prim_id >= 0;
+
+                let (surf, mat) = if alive {
+                    compute_surface_parameters(cpu_intrinsics, scene, loaded_ray, loaded_hit)
+                } else {
+                    make_dummy_surface_parameters()
+                };
 
                 // Shading
                 let mut shadow_needed = false;
@@ -154,14 +159,16 @@ fn @cpu_eye_trace(scene: Scene, eye_tracer: EyeTracer) -> () {
                 }
 
                 if alive {
-                    alive = false;
                     for once() {
                         @@(eye_tracer.on_bounce)(loaded_ray, loaded_hit, &mut state, surf, mat, |new_ray, new_state| -> ! {
                             primary_layout.write_ray(0, j, new_ray);
                             state = new_state;
                             alive = true;
                             break()
-                        });
+                        }, || -> ! {
+                            alive = false;
+                            break()
+                        })
                     }
                 }
 

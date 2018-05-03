@@ -16,6 +16,7 @@ static bool handle_events() {
             case SDL_KEYDOWN:
                 if (event.key.keysym.sym == SDLK_ESCAPE)
                     return true;
+                break;
             case SDL_QUIT:
                 return true;
             default:
@@ -57,11 +58,12 @@ int main(int argc, char** argv) {
     bool done = false;
     uint64_t tick_counter = 0;
     uint32_t frames = 0;
+    uint32_t iter = 0;
     while (!done) {
         done = handle_events();
 
         auto ticks = SDL_GetTicks();
-        render();
+        render(iter++);
         tick_counter += SDL_GetTicks() - ticks;
         frames++;
         if (frames > 10 || tick_counter >= 5000) {
@@ -73,13 +75,14 @@ int main(int argc, char** argv) {
         }
 
         auto film = get_cpu_pixels();
+        auto inv_iter = 1.0f / iter;
         for (size_t y = 0; y < height; ++y) {
             for (size_t x = 0; x < width; ++x) {
                 auto pixel = film[y * width + x];
                 buf.get()[y * width + x] =
-                    (uint32_t(clamp(pixel.r, 0.0f, 1.0f) * 255.0f) << 16) |
-                    (uint32_t(clamp(pixel.g, 0.0f, 1.0f) * 255.0f) << 8)  |
-                     uint32_t(clamp(pixel.b, 0.0f, 1.0f) * 255.0f);
+                    (uint32_t(clamp(pixel.r * inv_iter, 0.0f, 1.0f) * 255.0f) << 16) |
+                    (uint32_t(clamp(pixel.g * inv_iter, 0.0f, 1.0f) * 255.0f) << 8)  |
+                     uint32_t(clamp(pixel.b * inv_iter, 0.0f, 1.0f) * 255.0f);
             }
         }
         SDL_UpdateTexture(texture, nullptr, buf.get(), width * sizeof(uint32_t));

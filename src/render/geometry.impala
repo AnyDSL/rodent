@@ -32,7 +32,7 @@ fn @make_tri_mesh_geometry(tri_mesh: TriMesh) -> Geometry {
                 point: vec3_add(ray.org, vec3_mulf(ray.dir, hit.distance)),
                 face_normal: if is_entering { face_normal } else { vec3_neg(face_normal) },
                 uv_coords: texcoord,
-                local: make_orthonormal_mat3x3(normal)
+                local: make_orthonormal_mat3x3(vec3_normalize(math, normal))
             }
         },
         shader_id: @ |hit| tri_mesh.ids(hit.prim_id * 4 + 3)
