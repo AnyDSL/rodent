@@ -23,7 +23,7 @@ fn @make_tri_mesh_geometry(tri_mesh: TriMesh) -> Geometry {
             let i2 = tri_mesh.ids(hit.prim_id * 4 + 2);
 
             let face_normal = tri_mesh.face_normals(hit.prim_id);
-            let normal = vec3_lerp2(tri_mesh.normals(i0), tri_mesh.normals(i1), tri_mesh.normals(i2), hit.uv_coords.x, hit.uv_coords.y);
+            let normal = vec3_normalize(math, vec3_lerp2(tri_mesh.normals(i0), tri_mesh.normals(i1), tri_mesh.normals(i2), hit.uv_coords.x, hit.uv_coords.y));
             let texcoord = vec2_lerp2(tri_mesh.uvs(i0), tri_mesh.uvs(i1), tri_mesh.uvs(i2), hit.uv_coords.x, hit.uv_coords.y);
             let is_entering = vec3_dot(ray.dir, face_normal) <= 0.0f;
 
@@ -32,7 +32,7 @@ fn @make_tri_mesh_geometry(tri_mesh: TriMesh) -> Geometry {
                 point: vec3_add(ray.org, vec3_mulf(ray.dir, hit.distance)),
                 face_normal: if is_entering { face_normal } else { vec3_neg(face_normal) },
                 uv_coords: texcoord,
-                local: make_orthonormal_mat3x3(vec3_normalize(math, normal))
+                local: make_orthonormal_mat3x3(if vec3_dot(ray.dir, normal) <= 0.0f { normal } else { vec3_neg(normal) })
             }
         },
         shader_id: @ |hit| tri_mesh.ids(hit.prim_id * 4 + 3)
