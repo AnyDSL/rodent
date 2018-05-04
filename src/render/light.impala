@@ -138,8 +138,8 @@ fn @make_triangle_light(v0: Vec3, v1: Vec3, v2: Vec3, n: Vec3, inv_area: f32, co
             let pos = sample_surface(math, rnd);
             let u = randf(rnd);
             let v = randf(rnd);
-            let sample = sample_cosine_hemisphere(math, make_orthonormal_mat3x3(n), u, v);
-            make_emission_sample(pos, sample.dir, color, inv_area, sample.pdf, vec3_dot(sample.dir, n))
+            let sample = sample_cosine_hemisphere(math, u, v);
+            make_emission_sample(pos, mat3x3_mul(make_orthonormal_mat3x3(n), sample.dir), color, inv_area, sample.pdf, sample.dir.z)
         },
         emission: @ |math, dir, surf_pos| make_emission_value(black, inv_area, cosine_hemisphere_pdf(vec3_dot(n, dir))),
         has_area: true

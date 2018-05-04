@@ -5,8 +5,9 @@ type RndState = u32;
 static randi = xorshift;
 
 fn @randf(rnd: &mut RndState) -> f32 {
-    let i = randi(rnd);
-    (i as f32) / (0xFFFFFFFFu32 as f32)
+    // Assumes IEEE 754 floating point format
+    let x = randi(rnd) as u32;
+    bitcast[f32]((127u32 << 23u32) | (x & 0x7FFFFFu32)) - 1.0f
 }
 
 // MWC64X: http://cas.ee.ic.ac.uk/people/dt10/research/rngs-gpu-mwc64x.html
@@ -17,6 +18,7 @@ fn @mwc64x(seed: &mut u64) -> i32 {
     (x as i32)^(c as i32)
 }
 
+// 32-bit version of the xorshift random number generator
 fn @xorshift(seed: &mut u32) -> i32 {
     let mut x = *seed;
     x = select(x == 0u32, 1u32, x);
@@ -33,12 +35,12 @@ struct DirSample {
     pdf: f32
 }
 
-fn @make_dir_sample(math: Intrinsics, m: Mat3x3, c: f32, s: f32, phi: f32, pdf: f32) -> DirSample {
+fn @make_dir_sample(math: Intrinsics, c: f32, s: f32, phi: f32, pdf: f32) -> DirSample {
     let x = s * math.cosf(phi);
     let y = s * math.sinf(phi);
     let z = c;
     DirSample {
-        dir: mat3x3_mul(m, make_vec3(x, y, z)),
+        dir: make_vec3(x, y, z),
         pdf: pdf
     }
 }
@@ -51,31 +53,31 @@ fn @sample_uniform_sphere(math: Intrinsics, u: f32, v: f32) -> DirSample {
     let c = 2.0f * v - 1.0f;
     let s = math.sqrtf(1.0f - c * c);
     let phi = 2.0f * flt_pi * u;
-    make_dir_sample(math, mat3x3_identity(), c, s, phi, uniform_sphere_pdf())
+    make_dir_sample(math, c, s, phi, uniform_sphere_pdf())
 }
 
 // Probability density function for cosine weighted hemisphere sampling
-fn @cosine_hemisphere_pdf(c: f32) -> f32 { c / flt_pi }
+fn @cosine_hemisphere_pdf(c: f32) -> f32 { c * (1.0f / flt_pi) }
 
 // Samples a direction on a hemisphere proportionally to the cosine with the surface normal
-fn @sample_cosine_hemisphere(math: Intrinsics, m: Mat3x3, u: f32, v: f32) -> DirSample {
+fn @sample_cosine_hemisphere(math: Intrinsics, u: f32, v: f32) -> DirSample {
     let c = math.sqrtf(1.0f - v);
     let s = math.sqrtf(v);
     let phi = 2.0f * flt_pi * u;
-    make_dir_sample(math, m, c, s, phi, cosine_hemisphere_pdf(c))
+    make_dir_sample(math, c, s, phi, cosine_hemisphere_pdf(c))
 }
 
 // Probability density function for cosine-power weighted hemisphere sampling
 fn @cosine_power_hemisphere_pdf(math: Intrinsics, c: f32, k: f32) -> f32 {
-    math.powf(c, k) * (k + 1.0f) / (2.0f * flt_pi)
+    math.powf(c, k) * (k + 1.0f) * (1.0f / (2.0f * flt_pi))
 }
 
 // Samples a direction on a hemisphere proportionally to the power of the cosine with the surface normal
-fn @sample_cosine_power_hemisphere(math: Intrinsics, m: Mat3x3, k: f32, u: f32, v: f32) -> DirSample {
+fn @sample_cosine_power_hemisphere(math: Intrinsics, k: f32, u: f32, v: f32) -> DirSample {
     let c = math.powf(v, 1.0f / (k + 1.0f));
     let s = math.sqrtf(1.0f - c * c);
     let phi = 2.0f * flt_pi * u;
-    make_dir_sample(math, m, c, s, phi, cosine_power_hemisphere_pdf(math, c, k))
+    make_dir_sample(math, c, s, phi, cosine_power_hemisphere_pdf(math, c, k))
 }
 
 // Initializer for Bernstein's hash function

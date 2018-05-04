@@ -1,6 +1,6 @@
 struct EyeTracer {
     on_emit:   fn (i32, i32, i32, i32) -> (Ray, RayState),
-    on_hit:    fn (Ray, Hit, &mut RayState, SurfaceElement, Material) -> Color,
+    on_hit:    fn (Ray, Hit, &mut RayState, SurfaceElement, Material, fn (Color) -> !) -> (),
     on_shadow: fn (Ray, Hit, &mut RayState, SurfaceElement, Material, fn (Ray, Color) -> !) -> (),
     on_bounce: fn (Ray, Hit, &mut RayState, SurfaceElement, Material, fn (Ray, RayState) -> !) -> (),
 }
@@ -23,7 +23,7 @@ fn @make_ray_state(rnd: RndState, contrib: Color, mis: f32, depth: i32) -> RaySt
 
 fn @make_path_tracer(max_path_len: i32) -> Renderer {
     @ |scene, device, iter| {
-        let offset = 0.0001f;
+        let offset = 0.001f;
         let pdf_lightpick = 1.0f / (scene.num_lights as f32);
 
         fn @on_emit(x: i32, y: i32, width: i32, height: i32) -> (Ray, RayState) {
@@ -81,15 +81,14 @@ fn @make_path_tracer(max_path_len: i32) -> Renderer {
                   , state: &mut RayState
                   , surf: SurfaceElement
                   , mat: Material
-                  ) -> Color {
+                  , accumulate: fn (Color) -> !
+                  ) -> () {
             // Hits on a light source
             if mat.is_emissive && surf.is_entering {
                 let out_dir = vec3_neg(ray.dir);
                 let emit = mat.emission(device.intrinsics, out_dir);
                 let mis = 1.0f / (1.0f + state.mis * pdf_lightpick * emit.pdf_area * hit.distance * hit.distance / vec3_dot(out_dir, surf.local.col(2)));
-                color_mulf(color_mul(state.contrib, emit.intensity), mis)
-            } else {
-                black
+                accumulate(color_mulf(color_mul(state.contrib, emit.intensity), mis))
             }
         }
 
@@ -109,10 +108,11 @@ fn @make_path_tracer(max_path_len: i32) -> Renderer {
             // Bounce
             let out_dir = vec3_neg(ray.dir);
             let mat_sample = mat.bsdf.sample(device.intrinsics, &mut state.rnd, out_dir, false);
+            let contrib = color_mul(state.contrib, mat_sample.color);
             let mis = if mat.bsdf.is_specular { 0.0f } else { 1.0f / mat_sample.pdf };
             bounce(
                 make_ray(surf.point, mat_sample.in_dir, offset, flt_max),
-                make_ray_state(state.rnd, color_mulf(color_mul(state.contrib, mat_sample.color), 1.0f / (mat_sample.pdf * rr_prob)), mis, state.depth + 1)
+                make_ray_state(state.rnd, color_mulf(contrib, 1.0f / (mat_sample.pdf * rr_prob)), mis, state.depth + 1)
             )
         }
 

@@ -147,7 +147,12 @@ fn @cpu_eye_trace(scene: Scene, eye_tracer: EyeTracer) -> () {
                 let mut shadow_needed = false;
                 let mut shadow_color : Color;
                 if alive {
-                    accumulate(@@(eye_tracer.on_hit)(loaded_ray, loaded_hit, &mut state, surf, mat));
+                    for once() {
+                        @@(eye_tracer.on_hit)(loaded_ray, loaded_hit, &mut state, surf, mat, @ |color| -> ! {
+                            accumulate(color);
+                            break()
+                        })
+                    }
                     for once() {
                         @@(eye_tracer.on_shadow)(loaded_ray, loaded_hit, &mut state, surf, mat, @ |ray, color| -> ! {
                             shadow_layout.write_ray(0, j, ray);

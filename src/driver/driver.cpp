@@ -76,13 +76,15 @@ int main(int argc, char** argv) {
 
         auto film = get_cpu_pixels();
         auto inv_iter = 1.0f / iter;
+        auto gamma = 0.5f;
         for (size_t y = 0; y < height; ++y) {
             for (size_t x = 0; x < width; ++x) {
                 auto pixel = film[y * width + x];
+
                 buf.get()[y * width + x] =
-                    (uint32_t(clamp(pixel.r * inv_iter, 0.0f, 1.0f) * 255.0f) << 16) |
-                    (uint32_t(clamp(pixel.g * inv_iter, 0.0f, 1.0f) * 255.0f) << 8)  |
-                     uint32_t(clamp(pixel.b * inv_iter, 0.0f, 1.0f) * 255.0f);
+                    (uint32_t(clamp(pow(pixel.r * inv_iter, gamma), 0.0f, 1.0f) * 255.0f) << 16) |
+                    (uint32_t(clamp(pow(pixel.g * inv_iter, gamma), 0.0f, 1.0f) * 255.0f) << 8)  |
+                     uint32_t(clamp(pow(pixel.b * inv_iter, gamma), 0.0f, 1.0f) * 255.0f);
             }
         }
         SDL_UpdateTexture(texture, nullptr, buf.get(), width * sizeof(uint32_t));
