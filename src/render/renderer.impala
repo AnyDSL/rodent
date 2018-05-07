@@ -12,6 +12,8 @@ struct RayState {
     depth:   i32
 }
 
+type Emitter = fn (i32, i32, i32, i32) -> (Ray, RayState);
+
 fn @make_ray_state(rnd: RndState, contrib: Color, mis: f32, depth: i32) -> RayState {
     RayState {
         rnd: rnd,
@@ -21,23 +23,49 @@ fn @make_ray_state(rnd: RndState, contrib: Color, mis: f32, depth: i32) -> RaySt
     }
 }
 
+fn @make_camera_emitter(scene: Scene, device: Device, iter: i32) -> Emitter {
+    @ |x, y, width, height| {
+        let mut hash = fnv_init();
+        hash = fnv_hash(hash, iter as u32);
+        hash = fnv_hash(hash, x as u32);
+        hash = fnv_hash(hash, y as u32);
+        let mut rnd = hash as RndState;
+        let kx = (x as f32 + randf(&mut rnd)) / (width  as f32);
+        let ky = (y as f32 + randf(&mut rnd)) / (height as f32);
+        let ray = scene.camera.generate_ray(device.intrinsics, kx, ky);
+        let state = make_ray_state(rnd, white, 1.0f, 0);
+        (ray, state)
+    }
+}
+
+fn @make_debug_renderer() -> Renderer {
+    @ |scene, device, iter| {
+        let offset = 0.001f;
+
+        let on_emit = make_camera_emitter(scene, device, iter);
+        let on_shadow = @ |_, _, _, _, _, _| ();
+        let on_bounce = @ |_, _, _, _, _, _| ();
+        let on_hit = @ |ray, hit, state, surf, mat, accumulate| {
+            accumulate(color_mulf(white, -vec3_dot(ray.dir, surf.local.col(2))))
+        };
+
+        let eye_tracer = EyeTracer {
+            on_emit:   on_emit,
+            on_hit:    on_hit,
+            on_shadow: on_shadow,
+            on_bounce: on_bounce
+        };
+
+        device.eye_trace(scene, eye_tracer);
+    }
+}
+
 fn @make_path_tracer(max_path_len: i32) -> Renderer {
     @ |scene, device, iter| {
         let offset = 0.001f;
         let pdf_lightpick = 1.0f / (scene.num_lights as f32);
 
-        fn @on_emit(x: i32, y: i32, width: i32, height: i32) -> (Ray, RayState) {
-            let mut hash = fnv_init();
-            hash = fnv_hash(hash, iter as u32);
-            hash = fnv_hash(hash, x as u32);
-            hash = fnv_hash(hash, y as u32);
-            let mut rnd = hash as RndState;
-            let kx = (x as f32 + randf(&mut rnd)) / (width  as f32);
-            let ky = (y as f32 + randf(&mut rnd)) / (height as f32);
-            let ray = scene.camera.generate_ray(device.intrinsics, kx, ky);
-            let state = make_ray_state(rnd, white, 1.0f, 0);
-            (ray, state)
-        }
+        let on_emit = make_camera_emitter(scene, device, iter);
 
         fn @on_shadow( ray: Ray
                      , hit: Hit

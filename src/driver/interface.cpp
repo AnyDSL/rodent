@@ -343,7 +343,7 @@ public:
 
     void build(const std::vector<Tri>& tris) {
         in_tris = tris.data();
-        builder_.build(tris, NodeWriter(*this), LeafWriter(*this), 8);
+        builder_.build(tris, NodeWriter(*this), LeafWriter(*this), 4);
     }
 
 #ifdef STATISTICS
@@ -368,10 +368,10 @@ private:
 
             if (!stack.is_empty()) {
                 StackElem elem = stack.pop();
-                nodes[elem.parent].child[elem.child] = i;
+                nodes[elem.parent].child[elem.child] = i + 1;
             }
 
-            assert(count >= 2 && count <= 4);
+            assert(count >= 2 && count <= 8);
 
             for (int j = count - 1; j >= 0; j--) {
                 const BBox& bbox = bboxes(j);
@@ -387,13 +387,13 @@ private:
             }
 
             for (int j = 3; j >= count; j--) {
-                nodes[i].bounds[0][j] = FLT_MAX;
-                nodes[i].bounds[2][j] = FLT_MAX;
-                nodes[i].bounds[4][j] = FLT_MAX;
+                nodes[i].bounds[0][j] = 0.0f;
+                nodes[i].bounds[2][j] = 0.0f;
+                nodes[i].bounds[4][j] = 0.0f;
 
-                nodes[i].bounds[1][j] = -FLT_MAX;
-                nodes[i].bounds[3][j] = -FLT_MAX;
-                nodes[i].bounds[5][j] = -FLT_MAX;
+                nodes[i].bounds[1][j] = -0.0f;
+                nodes[i].bounds[3][j] = -0.0f;
+                nodes[i].bounds[5][j] = -0.0f;
 
                 nodes[i].child[j] = 0;
             }
@@ -409,7 +409,6 @@ private:
 
         static void fill_dummy_parent(Bvh8Node& node, const BBox& leaf_bb, int index) {
             node.child[0] = index;
-            node.child[1] = 0;
 
             node.bounds[0][0] = leaf_bb.min.x;
             node.bounds[2][0] = leaf_bb.min.y;
@@ -418,6 +417,18 @@ private:
             node.bounds[1][0] = leaf_bb.max.x;
             node.bounds[3][0] = leaf_bb.max.y;
             node.bounds[5][0] = leaf_bb.max.z;
+
+            for (int i = 1; i < 8; ++i) {
+                node.child[i] = 0;
+
+                node.bounds[0][0] = 0.0f;
+                node.bounds[2][0] = 0.0f;
+                node.bounds[4][0] = 0.0f;
+
+                node.bounds[1][0] = -0.0f;
+                node.bounds[3][0] = -0.0f;
+                node.bounds[5][0] = -0.0f;
+            }
         }
 
         template <typename RefFn>
@@ -470,6 +481,7 @@ private:
 
                 tris.emplace_back(bvh4tri);
             }
+            assert(!tris.empty());
             tris.back().id[3] |= 0x80000000;
         }
     };
@@ -496,6 +508,7 @@ BvhType build_bvh(int32_t dev, const std::vector<Tri>& in_tris) {
     std::vector<Tri>  tris;
     Adapter adapter(nodes, tris);
     adapter.build(in_tris);
+    info("BVH built with ", nodes.size(), " node(s), ", tris.size(), " triangle(s)");
 
     auto nodes_ptr = reinterpret_cast<Node*>(anydsl_alloc(dev, sizeof(Node) * nodes.size()));
     auto tris_ptr  = reinterpret_cast<Tri*> (anydsl_alloc(dev, sizeof(Tri)  * tris.size()));
