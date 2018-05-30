@@ -5,48 +5,97 @@ static flt_pi = 3.14159265359f;
 static flt_sqrt2 = 1.41421356237f;
 static flt_sqrt3 = 1.73205080757f;
 
+struct FastDiv {
+    m: u32,
+    s1: u32,
+    s2: u32
+}
+
+fn @make_fast_div(div: u32) -> FastDiv {
+    let log = ilog2(div as i32) as u32;
+    let max = 1u64 << 32u64;
+    let m = (max << log as u64) / (div as u64) - max + 1u64;
+    let s1 = select(log < 1u32, log, 1u32);
+    let s2 = select(log > 1u32, log - 1u32, 0u32);
+    FastDiv {
+        m: m as u32,
+        s1: s1,
+        s2: s2
+    }
+}
+
+fn @fast_div(fd: FastDiv, i: u32) -> u32 {
+    let t = (((fd.m as u64) * (i as u64)) >> 32u64) as u32;
+    (t + ((i - t) >> fd.s1)) >> fd.s2
+}
+
 extern "device" {
     fn "llvm.expect.i1" expect(bool, bool) -> bool;
 }
 
-fn   likely(cond: bool) -> bool { expect(cond,  true) }
-fn unlikely(cond: bool) -> bool { expect(cond, false) }
+fn @  likely(cond: bool) -> bool { expect(cond,  true) }
+fn @unlikely(cond: bool) -> bool { expect(cond, false) }
 
-fn range_step(a: int, b: int, c: int, body: fn (int) -> ()) -> () {
-    if a < b {
-        body(a);
-        range_step(a + c, b, c, body, return)
+fn @once(body: fn () -> ()) -> () {
+    @@body()
+}
+
+fn @atomic_add_f32(ptr: &mut f32, value: f32) -> () {
+    let mut cur = *(ptr as &i32);
+    while true {
+        let next = bitcast[f32](cur) + value;
+        let (new, success) = cmpxchg(ptr as &mut i32, cur, bitcast[i32](next));
+        if success { break() }
+        cur = new;
     }
 }
 
-fn range(a: int, b: int, body: fn (int) -> ()) -> () {
-    range_step(a, b, 1, body);
+fn @prodsign(x: f32, y: f32) -> f32 {
+    bitcast[f32](bitcast[i32](x) ^ (bitcast[i32](y) & bitcast[i32](0x80000000u)))
 }
 
-fn unroll(a: int, b: int, body: fn (int) -> ()) -> () {
-    if a < b {
-        body(a);
-        @unroll(a + 1, b, body, return)
-    }
-}
-
-fn prodsign(x: float, y: float) -> float {
-    bitcast[float](bitcast[int](x) ^ (bitcast[int](y) & bitcast[int](0x80000000u)))
-}
-
-fn safe_rcp(x: float) -> float {
+fn @safe_rcp(x: f32) -> f32 {
     let min_rcp = 1e-8f;
     if select(x > 0.0f, x, -x) < min_rcp { prodsign(min_rcp, x) } else { 1.0f / x }
 }
 
-fn ilog2(i: int) -> int {
-    if i <= 1 {
-        0
-    } else {
-        ilog2(i / 2) + 1
-    }
+fn @round_up(n: i32, d: i32) -> i32 {
+    n / d + (if n % d != 0 { 1 } else { 0 })
 }
 
-fn lerp(a: float, b: float, k: float) -> float {
+fn @ilog2(i: i32) -> i32 {
+    fn @(?i) ilog2_helper(i: i32, p: i32) -> i32 {
+        if i <= (1 << p) {
+            p
+        } else {
+            ilog2_helper(i, p + 1)
+        }
+    }
+    ilog2_helper(i, 0)
+}
+
+fn @lerp(a: f32, b: f32, k: f32) -> f32 {
     (1.0f - k) * a + k * b
+}
+
+fn @lerp2(a: f32, b: f32, c: f32, k1: f32, k2: f32) -> f32 {
+    (1.0f - k1 - k2) * a + k1 * b + k2 * c
+}
+
+fn @triangle_area(math: Intrinsics, v0: Vec3, v1: Vec3, v2: Vec3) -> f32 {
+    let e1 = vec3_sub(v1, v0);
+    let e2 = vec3_sub(v2, v0);
+    let  n = vec3_cross(e1, e2);
+    0.5f * vec3_len(math, n)
+}
+
+fn @fresnel_factor(n1: f32, n2: f32, cos_i: f32, cos_t: f32) -> f32 {
+    let R_s = (n1 * cos_i - n2 * cos_t) / (n1 * cos_i + n2 * cos_t);
+    let R_p = (n2 * cos_i - n1 * cos_t) / (n2 * cos_i + n1 * cos_t);
+    (R_s * R_s + R_p * R_p) * 0.5f
+}
+
+fn @positive_cos(a: Vec3, b: Vec3) -> f32 {
+    let cos = vec3_dot(a, b);
+    if cos >= 0.0f { cos } else { 0.0f }
 }

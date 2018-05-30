@@ -1,50 +1,49 @@
 struct Ray1AoS {
-    org: [float * 3],
-    tmin: float,
-    dir: [float * 3],
-    tmax: float
+    org: [f32 * 3],
+    tmin: f32,
+    dir: [f32 * 3],
+    tmax: f32
 }
 
 struct Ray4SoA {
-    org: [[float * 4] * 3],
-    dir: [[float * 4] * 3],
-    tmin: [float * 4],
-    tmax: [float * 4]
+    org: [[f32 * 4] * 3],
+    dir: [[f32 * 4] * 3],
+    tmin: [f32 * 4],
+    tmax: [f32 * 4]
 }
 
 struct Ray8SoA {
-    org: [[float * 8] * 3],
-    dir: [[float * 8] * 3],
-    tmin: [float * 8],
-    tmax: [float * 8]
+    org: [[f32 * 8] * 3],
+    dir: [[f32 * 8] * 3],
+    tmin: [f32 * 8],
+    tmax: [f32 * 8]
 }
 
 struct Hit1AoS {
-    tri_id: int,
-    t: float,
-    u: float,
-    v: float
+    tri_id: i32,
+    t: f32,
+    u: f32,
+    v: f32
 }
 
 struct Hit4SoA {
-    tri_id: [int * 4],
-    t: [float * 4],
-    u: [float * 4],
-    v: [float * 4]
+    tri_id: [i32 * 4],
+    t: [f32 * 4],
+    u: [f32 * 4],
+    v: [f32 * 4]
 }
 
 struct Hit8SoA {
-    tri_id: [int * 8],
-    t: [float * 8],
-    u: [float * 8],
-    v: [float * 8]
+    tri_id: [i32 * 8],
+    t: [f32 * 8],
+    u: [f32 * 8],
+    v: [f32 * 8]
 }
 
-type TraversalInput  = fn (int, int) -> Ray;
-type TraversalOutput = fn (int, int, Hit) -> ();
-
 struct RayLayout {
-    packet_size: int,
-    input:  TraversalInput,
-    output: TraversalOutput
+    packet_size: i32,
+    read_ray: fn (i32, i32) -> Ray,
+    read_hit: fn (i32, i32) -> Hit,
+    write_ray: fn (i32, i32, Ray) -> (),
+    write_hit: fn (i32, i32, Hit) -> ()
 }

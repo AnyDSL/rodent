@@ -1,76 +1,97 @@
 // Images are discrete collections of pixels, and
 // can be generated procedurally or stored in memory
 struct Image {
-    pixels: fn (int, int) -> Color,
-    width:  fn () -> int,
-    height: fn () -> int
+    pixels: fn (i32, i32) -> Color,
+    width:  i32,
+    height: i32
+}
+
+struct PixelData {
+    pixels: &mut [Color],
+    width:  i32,
+    height: i32
 }
 
 struct BorderHandling {
-    lower: fn (Intrinsics, float) -> float,
-    upper: fn (Intrinsics, float) -> float
+    lower: fn (Intrinsics, f32) -> f32,
+    upper: fn (Intrinsics, f32) -> f32
 }
 
 type ImageFilter = fn (Intrinsics, Image, Vec2) -> Color;
 type Texture = fn (Vec2) -> Color;
 
-fn make_clamp_border() -> BorderHandling {
-    BorderHandling {
-        lower: |_, _| 0.0f,
-        upper: |_, _| 1.0f
+fn @make_pixel_data(pixels: &mut [Color], width: i32, height: i32) -> PixelData {
+    PixelData {
+        pixels: pixels,
+        width:  width,
+        height: height
     }
 }
 
-fn make_repeat_border() -> BorderHandling {
-    let repeat = |math, x| x - math.floorf(x);
+fn @make_image(data: PixelData) -> Image {
+    Image {
+        pixels: |x, y| data.pixels(y * data.width + x),
+        width:  data.width,
+        height: data.height
+    }
+}
+
+fn @make_clamp_border() -> BorderHandling {
+    BorderHandling {
+        lower: @ |_, _| 0.0f,
+        upper: @ |_, _| 1.0f
+    }
+}
+
+fn @make_repeat_border() -> BorderHandling {
+    let repeat = @ |math, x| x - math.floorf(x);
     BorderHandling {
         lower: repeat,
         upper: repeat
     }
 }
 
-fn make_nearest_filter() -> ImageFilter {
-    |img, uv| {
-        img.pixels(math.max((u.x * img.width())  as int, img.width()  - 1),
-                   math.min((u.y * img.height()) as int, img.height() - 1))
+fn @make_nearest_filter() -> ImageFilter {
+    @ |math, img, uv| {
+        img.pixels(math.min((uv.x * img.width  as f32) as i32, img.width  - 1),
+                   math.min((uv.y * img.height as f32) as i32, img.height - 1))
     }
 }
 
-fn make_bilinear_filter() -> ImageFilter {
-    |img, uv| {
-        let u = uv.x * img.width();
-        let v = uv.y * img.height();
-        let x0 = math.max(u as int, img.width()  - 1);
-        let y0 = math.min(v as int, img.height() - 1);
-        let x1 = math.max(u as int + 1, img.width()  - 1);
-        let y1 = math.min(v as int + 1, img.height() - 1);
-        let kx  = u - math.floorf(u);
-        let ky  = v - math.floorf(v);
+fn @make_bilinear_filter() -> ImageFilter {
+    @ |math, img, uv| {
+        let u = uv.x * img.width as f32;
+        let v = uv.y * img.height as f32;
+        let x0 = math.min(u as i32, img.width  - 1);
+        let y0 = math.min(v as i32, img.height - 1);
+        let x1 = math.min(x0 + 1, img.width  - 1);
+        let y1 = math.min(y0 + 1, img.height - 1);
+        let kx = u - math.floorf(u);
+        let ky = v - math.floorf(v);
 
         let p00 = img.pixels(x0, y0);
         let p10 = img.pixels(x1, y0);
         let p01 = img.pixels(x0, y1);
         let p11 = img.pixels(x1, y1);
 
-        let interp = |x00, x10, x01, x11| lerp(lerp(x00, x10, kx), lerp(x01, x11, kx), ky);
-        color(interp(p00.r, p10.r, p01.r, p11.r),
-              interp(p00.g, p10.g, p01.g, p11.g),
-              interp(p00.b, p10.b, p01.b, p11.b),
-              interp(p00.a, p10.a, p01.a, p11.a))
+        let interp = @ |x00, x10, x01, x11| lerp(lerp(x00, x10, kx), lerp(x01, x11, kx), ky);
+        make_color(interp(p00.r, p10.r, p01.r, p11.r),
+                   interp(p00.g, p10.g, p01.g, p11.g),
+                   interp(p00.b, p10.b, p01.b, p11.b))
     }
 }
 
-fn make_texture(math: Intrinsics, border: BorderHandling, filter: ImageFilter, image: Image) -> Texture {
-    let apply_border = |x| {
+fn @make_texture(math: Intrinsics, border: BorderHandling, filter: ImageFilter, image: Image) -> Texture {
+    let apply_border = @ |x| {
         if x < 0.0f {
             border.lower(math, x)
         } else if x > 1.0f {
             border.upper(math, x)
         } else { x }
     };
-    |uv| {
+    @ |uv| {
         let u = apply_border(uv.x);
         let v = apply_border(uv.y);
-        filter(math, image, vec2(u, v))
+        filter(math, image, make_vec2(u, v))
     }
 }

@@ -1,7 +1,7 @@
-type SortingNetwork = fn (int, fn (int, int) -> ()) -> ();
+type SortingNetwork = fn (i32, fn (i32, i32) -> ()) -> ();
 
-fn bose_nelson_sort(n: int, cmp_swap: fn (int, int) -> ()) -> () {
-    fn p_star(i: int, len: int) -> () {
+fn @bose_nelson_sort(n: i32, cmp_swap: fn (i32, i32) -> ()) -> () {
+    fn @p_star(i: i32, len: i32) -> () {
         if len > 1 {
             let m = len / 2;
             p_star(i, m);
@@ -10,7 +10,7 @@ fn bose_nelson_sort(n: int, cmp_swap: fn (int, int) -> ()) -> () {
         }
     }
 
-    fn p_bracket(i1: int, len1: int, i2: int, len2: int) -> () {
+    fn @p_bracket(i1: i32, len1: i32, i2: i32, len2: i32) -> () {
         if len1 == 1 && len2 == 1 {
             cmp_swap(i1, i2);
         } else if len1 == 1 && len2 == 2 {
@@ -31,13 +31,13 @@ fn bose_nelson_sort(n: int, cmp_swap: fn (int, int) -> ()) -> () {
     p_star(0, n)
 }
 
-fn batcher_sort(n: int, cmp_swap: fn (int, int) -> ()) -> () {
-    fn merge(i: int, len: int, r: int) -> () {
+fn @batcher_sort(n: i32, cmp_swap: fn (i32, i32) -> ()) -> () {
+    fn @merge(i: i32, len: i32, r: i32) -> () {
         let step = r * 2;
         if step < len {
             merge(i, len, step);
             merge(i + r, len, step);
-            for j in range_step(i + r, i + len - r, step) {
+            for j in range_step(i + r, i + len - r, step) @{
                 // Remove comparators for non-existing elements
                 if j < n && j + r < n {
                     cmp_swap(j, j + r)
@@ -46,34 +46,32 @@ fn batcher_sort(n: int, cmp_swap: fn (int, int) -> ()) -> () {
         } else {
             // idem
             if i < n && i + r < n {
-                cmp_swap(i, i + r)
+                cmp_swap(i, i + r);
             }
         }
     }
 
-    fn sort(i: int, len: int) -> () {
+    fn @sort(i: i32, len: i32) -> () {
         if len > 1 {
             let m = len / 2;
             sort(i, m);
             sort(i + m, m);
-            merge(i, len, 1);
+            merge(i, len, 1)
         }
     }
 
     // Compute closest power of two
-    let mut p = 1;
-    while p < n { p *= 2; }
-
+    let p = 1 << ilog2(n);
     sort(0, p)
 }
 
-fn bitonic_sort(n: int, cmp_swap: fn (int, int) -> ()) -> () {
-    fn merge(i: int, len: int, dir: bool) -> () {
+fn @bitonic_sort(n: i32, cmp_swap: fn (i32, i32) -> ()) -> () {
+    fn @merge(i: i32, len: i32, dir: bool) -> () {
         if len > 1 {
             // Compute greatest power of two lower than len
             let m = 1 << (ilog2(len) - 1);
 
-            for j in range(i, i + len - m) {
+            for j in range(i, i + len - m) @{
                 cmp_swap(select(dir, j, j + m), select(dir, j + m, j));
             }
 
@@ -82,7 +80,7 @@ fn bitonic_sort(n: int, cmp_swap: fn (int, int) -> ()) -> () {
         }
     }
 
-    fn sort(i: int, len: int, dir: bool) -> () {
+    fn @sort(i: i32, len: i32, dir: bool) -> () {
         if len > 1 {
             let m = len / 2;
             sort(i, m, !dir);

@@ -3,44 +3,44 @@ struct EmissionSample {
     pos: Vec3,          // Position on the light source
     dir: Vec3,          // Direction of the light going outwards
     intensity: Color,   // Intensity along the direction
-    pdf_area: float,    // Probability to sample the point on the light
-    pdf_dir: float,     // Probability to sample the direction on the light, conditioned on the point on the light source
-    cos: float          // Cosine between the direction and the light source geometry
+    pdf_area: f32,    // Probability to sample the point on the light
+    pdf_dir: f32,     // Probability to sample the direction on the light, conditioned on the point on the light source
+    cos: f32          // Cosine between the direction and the light source geometry
 }
 
 // Result from sampling direct lighting from a light source
 struct DirectLightSample {
     pos: Vec3,          // Position on the light source
     intensity: Color,   // Intensity along the direction
-    pdf_area: float,    // Probability to sample the point on the light
-    pdf_dir: float,     // Probability to sample the direction using emission sampling
-    cos: float          // Cosine between the direction and the light source geometry
+    pdf_area: f32,    // Probability to sample the point on the light
+    pdf_dir: f32,     // Probability to sample the direction using emission sampling
+    cos: f32          // Cosine between the direction and the light source geometry
 }
 
 // Emission properties of a light source
 struct EmissionValue {
     intensity: Color,   // Intensity along the direction
-    pdf_area: float,    // Probability to sample the direction using emission sampling
-    pdf_dir: float      // Probability to sample the point on the light
-};
+    pdf_area: f32,    // Probability to sample the direction using emission sampling
+    pdf_dir: f32      // Probability to sample the point on the light
+}
 
 // Opaque light structure
 struct Light {
     // Samples direct illumination from this light source at the given point on a surface
     sample_direct: fn (Intrinsics, &mut RndState, Vec3) -> DirectLightSample,
     // Samples the emitting surface of the light
-    sample_emission: fn (Intrinsics, &mut RndState) -> EmissionSample),
+    sample_emission: fn (Intrinsics, &mut RndState) -> EmissionSample,
     // Returns the emission properties of the light at a given point on its surface
     emission: fn (Intrinsics, Vec3, Vec2) -> EmissionValue,
     // Returns true if the light has an area (can be hit by a ray)
     has_area: bool
 }
 
-fn make_emission_sample(pos: Vec3, dir: Vec3, intensity: Color, pdf_area: float, pdf_dir: float, cos: float) -> EmissionSample {
-    if pdf_area > 0 && pdf_dir > 0 && cos > 0 {
+fn @make_emission_sample(pos: Vec3, dir: Vec3, intensity: Color, pdf_area: f32, pdf_dir: f32, cos: f32) -> EmissionSample {
+    if pdf_area > 0.0f && pdf_dir > 0.0f && cos > 0.0f {
         EmissionSample {
             pos: pos,
-            dif: dir,
+            dir: dir,
             intensity: intensity,
             pdf_area: pdf_area,
             pdf_dir: pdf_dir,
@@ -58,8 +58,8 @@ fn make_emission_sample(pos: Vec3, dir: Vec3, intensity: Color, pdf_area: float,
     }
 }
 
-fn make_direct_sample(pos: Vec3, intensity: Color, pdf_area: float, pdf_dir: float, cos: float) -> DirectLightSample {
-    if pdf_area > 0 && pdf_dir > 0 && cos > 0 {
+fn @make_direct_sample(pos: Vec3, intensity: Color, pdf_area: f32, pdf_dir: f32, cos: f32) -> DirectLightSample {
+    if pdf_area > 0.0f && pdf_dir > 0.0f && cos > 0.0f {
         DirectLightSample {
             pos: pos,
             intensity: intensity,
@@ -78,8 +78,8 @@ fn make_direct_sample(pos: Vec3, intensity: Color, pdf_area: float, pdf_dir: flo
     }
 }
 
-fn make_emission_value(intensity: Color, pdf_area: float, pdf_dir: float) -> EmissionValue {
-    if pdf_dir > 0 {
+fn @make_emission_value(intensity: Color, pdf_area: f32, pdf_dir: f32) -> EmissionValue {
+    if pdf_dir > 0.0f {
         EmissionValue {
             intensity: intensity,
             pdf_area: pdf_area,
@@ -94,28 +94,28 @@ fn make_emission_value(intensity: Color, pdf_area: float, pdf_dir: float) -> Emi
     }
 }
 
-fn make_point_light(pos: Vec3, color: Color) -> Light {
+fn @make_point_light(pos: Vec3, color: Color) -> Light {
     Light {
-        sample_direct: |math, rnd, from| {
+        sample_direct: @ |math, rnd, from| {
             let intensity = color_mulf(color, 1.0f / (4.0f * flt_pi));
             make_direct_sample(pos, intensity, 1.0f, uniform_sphere_pdf(), 1.0f)
         },
-        sample_emission: |math, rnd| {
+        sample_emission: @ |math, rnd| {
             let u = randf(rnd);
             let v = randf(rnd);
-            let sample = sample_uniform_sphere(u, v);
+            let sample = sample_uniform_sphere(math, u, v);
             let intensity = color_mulf(color, 1.0f / (4.0f * flt_pi));
             make_emission_sample(pos, sample.dir, intensity, 1.0f, sample.pdf, 1.0f)
         },
-        emission: |math, dir, surf_pos| make_emission_value(black, 1.0f, 1.0f),
+        emission: @ |math, dir, surf_pos| make_emission_value(black, 1.0f, 1.0f),
         has_area: false
     }
 }
 
-fn make_triangle_light(v0: Vec3, v1: Vec3, v2: Vec3, n: Vec3, inv_area: float, color: Color) -> Light {
-    fn sample_surface(math: Intrinsics, rnd: &mut RndState) -> Vec3 {
-        let u = randf(rnd);
-        let v = randf(rnd);
+fn @make_triangle_light(v0: Vec3, v1: Vec3, v2: Vec3, n: Vec3, inv_area: f32, color: Color) -> Light {
+    fn @sample_surface(math: Intrinsics, rnd: &mut RndState) -> Vec3 {
+        let mut u = randf(rnd);
+        let mut v = randf(rnd);
         if (u + v > 1.0f) {
             u = 1.0f - u;
             v = 1.0f - v;
@@ -123,24 +123,25 @@ fn make_triangle_light(v0: Vec3, v1: Vec3, v2: Vec3, n: Vec3, inv_area: float, c
         vec3_add(
             vec3_add(vec3_mulf(v0, 1.0f - v - u),
                      vec3_mulf(v1, u)),
-                     vec3_mulf(v2, v)))
+            vec3_mulf(v2, v)
+        )
     }
 
     Light {
-        sample_direct: |math, rnd, from| {
+        sample_direct: @ |math, rnd, from| {
             let pos = sample_surface(math, rnd);
             let dir = vec3_sub(from, pos);
-            let cos = vec3_dot(dir, n) / vec3_length(math, dir);
+            let cos = vec3_dot(dir, n) / vec3_len(math, dir);
             make_direct_sample(pos, color, inv_area, cosine_hemisphere_pdf(cos), cos)
         },
-        sample_emission: |math, rnd| {
+        sample_emission: @ |math, rnd| {
             let pos = sample_surface(math, rnd);
             let u = randf(rnd);
             let v = randf(rnd);
-            let sample = sample_cosine_hemisphere(math, make_local_coords(), u, v);
-            make_emission_sample(pos, sample.dir, color, inv_area, sample.pdf, vec3_dot(sample.dir, n))
+            let sample = sample_cosine_hemisphere(math, u, v);
+            make_emission_sample(pos, mat3x3_mul(make_orthonormal_mat3x3(n), sample.dir), color, inv_area, sample.pdf, sample.dir.z)
         },
-        emission: |math, dir, surf_pos| make_emission_value(black, inv_area, cosine_hemisphere_pdf(vec3_dot(n, dir)))
+        emission: @ |math, dir, surf_pos| make_emission_value(black, inv_area, cosine_hemisphere_pdf(vec3_dot(n, dir))),
         has_area: true
     }
 }

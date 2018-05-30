@@ -1,20 +1,3 @@
-// Misc. ---------------------------------------------------------------------------
-
-// Make a bounding box ordered by octant
-fn make_gpu_ordered_bbox(bbox: BBox, octant: int) -> BBox {
-    let (inv_x, inv_y, inv_z) = ((octant & 1) == 0, (octant & 2) == 0, (octant & 3) == 0);
-    make_bbox(
-        make_vec3(
-            select(inv_x, bbox.max.x, bbox.min.x),
-            select(inv_y, bbox.max.y, bbox.min.y),
-            select(inv_z, bbox.max.z, bbox.min.z)),
-        make_vec3(
-            select(inv_x, bbox.min.x, bbox.max.x),
-            select(inv_y, bbox.min.y, bbox.max.y),
-            select(inv_z, bbox.min.z, bbox.max.z))
-    )
-}
-
 // BVH2 ----------------------------------------------------------------------------
 
 struct Bvh2 {
@@ -23,205 +6,240 @@ struct Bvh2 {
 }
 
 struct Bvh2Tri {
-    v0: [float * 3],
-    nx: float,
-    e1: [float * 3],
-    ny: float,
-    e2: [float * 3],
-    id: int
+    v0: [f32 * 3],
+    nx: f32,
+    e1: [f32 * 3],
+    ny: f32,
+    e2: [f32 * 3],
+    id: i32
 }
 
 struct Bvh2BBox {
-    lo_x: float, hi_x: float,
-    lo_y: float, hi_y: float,
-    lo_z: float, hi_z: float
+    lo_x: f32, hi_x: f32,
+    lo_y: f32, hi_y: f32,
+    lo_z: f32, hi_z: f32
 }
 
 struct Bvh2Node {
     left_bb:  Bvh2BBox,
     right_bb: Bvh2BBox,
-    left:  int,
-    right: int,
-    pad1:  int,
-    pad2:  int
+    left:  i32,
+    right: i32,
+    pad1:  i32,
+    pad2:  i32
 }
 
-fn make_bvh2_nvvm(bvh2: Bvh2) -> Bvh {
-    Bvh {
-        node: |j| {
-            let node_ptr = &bvh2.nodes(j) as &[1][simd[float * 4]];
-            let bb0 = nvvm_ldg4_f32(&node_ptr(0));
-            let bb1 = nvvm_ldg4_f32(&node_ptr(1));
-            let bb2 = nvvm_ldg4_f32(&node_ptr(2));
-            let children = nvvm_ldg4_i32(&node_ptr(3) as &[1]simd[int * 4]);
+fn @make_bvh2_tri_nvvm(tri_ptr: &Bvh2Tri) -> BvhTri {
+    let simd_ptr = tri_ptr as &[1][simd[f32 * 4]];
+    let tri0 = nvvm_ldg4_f32(&simd_ptr(0));
+    let tri1 = nvvm_ldg4_f32(&simd_ptr(1));
+    let tri2 = nvvm_ldg4_f32(&simd_ptr(2));
+    BvhTri {
+        load: @ |i| {
+            let v0 = make_vec3(tri0(0), tri0(1), tri0(2));
+            let e1 = make_vec3(tri1(0), tri1(1), tri1(2));
+            let e2 = make_vec3(tri2(0), tri2(1), tri2(2));
+            let n  = make_vec3(tri0(3), tri1(3), vec3_cross(e1, e2).z);
+            make_tri(v0, e1, e2, n)
+        },
+        id: @ |i| bitcast[i32](tri2(3))
+    }
+}
 
-            BvhNode {
-                bbox: |i, octant| {
-                    let bbox =
-                        if i == 0 {
-                            make_bbox(make_vec3(bb0(0), bb0(2), bb1(0)),
-                                      make_vec3(bb0(1), bb0(3), bb1(1)))
-                        } else {
-                            make_bbox(make_vec3(bb1(2), bb2(0), bb2(2)),
-                                      make_vec3(bb1(3), bb2(1), bb2(3)))
-                        };
-                    if octant >= 0 { make_gpu_ordered_bbox(bbox, octant) } else { bbox }
-                },
-                child: |i| children(i),
-                prefetch: || {} // No-op
-            }
-        },
-        tri: |j| {
-            let tri_ptr = &bvh2.tris(j) as &[1][simd[float * 4]];
-            let tri0 = nvvm_ldg4_f32(&tri_ptr(0));
-            let tri1 = nvvm_ldg4_f32(&tri_ptr(1));
-            let tri2 = nvvm_ldg4_f32(&tri_ptr(2));
-            BvhTri {
-                load: |i| {
-                    let v0 = make_vec3(tri0(0), tri0(1), tri0(2));
-                    let e1 = make_vec3(tri1(0), tri1(1), tri1(2));
-                    let e2 = make_vec3(tri2(0), tri2(1), tri2(2));
-                    let n  = make_vec3(tri0(3), tri1(3), vec3_cross(e1, e2).z);
-                    make_tri(v0, e1, e2, n)
-                },
-                id: |i| bitcast[int](tri2(3)),
-                size: 1
-            }
-        },
-        arity: 2
+fn @make_bvh2_node_nvvm(node_ptr: &Bvh2Node) -> BvhNode {
+    let simd_ptr = node_ptr as &[1][simd[f32 * 4]];
+    let bb0 = nvvm_ldg4_f32(&simd_ptr(0));
+    let bb1 = nvvm_ldg4_f32(&simd_ptr(1));
+    let bb2 = nvvm_ldg4_f32(&simd_ptr(2));
+    let children = nvvm_ldg4_i32(&simd_ptr(3) as &[1]simd[i32 * 4]);
+
+    fn bbox(i: i32) -> BBox {
+        if i == 0 {
+            make_bbox(make_vec3(bb0(0), bb0(2), bb1(0)),
+                      make_vec3(bb0(1), bb0(3), bb1(1)))
+        } else {
+            make_bbox(make_vec3(bb1(2), bb2(0), bb2(2)),
+                      make_vec3(bb1(3), bb2(1), bb2(3)))
+        }
+    }
+
+    BvhNode {
+        bbox: @ |i| bbox(i),
+        ordered_bbox: @ |i, _| undef[BBox](), // Not implemented
+        child: @ |i| children(i)
+    }
+}
+
+fn @make_bvh2_nvvm(bvh2: Bvh2) -> Bvh {
+    Bvh {
+        node: @ |j| make_bvh2_node_nvvm(&bvh2.nodes(j)),
+        tri:  @ |j| make_bvh2_tri_nvvm(&bvh2.tris(j)),
+        order: @ |_| undef[[i32 * 6]](), // Not implemented
+        prefetch: @ |_| (), // Not implemented
+        arity: 2,
+        tri_size: 1
     }
 }
 
 // Ray-box intrinsics  -------------------------------------------------------------
 
-fn make_ray_box_intrinsics_nvvm() -> RayBoxIntrinsics {
+fn @make_ray_box_intrinsics_nvvm() -> RayBoxIntrinsics {
     // Use video instructions to speed-up the ray-box test
     RayBoxIntrinsics {
         fminf: nvvm_fminf,
         fmaxf: nvvm_fmaxf,
-        fminminf: |a, b, c| bitcast[float](nvvm_minmin(bitcast[int](a), bitcast[int](b), bitcast[int](c))),
-        fmaxmaxf: |a, b, c| bitcast[float](nvvm_maxmax(bitcast[int](a), bitcast[int](b), bitcast[int](c))),
-        fminmaxf: |a, b, c| bitcast[float](nvvm_minmax(bitcast[int](a), bitcast[int](b), bitcast[int](c))),
-        fmaxminf: |a, b, c| bitcast[float](nvvm_maxmin(bitcast[int](a), bitcast[int](b), bitcast[int](c))),
-        fcmp_le: |a, b| a <= b
+        fminminf: @ |a, b, c| bitcast[f32](nvvm_minmin(bitcast[i32](a), bitcast[i32](b), bitcast[i32](c))),
+        fmaxmaxf: @ |a, b, c| bitcast[f32](nvvm_maxmax(bitcast[i32](a), bitcast[i32](b), bitcast[i32](c))),
+        fminmaxf: @ |a, b, c| bitcast[f32](nvvm_minmax(bitcast[i32](a), bitcast[i32](b), bitcast[i32](c))),
+        fmaxminf: @ |a, b, c| bitcast[f32](nvvm_maxmin(bitcast[i32](a), bitcast[i32](b), bitcast[i32](c))),
+        fcmp_le: @ |a, b| a <= b
     }
 }
 
 // Ray layouts  --------------------------------------------------------------------
 
-fn make_ray_layout_nvvm(rays: &[Ray1AoS], hits: &mut[Hit1AoS]) -> RayLayout {
+fn @make_gpu_ray1_layout(rays: &mut [Ray1AoS], hits: &mut[Hit1AoS]) -> RayLayout {
     RayLayout {
         packet_size: 1,
-        input: |i, j| {
-            let ray_ptr = &rays(i + j) as &[1][simd[float * 4]];
-            let ray0 = nvvm_ldg4_f32(&ray_ptr(0));
-            let ray1 = nvvm_ldg4_f32(&ray_ptr(1));
+        read_ray: @ |i, j| {
+            let ray_ptr = &rays(i + j) as &[simd[f32 * 4]];
+            let ray0 = ray_ptr(0);
+            let ray1 = ray_ptr(1);
             make_ray(make_vec3(ray0(0), ray0(1), ray0(2)),
                      make_vec3(ray1(0), ray1(1), ray1(2)),
-             ray0(3), ray1(3))
+                     ray0(3), ray1(3))
         },
-        output: |i, j, hit| {
-            *(&hits(i + j) as &mut simd[float * 4]) =
-                simd[bitcast[float](hit.prim_id), hit.distance, hit.uv_coords.x, hit.uv_coords.y];
+        read_hit: @ |i, j| {
+            let hit_ptr = &hits(i + j) as &simd[f32 * 4];
+            let hit = *hit_ptr;
+            make_hit(-1, bitcast[i32](hit(0)), hit(1), make_vec2(hit(2), hit(3)))
+        },
+        write_ray: @ |i, j, ray| {
+            let ray_ptr = &rays(i + j) as &mut [simd[f32 * 4]];
+            ray_ptr(0) = simd[ray.org.x, ray.org.y, ray.org.z, ray.tmin];
+            ray_ptr(1) = simd[ray.dir.x, ray.dir.y, ray.dir.z, ray.tmax];
+        },
+        write_hit: @ |i, j, hit| {
+            let hit_ptr = &hits(i + j) as &mut simd[f32 * 4];
+            *hit_ptr = simd[bitcast[f32](hit.prim_id), hit.distance, hit.uv_coords.x, hit.uv_coords.y];
         }
     }
 }
 
 // Mappings  -----------------------------------------------------------------------
 
-fn make_gpu_mapping_single(config: TraversalConfig, bvh: Bvh, gpu_intrinsics: Intrinsics, ray_box_intrinsics: RayBoxIntrinsics) -> TraversalMapping {
-    let iterate_primitives = |leaf_ref, ray, body| {
-        let mut tri_id = !leaf_ref.node;
-        while true @{
-            let tri = bvh.tri(tri_id++);
+fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
+                              , ray_box_intrinsics: RayBoxIntrinsics
+                              , mut ray: Ray
+                              , bvh: Bvh
+                              , any_hit: bool
+                              , root: i32
+                              ) -> Hit {
+    let mut hit = empty_hit(ray.tmax);
+    let early_exit = || -> ! return(hit);
+    let stack = allocate_stack();
+    stack.push(1, undef());
 
-            for k in @unroll(0, tri.size) @{
-                @body(make_ray_tri_intersector(gpu_intrinsics, tri.load(k), tri.id(k) & 0x7FFFFFFF));
-            }
-
-            if (bitcast[uint](tri.id(tri.size - 1)) & 0x80000000u) != 0u { break() }
-        }
-    };
-
-    let iterate_children = |stack, ray, hit, body| @{
+    while !stack.is_empty() {
         let node_ref = stack.top();
         let node = bvh.node(node_ref.node - 1);
 
         let mut mask = 0;
-        let mut tentry : [float * 8]; // Up to BVH8
-        for k in @unroll(0, bvh.arity) @{
-            let (hit, t, _) = @body(@node.bbox(k, -1));
+        let tmp = make_small_stack(bvh.arity);
+        for k in unroll(0, bvh.arity) @{
+            let (hit, t, _) = intersect_ray_box(ray_box_intrinsics, false, ray, node.bbox(k));
             mask = mask | select(hit, 1 << k, 0);
-            tentry(k) = t;
+            tmp.write(k, (node.child(k), t));
         }
-        if mask == 0 { @stack.pop() }
-        else if bvh.arity == 2 @{
+
+        if mask == 0 { stack.pop() }
+        else if bvh.arity == 2 {
             // Special case for N=2
-            if mask == 3 @{
-                let mut child1 = node.child(0);
-                let mut child2 = node.child(1);
-                if config.any_hit && tentry(1) < tentry(0) {
-                    let c = child1;
-                    child1 = child2;
-                    child2 = c;
-                }
-                @stack.set_top(child1, undef());
-                @stack.push_after(child2, undef());
-            } else @{
-                stack.set_top(select(mask == 1, node.child(0), node.child(1)), undef());
+            let (child1, t1) = tmp.read(0);
+            let (child2, t2) = tmp.read(1);
+            if mask == 3 {
+                let order = select(any_hit || t1 < t2, (child1, child2), (child2, child1));
+                let (first, second) = order;
+                stack.set_top(first, undef());
+                stack.push_after(second, undef());
+            } else {
+                stack.set_top(select(mask == 1, child1, child2), undef());
             }
-        } else @{
+        } else {
             // General case - slow
-            @stack.pop();
+            stack.pop();
             let mut tmin = flt_max;
-            for k in @unroll(0, bvh.arity) @{
-                if mask & (1 << k) != 0 @{
-                    let child = node.child(k);
-                    let t = tentry(k);
-                    if config.any_hit || t < tmin {
+            for k in unroll(0, bvh.arity) @{
+                if mask & (1 << k) != 0 {
+                    let (child, t) = tmp.read(k);
+                    if any_hit || t < tmin {
                         // Equivalent to stack.push(child, undef())
                         // but does not generate allocas for the stack's tmins
                         let top = stack.top();
-                        @stack.set_top(child, undef());
-                        @stack.push_after(top.node, undef());
+                        stack.set_top(child, undef());
+                        stack.push_after(top.node, undef());
                     } else {
-                        @stack.push_after(child, undef());
+                        stack.push_after(child, undef());
                     }
                     tmin = gpu_intrinsics.fminf(tmin, t);
                 }
             }
         }
-    };
 
-    TraversalMapping {
-        iterate_children: iterate_children,
-        iterate_primitives: iterate_primitives,
-        ray_box_intrinsics: ray_box_intrinsics,
-        ray_box_ordered: false
+        while is_leaf(stack.top()) {
+            let leaf_ref = stack.top();
+            let mut tri_id = !leaf_ref.node;
+            while true {
+                let tri = bvh.tri(tri_id++);
+
+                for k in unroll(0, bvh.tri_size) @{
+                    let (mask, t, u, v) = intersect_ray_tri(gpu_intrinsics, false, true, ray, tri.load(k));
+                    if mask {
+                        hit = make_hit(
+                            undef[i32](),
+                            tri_id & 0x7FFFFFFF,
+                            t,
+                            make_vec2(u, v)
+                        );
+                        ray.tmax = t;
+                    }
+
+                    if any_hit && hit.prim_id >= 0 { early_exit() }
+                }
+
+                if (bitcast[uint](tri.id(bvh.tri_size - 1)) & 0x80000000u) != 0u { break() }
+            }
+
+            stack.pop()
+        }
     }
+
+    hit
 }
 
 // Variants  -----------------------------------------------------------------------
 
-fn gpu_traverse(acc: Accelerator,
-                gpu_intrinsics: Intrinsics,
-                ray_box_intrinsics: RayBoxIntrinsics,
-                config: TraversalConfig,
-                bvh: Bvh, ray_layout: RayLayout, ray_count: int) -> () {
+fn @gpu_traverse_single( acc: Accelerator
+                       , gpu_intrinsics: Intrinsics
+                       , ray_box_intrinsics: RayBoxIntrinsics
+                       , ray_layout: RayLayout
+                       , bvh: Bvh
+                       , any_hit: bool
+                       , ray_count: i32
+                       , root: i32
+                       ) -> () {
     let block_size = 64;
-    let grid  = (ray_count, ray_layout.packet_size, 1);
+    let grid  = ((ray_count / block_size) * block_size, ray_layout.packet_size, 1);
     let block = (block_size, ray_layout.packet_size, 1);
 
-    with acc.exec(grid, block) @{
-        let (i, j) = (acc.tidx() + acc.bidx() * acc.bdimx(), acc.tidy());
-        if (i + j) >= ray_count { break() }
+    for tid, bid, bdim, gdim, gid in acc.exec(grid, block) {
+        let (tidx, tidy, _) = tid;
+        let (bidx, bidy, _) = bid;
+        let (i, j) = (tidx() + bidx() * block_size, tidy());
+        if (i + j) >= ray_count { continue() }
 
-        let ray = ray_layout.input(i, j);
-
-        let stack = allocate_stack();
-        stack.push(1, undef());
-
-        let mapping = make_gpu_mapping_single(config, bvh, gpu_intrinsics, ray_box_intrinsics);
-        ray_layout.output(i, j, @traverse_bvh(mapping, config, stack, ray))
+        let ray = ray_layout.read_ray(i, j);
+        let hit = gpu_traverse_single_helper(gpu_intrinsics, ray_box_intrinsics, ray, bvh, any_hit, root);
+        ray_layout.write_hit(i, j, hit)
     }
 }

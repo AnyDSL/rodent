@@ -1,97 +1,103 @@
 struct NodeRef {
-    node: int,
-    tmin: float
+    node: i32,
+    tmin: f32
 }
 
 struct Stack {
-    push:       fn (int, float) -> (),
-    push_after: fn (int, float) -> (),
-    set_top:    fn (int, float) -> (),
-    sort_n:     fn (int, fn (float, float) -> bool, SortingNetwork, bool) -> (),
+    push:       fn (i32, f32) -> (),
+    push_after: fn (i32, f32) -> (),
+    set_top:    fn (i32, f32) -> (),
+    sort_n:     fn (i32, fn (f32, f32) -> bool, SortingNetwork, bool) -> (),
     pop:        fn () -> (),
     top:        fn () -> NodeRef,
     is_empty:   fn () -> bool,
-    size:       fn () -> int
+    size:       fn () -> i32
 }
 
 struct SmallStack {
-    write: fn (int, (int, float)) -> (),
-    read:  fn (int) -> (int, float)
+    write: fn (i32, (i32, f32)) -> (),
+    read:  fn (i32) -> (i32, f32)
 }
 
-fn is_leaf (ref: NodeRef) -> bool { ref.node < 0 }
-fn is_inner(ref: NodeRef) -> bool { ref.node > 0 }
+fn @is_leaf (ref: NodeRef) -> bool { ref.node < 0 }
+fn @is_inner(ref: NodeRef) -> bool { ref.node > 0 }
 
-fn make_small_stack(n: int) -> SmallStack {
-    if n == 0 {
-        SmallStack {
-            write: |_, _| (),
-            read: |_| undef[(int, float)]()
-        }
-    } else {
-        let mut val : (int, float);
-        let sub = make_small_stack(n - 1);
-        SmallStack {
-            write: |i, v| {
-                if i == n - 1 {
-                    val = v;
-                } else {
-                    sub.write(i, v)
-                }
-            },
-            read: |i| {
-                if i == n - 1 {
-                    val
-                } else {
-                    sub.read(i)
-                }
+fn @make_small_stack(n: i32) -> SmallStack {
+    fn @(?begin & ?end) make_small_stack_helper(begin: i32, end: i32) -> SmallStack {
+        if begin == end {
+            SmallStack {
+                write: @ |_, _| (),
+                read:  @ |_| undef[(i32, f32)]()
+            }
+        } else if begin + 1 == end {
+            let mut val : (i32, f32);
+            SmallStack {
+                write: @ |i, v| val = v,
+                read:  @ |i| val
+            }
+        } else {
+            let m = (begin + end) / 2;
+            let left  = make_small_stack_helper(begin, m);
+            let right = make_small_stack_helper(m, end);
+            SmallStack {
+                write: @ |i, v| if i < m { left.write(i, v) } else { right.write(i, v) },
+                read:  @ |i|    if i < m { left.read(i)     } else { right.read(i)     }
             }
         }
     }
+
+    make_small_stack_helper(0, n)
 }
 
-fn allocate_stack() -> Stack {
-    let mut nodes : [int   * 64];
-    let mut tmins : [float * 64];
+fn @allocate_stack() -> Stack {
+    let mut nodes : [i32   * 64];
+    let mut tmins : [f32 * 64];
     let mut node = 0;
     let mut tmin = flt_max;
     let mut ptr = -1;
 
-    let vals_accessor = |off| (|i| nodes(i + off), |i, v| nodes(i + off) = v);
-    let keys_accessor = |off| (|i| tmins(i + off), |i, k| tmins(i + off) = k);
+    let vals_accessor = @ |off| (@ |i| nodes(i + off), @ |i, v| nodes(i + off) = v);
+    let keys_accessor = @ |off| (@ |i| tmins(i + off), @ |i, k| tmins(i + off) = k);
 
     Stack {
-        push: |n, t| {
+        push: @ |n, t| {
             ptr++;
             nodes(ptr) = node;
             tmins(ptr) = tmin;
             node = n;
             tmin = t;
         },
-        push_after: |n, t| {
+        push_after: @ |n, t| {
             ptr++;
             nodes(ptr) = n;
             tmins(ptr) = t;
         },
-        set_top: |n, t| {
+        set_top: @ |n, t| {
             node = n;
             tmin = t;
         },
-        sort_n: |n, cmp, sorting_network, branchless| {
+        sort_n: @ |n, cmp, sorting_network, branchless| {
             let (read_val, write_val) = vals_accessor(ptr - n + 1);
             let (read_key, write_key) = keys_accessor(ptr - n + 1);
-            let tmp = make_small_stack(n);
-
-            let cmp_swap = if branchless {
-                |i, j| {
+            if branchless {
+                let tmp = make_small_stack(n);
+                for i in range(0, n) @{
+                    tmp.write(i, (read_val(i), read_key(i)))
+                }
+                sorting_network(n, @ |i, j| {
                     let (v0, k0) = tmp.read(i);
                     let (v1, k1) = tmp.read(j);
                     let swp = cmp(k0, k1);
                     tmp.write(i, select(swp, (v1, k1), (v0, k0)));
                     tmp.write(j, select(swp, (v0, k0), (v1, k1)));
+                });
+                for i in range(0, n) @{
+                    let (v, k) = tmp.read(i);
+                    write_val(i, v);
+                    write_key(i, k);
                 }
             } else {
-                |i, j| {
+                sorting_network(n, @ |i, j| {
                     let (k0, k1) = (read_key(i), read_key(j));
                     if cmp(k0, k1) {
                         let (v0, v1) = (read_val(i), read_val(j));
@@ -100,34 +106,16 @@ fn allocate_stack() -> Stack {
                         write_val(i, v1);
                         write_val(j, v0);
                     }
-                }
-            };
-
-            if branchless {
-                // Store the stack elements into registers
-                for i in range(0, n) {
-                    tmp.write(i, (read_val(i), read_key(i)))
-                }
-            }
-
-            sorting_network(n, cmp_swap);
-
-            if branchless {
-                // Read back the stack elements from registers
-                for i in range(0, n) {
-                    let (v, k) = tmp.read(i);
-                    write_val(i, v);
-                    write_key(i, k);
-                }
+                });
             }
         },
-        pop: || {
+        pop: @ || {
             node = nodes(ptr);
             tmin = tmins(ptr);
             ptr--;
         },
-        top: || NodeRef { node: node, tmin: tmin },
-        is_empty: || node == 0,
-        size: || ptr
+        top: @ || NodeRef { node: node, tmin: tmin },
+        is_empty: @ || node == 0,
+        size: @ || ptr
     }
 }

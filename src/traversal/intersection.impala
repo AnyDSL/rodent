@@ -3,15 +3,15 @@ struct Ray {
     dir: Vec3,     // Direction of the ray
     inv_dir: Vec3, // Inverse of the direction
     inv_org: Vec3, // Origin multiplied by the inverse of the direction
-    tmin: float,   // Minimum distance from the origin
-    tmax: float    // Maximum distance from the origin
+    tmin: f32,     // Minimum distance from the origin
+    tmax: f32      // Maximum distance from the origin
 }
 
 struct Hit {
-    distance:  float,  // Distance to the intersection point
+    distance:  f32,    // Distance to the intersection point
     uv_coords: Vec2,   // Surface coordinates
-    prim_id:   int,    // Primitive identifier, or -1 (no intersection found)
-    inst_id:   int     // Instance identifier, or -1 (no instance found)
+    prim_id:   i32,    // Primitive identifier, or -1 (no intersection found)
+    geom_id:   i32     // Geometry identifier, or -1 (no intersection found)
 }
 
 struct Tri {
@@ -29,53 +29,57 @@ struct BBox {
 }
 
 struct Bvh {
-    node:  fn (int) -> BvhNode,         // Access to one node of the BVH
-    tri:   fn (int) -> BvhTri,          // Access to one (possibly packed) triangle
-    arity: int                          // Arity of the BVH (number of children per node)
+    node:  fn (i32) -> BvhNode,     // Access to one node of the BVH
+    tri:   fn (i32) -> BvhTri,      // Access to one (possibly packed) triangle
+    order: fn (i32) -> [i32 * 6],   // Orders the bounding box corners for a given octant
+    prefetch: fn (i32) -> (),       // Prefetches a leaf or inner node
+
+    arity: i32,                     // Arity of the BVH (number of children per node)
+    tri_size: i32,                  // Number of triangles per packet
 }
 
 struct BvhNode {
-    bbox:     fn (int, int) -> BBox,    // Loads the bounding box of one child node (octant as second argument, -1 if no octant)
-    child:    fn (int) -> int,          // Gets the index of one child node
-    prefetch: fn () -> ()               // Prefetches this node
+    bbox:         fn (i32) -> BBox,             // Loads the bounding box of one child node
+    ordered_bbox: fn (i32, [i32 * 6]) -> BBox,  // Loads the bounding box of one child with the given octant order (mapping specific)
+    child:        fn (i32) -> i32,              // Gets the index of one child node
 }
 
 struct BvhTri {
-    load: fn (int) -> Tri,              // Loads the given triangle in the packet
-    id:   fn (int) -> int,              // Identifier of the given triangle in the packet
-    size: int                           // Number of triangles in the packet
+    load: fn (i32) -> Tri,          // Loads the given triangle in the packet
+    id:   fn (i32) -> i32,          // Identifier of the given triangle in the packet
 }
 
 // Intrinsics required to perform the ray-box test
 struct RayBoxIntrinsics {
-    fmaxmaxf: fn (float, float, float) -> float,
-    fminminf: fn (float, float, float) -> float,
-    fminmaxf: fn (float, float, float) -> float,
-    fmaxminf: fn (float, float, float) -> float,
-    fmaxf:    fn (float, float) -> float,
-    fminf:    fn (float, float) -> float,
-    fcmp_le:  fn (float, float) -> bool
+    fmaxmaxf: fn (f32, f32, f32) -> f32,
+    fminminf: fn (f32, f32, f32) -> f32,
+    fminmaxf: fn (f32, f32, f32) -> f32,
+    fmaxminf: fn (f32, f32, f32) -> f32,
+    fmaxf:    fn (f32, f32) -> f32,
+    fminf:    fn (f32, f32) -> f32,
+    fcmp_le:  fn (f32, f32) -> bool
 }
 
 type Intersector = fn (Ray, fn (Hit) -> ()) -> ();
 
 // Constructs a set of intrinsics from min and max functions.
 // May not be the optimal intrinsics if the hardware provides a combined min/max instruction.
-fn make_ray_box_intrinsics(fminf: fn (float, float) -> float,
-                           fmaxf: fn (float, float) -> float,
-                           fcmp_le: fn (float, float) -> bool) -> RayBoxIntrinsics {
+fn @make_ray_box_intrinsics( fminf: fn (f32, f32) -> f32
+                           , fmaxf: fn (f32, f32) -> f32
+                           , fcmp_le: fn (f32, f32) -> bool
+                           ) -> RayBoxIntrinsics {
     RayBoxIntrinsics {
         fminf: fminf,
         fmaxf: fmaxf,
-        fminminf: |a, b, c| fminf(fminf(a, b), c),
-        fmaxmaxf: |a, b, c| fmaxf(fmaxf(a, b), c),
-        fminmaxf: |a, b, c| fmaxf(fminf(a, b), c),
-        fmaxminf: |a, b, c| fminf(fmaxf(a, b), c),
+        fminminf: @ |a, b, c| fminf(fminf(a, b), c),
+        fmaxmaxf: @ |a, b, c| fmaxf(fmaxf(a, b), c),
+        fminmaxf: @ |a, b, c| fmaxf(fminf(a, b), c),
+        fmaxminf: @ |a, b, c| fminf(fmaxf(a, b), c),
         fcmp_le: fcmp_le
     }
 }
 
-fn make_ray(org: Vec3, dir: Vec3, tmin: float, tmax: float) -> Ray @{
+fn @make_ray(org: Vec3, dir: Vec3, tmin: f32, tmax: f32) -> Ray {
     let inv_dir = make_vec3(safe_rcp(dir.x), safe_rcp(dir.y), safe_rcp(dir.z));
     let inv_org = vec3_neg(vec3_mul(org, inv_dir));
     Ray {
@@ -88,16 +92,16 @@ fn make_ray(org: Vec3, dir: Vec3, tmin: float, tmax: float) -> Ray @{
     }
 }
 
-fn make_hit(inst_id: int, prim_id: int, t: float, uv: Vec2) -> Hit {
+fn @make_hit(geom_id: i32, prim_id: i32, t: f32, uv: Vec2) -> Hit {
     Hit {
         distance:  t,
         uv_coords: uv,
         prim_id:   prim_id,
-        inst_id:   inst_id
+        geom_id:   geom_id
     }
 }
 
-fn make_tri(v0: Vec3, e1: Vec3, e2: Vec3, n: Vec3) -> Tri {
+fn @make_tri(v0: Vec3, e1: Vec3, e2: Vec3, n: Vec3) -> Tri {
     Tri {
         v0: v0,
         v1: vec3_sub(v0, e1),
@@ -108,14 +112,14 @@ fn make_tri(v0: Vec3, e1: Vec3, e2: Vec3, n: Vec3) -> Tri {
     }
 }
 
-fn make_bbox(min: Vec3, max: Vec3) -> BBox {
+fn @make_bbox(min: Vec3, max: Vec3) -> BBox {
     BBox {
         min: min,
         max: max
     }
 }
 
-fn clip_ray(ray: Ray, tmin: float, tmax: float) -> Ray {
+fn @clip_ray(ray: Ray, tmin: f32, tmax: f32) -> Ray {
     Ray {
         org: ray.org,
         dir: ray.dir,
@@ -126,39 +130,47 @@ fn clip_ray(ray: Ray, tmin: float, tmax: float) -> Ray {
     }
 }
 
-fn ray_octant(ray: Ray) -> int {
+fn @ray_octant(ray: Ray) -> i32 {
     select(ray.dir.x > 0.0f, 1, 0) |
     select(ray.dir.y > 0.0f, 2, 0) |
     select(ray.dir.z > 0.0f, 4, 0)
 }
 
-fn empty_hit(tmax: float) -> Hit {
+fn @empty_hit(tmax: f32) -> Hit {
     make_hit(-1, -1, tmax, undef())
 }
 
-fn intersect_ray_tri(math: Intrinsics, ray: Ray, tri: Tri) -> (bool, float, float, float) @{
+fn @intersect_ray_tri(math: Intrinsics, early_exit: bool, mut mask: bool, ray: Ray, tri: Tri) -> (bool, f32, f32, f32) {
+    let no_hit = || -> ! return (false, undef[f32](), undef[f32](), undef[f32]());
+    let expect = |cond: bool, _| -> ! {
+        mask &= cond;
+        if early_exit && likely(rv_all(!mask)) { no_hit() }
+    };
+
     let c = vec3_sub(tri.v0, ray.org);
     let r = vec3_cross(ray.dir, c);
     let det = vec3_dot(tri.n, ray.dir);
     let abs_det = math.fabsf(det);
 
     let u = prodsign(vec3_dot(r, tri.e2), det);
+    expect(u >= 0.0f);
+
     let v = prodsign(vec3_dot(r, tri.e1), det);
+    expect(v >= 0.0f);
+    expect(u + v <= abs_det);
 
-    let mut mask = (det != 0.0f) & (u >= 0.0f) & (v >= 0.0f) & (u + v <= abs_det);
-    if any(mask) @{
-        let t = prodsign(vec3_dot(tri.n, c), det);
-        mask &= (t >= abs_det * ray.tmin) & (t <= abs_det * ray.tmax);
-        if any(mask) @{
-            let inv_det = 1.0f / abs_det;
-            return(mask, t * inv_det, u * inv_det, v * inv_det)
-        }
-    }
+    if !early_exit && likely(rv_all(!mask)) { no_hit() }
 
-    (false, undef(), undef(), undef())
+    let t = prodsign(vec3_dot(c, tri.n), det);
+    expect((abs_det != 0.0f) & (t >= abs_det * ray.tmin) & (t <= abs_det * ray.tmax));
+
+    if !early_exit && likely(rv_all(!mask)) { no_hit() }
+    let inv_det = 1.0f / abs_det;
+
+    (mask, t * inv_det, u * inv_det, v * inv_det)
 }
 
-fn intersect_ray_box(math: RayBoxIntrinsics, ordered: bool, ray: Ray, bbox: BBox) -> (bool, float, float) @{
+fn @intersect_ray_box(math: RayBoxIntrinsics, ordered: bool, ray: Ray, bbox: BBox) -> (bool, f32, f32) {
     let t0 = vec3_add(vec3_mul(ray.inv_dir, bbox.min), ray.inv_org);
     let t1 = vec3_add(vec3_mul(ray.inv_dir, bbox.max), ray.inv_org);
 
@@ -172,19 +184,4 @@ fn intersect_ray_box(math: RayBoxIntrinsics, ordered: bool, ray: Ray, bbox: BBox
         };
 
     (math.fcmp_le(tentry, texit), tentry, texit)
-}
-
-// Helper function to create a ray-triangle intersector
-fn make_ray_tri_intersector(math: Intrinsics, tri: Tri, prim_id: int) -> Intersector @{
-    |ray, intr| @{
-        let (mask, t, u, v) = intersect_ray_tri(math, ray, tri);
-        if mask {
-            @intr(Hit {
-                distance:  t,
-                uv_coords: make_vec2(u, v),
-                prim_id:   prim_id,
-                inst_id:   undef()
-            })
-        }
-    }
 }

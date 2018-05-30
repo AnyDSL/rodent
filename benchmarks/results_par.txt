@@ -1,0 +1,72 @@
+sponza : primary : -w 4 : 36.3476 : 34.725
+sponza : ao : -w 4 : 70.6553 : 76.3449
+sponza : bounces : -w 4 : 11.0716 : 9.77876
+sponza : primary : -w 4 -p : None : 36.0903
+sponza : ao : -w 4 -p : None : 75.9812
+sponza : bounces : -w 4 -p : None : 7.74625
+sponza : primary : -w 4 -s : 18.1877 : 14.8939
+sponza : ao : -w 4 -s : 36.4553 : 28.598
+sponza : bounces : -w 4 -s : 11.2891 : 9.36764
+sponza : primary : -w 8 : 36.3964 : 34.8446
+sponza : ao : -w 8 : 67.8053 : 76.7301
+sponza : bounces : -w 8 : 12.7442 : 11.461
+sponza : primary : -w 8 -p : None : 38.2885
+sponza : ao : -w 8 -p : None : 77.2587
+sponza : bounces : -w 8 -p : None : 7.88341
+sponza : primary : -w 8 -s : 22.7849 : 18.7401
+sponza : ao : -w 8 -s : 44.717 : 35.7588
+sponza : bounces : -w 8 -s : 13.3862 : 11.8594
+crown : primary : -w 4 : 97.8603 : 102.512
+crown : ao : -w 4 : 44.2639 : 40.2826
+crown : bounces : -w 4 : 22.2004 : 19.4772
+crown : primary : -w 4 -p : None : 104.206
+crown : ao : -w 4 -p : None : 34.9943
+crown : bounces : -w 4 -p : None : 14.952
+crown : primary : -w 4 -s : 63.9428 : 53.0047
+crown : ao : -w 4 -s : 33.7507 : 28.0173
+crown : bounces : -w 4 -s : 21.4867 : 17.9545
+crown : primary : -w 8 : 89.923 : 95.4834
+crown : ao : -w 8 : 44.2455 : 42.1222
+crown : bounces : -w 8 : 23.1584 : 21.0389
+crown : primary : -w 8 -p : None : 103.194
+crown : ao : -w 8 -p : None : 35.5137
+crown : bounces : -w 8 -p : None : 15.2423
+crown : primary : -w 8 -s : 70.0337 : 59.2134
+crown : ao : -w 8 -s : 38.9787 : 32.6553
+crown : bounces : -w 8 -s : 23.8139 : 20.9049
+san-miguel : primary : -w 4 : 23.0406 : 22.0645
+san-miguel : ao : -w 4 : 15.9148 : 13.8224
+san-miguel : bounces : -w 4 : 7.32533 : 6.45785
+san-miguel : primary : -w 4 -p : None : 23.2798
+san-miguel : ao : -w 4 -p : None : 11.859
+san-miguel : bounces : -w 4 -p : None : 4.93395
+san-miguel : primary : -w 4 -s : 15.4667 : 10.8329
+san-miguel : ao : -w 4 -s : 14.0318 : 11.4903
+san-miguel : bounces : -w 4 -s : 7.6656 : 6.8292
+san-miguel : primary : -w 8 : 19.1285 : 18.7394
+san-miguel : ao : -w 8 : 16.3181 : 14.7668
+san-miguel : bounces : -w 8 : 7.62373 : 6.98282
+san-miguel : primary : -w 8 -p : None : 20.2968
+san-miguel : ao : -w 8 -p : None : 11.8617
+san-miguel : bounces : -w 8 -p : None : 4.85699
+san-miguel : primary : -w 8 -s : 17.9463 : 11.3314
+san-miguel : ao : -w 8 -s : 16.133 : 13.5902
+san-miguel : bounces : -w 8 -s : 8.51997 : 7.75063
+powerplant : primary : -w 4 : 50.633 : 49.3437
+powerplant : ao : -w 4 : 95.4166 : 102.892
+powerplant : bounces : -w 4 : 13.8832 : 11.8606
+powerplant : primary : -w 4 -p : None : 50.9431
+powerplant : ao : -w 4 -p : None : 106.134
+powerplant : bounces : -w 4 -p : None : 8.97721
+powerplant : primary : -w 4 -s : 33.1721 : 25.3444
+powerplant : ao : -w 4 -s : 52.6649 : 42.33
+powerplant : bounces : -w 4 -s : 14.254 : 12.0286
+powerplant : primary : -w 8 : 44.8194 : 43.0222
+powerplant : ao : -w 8 : 88.0362 : 98.0998
+powerplant : bounces : -w 8 : 14.658 : 13.2946
+powerplant : primary : -w 8 -p : None : 46.8461
+powerplant : ao : -w 8 -p : None : 101.687
+powerplant : bounces : -w 8 -p : None : 9.25009
+powerplant : primary : -w 8 -s : 34.5967 : 29.0171
+powerplant : ao : -w 8 -s : 64.9127 : 52.1655
+powerplant : bounces : -w 8 -s : 15.9856 : 13.9619

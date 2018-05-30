@@ -1,0 +1,51 @@
+fn @diffuse_shader(math: Intrinsics, scene: Scene, surf: SurfaceElement) -> Material {
+    let texture = make_texture(math,
+        make_repeat_border(),
+        make_bilinear_filter(),
+        scene.images(0));
+    let bsdf = make_diffuse_bsdf(surf, make_color(0.5f, 0.5f, 0.5f)/*texture(surf.uv_coords)*/);
+    make_material(bsdf)
+}
+
+struct Settings {
+    eye: Vec3,
+    dir: Vec3,
+    up: Vec3,
+    right: Vec3,
+    width: f32,
+    height: f32
+};
+
+extern fn render(settings: &Settings, iter: i32) -> () {
+    let device   = make_cpu_device();
+    let renderer = make_path_tracer(64);
+    let image    = device.load_image("data/textures/wall.png");
+    let tri_mesh = device.load_mesh("data/cube.obj");
+
+    let camera = make_perspective_camera(
+        settings.eye,
+        make_mat3x3(settings.right, settings.up, settings.dir),
+        settings.width,
+        settings.height
+    );
+
+    let light = make_point_light(
+        make_vec3(0.0f, 1.8f, 0.0f),
+        make_color(100.0f, 100.0f, 100.0f)
+    );
+
+    let scene = Scene {
+        num_shaders:    1,
+        num_geometries: 1,
+        num_images:     1,
+        num_lights:     1,
+
+        shaders:    @ |i| diffuse_shader,
+        geometries: @ |i| tri_mesh,
+        images:     @ |i| image,
+        lights:     @ |i| light,
+        camera:     camera
+    };
+
+    renderer(scene, device, iter);
+}

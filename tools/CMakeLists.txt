@@ -1,6 +1,11 @@
 # Generate the traversal benchmark utility, and the ../common/traversal.h interface
 add_subdirectory(bench_traversal)
 
+find_package(CUDA QUIET)
+if (CUDA_FOUND)
+    add_subdirectory(bench_aila)
+endif()
+
 add_subdirectory(ray_gen)
 find_package(PNG QUIET)
 if (PNG_FOUND)
