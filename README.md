@@ -13,6 +13,8 @@ Once the dependencies are installed, use the following commands to build the pro
     # Optional: Create benchmarking tools for Embree and BVH extractor tools
     # cmake .. -DEMBREE_ROOT_DIR = <path to Embree sources>
     make
+    
+The current settings assume a machine with AVX2 or higher. To change this, edit the [source code](tools/bench_traversal/bench_traversal.impala) of the benchmarking tool to only use AVX or SSE, and set the `CLANG_FLAGS` CMake variable to the desired ISA.
 
 # Testing
 
