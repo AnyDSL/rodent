@@ -7,6 +7,8 @@
 #include <cstring>
 #include <functional>
 
+#include <tbb/tbb.h>
+
 #include <embree2/rtcore.h>
 #include <embree2/rtcore_ray.h>
 #include <common/math/vec3.h>
