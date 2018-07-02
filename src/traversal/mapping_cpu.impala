@@ -597,7 +597,7 @@ fn @cpu_traverse_single( ray_box_intrinsics: RayBoxIntrinsics
                        , ray_count: i32
                        , root: i32
                        ) -> () {
-    for i in unroll(0, ray_count) {
+    for i in parallel(0, 0, ray_count) {
         let (packet_id, ray_id) = (i / ray_layout.packet_size, i % ray_layout.packet_size);
         let ray = ray_layout.read_ray(packet_id, ray_id);
         let order = bvh.order(ray_octant(ray));
@@ -615,7 +615,7 @@ fn @cpu_traverse_hybrid( ray_box_intrinsics: RayBoxIntrinsics
                        , root: i32
                        ) -> () {
     let vector_width = ray_layout.packet_size;
-    for i in unroll(0, ray_count / vector_width) {
+    for i in parallel(0, 0, ray_count / vector_width) {
         for j in vectorize(vector_width, vector_width * sizeof[f32](), 0, vector_width) {
             let ray = ray_layout.read_ray(i, j);
             let order = bvh.order(ray_octant(ray));

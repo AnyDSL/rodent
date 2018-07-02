@@ -101,14 +101,17 @@ static void create_triangles(const obj::File& obj_file, std::vector<Tri>& tris) 
 template <typename F>
 double intersect_scene(RTCScene scene, const anydsl::Array<RTCRay>& rays, anydsl::Array<RTCRay>& hits, F f) {
     using namespace std::chrono;
+    using namespace tbb;
 
     // Restore tnear, tfar and other fields that have been modified
     anydsl::copy(rays, hits);
 
     auto t0 = high_resolution_clock::now();
-    for (int i = 0; i < rays.size(); i++) {
-        f(scene, hits[i]);
-    }
+    parallel_for(blocked_range<size_t>(0, rays.size), [&](const blocked_range<size_t>& range) {
+        for (size_t i = range.begin(), e = range.end(); i != e; i++) {
+            f(scene, hits[i]);
+        }
+    });
     auto t1 = high_resolution_clock::now();
     return duration_cast<microseconds>(t1 - t0).count() * 1.0e-3;
 }
@@ -116,15 +119,18 @@ double intersect_scene(RTCScene scene, const anydsl::Array<RTCRay>& rays, anydsl
 template <typename F>
 double intersect_scene(RTCScene scene, const anydsl::Array<RTCRay8>& rays, anydsl::Array<RTCRay8>& hits, F f) {
     using namespace std::chrono;
+    using namespace tbb;
 
     // Restore tnear, tfar and other fields that have been modified
     anydsl::copy(rays, hits);
 
     auto t0 = high_resolution_clock::now();
-    for (int i = 0; i < rays.size(); i++) {
-        const int valid[8] alignas(32) = { -1, -1, -1, -1, -1, -1, -1, -1 };
-        f(valid, scene, hits[i]);
-    }
+    parallel_for(blocked_range<size_t>(0, rays.size), [&](const blocked_range<size_t>& range) {
+        for (size_t i = range.begin(), e = range.end(); i != e; i++) {
+            const int valid[8] alignas(32) = { -1, -1, -1, -1, -1, -1, -1, -1 };
+            f(valid, scene, hits[i]);
+        }
+    });
     auto t1 = high_resolution_clock::now();
     return duration_cast<microseconds>(t1 - t0).count() * 1.0e-3;
 }
