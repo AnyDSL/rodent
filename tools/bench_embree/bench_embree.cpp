@@ -109,7 +109,7 @@ double intersect_scene(RTCScene scene, const anydsl::Array<RTCRay>& rays, anydsl
     anydsl::copy(rays, hits);
 
     auto t0 = high_resolution_clock::now();
-    parallel_for(blocked_range<size_t>(0, rays.size), [&](const blocked_range<size_t>& range) {
+    parallel_for(blocked_range<size_t>(0, rays.size()), [&](const blocked_range<size_t>& range) {
         for (size_t i = range.begin(), e = range.end(); i != e; i++) {
             f(scene, hits[i]);
         }
@@ -127,7 +127,7 @@ double intersect_scene(RTCScene scene, const anydsl::Array<RTCRay8>& rays, anyds
     anydsl::copy(rays, hits);
 
     auto t0 = high_resolution_clock::now();
-    parallel_for(blocked_range<size_t>(0, rays.size), [&](const blocked_range<size_t>& range) {
+    parallel_for(blocked_range<size_t>(0, rays.size()), [&](const blocked_range<size_t>& range) {
         for (size_t i = range.begin(), e = range.end(); i != e; i++) {
             const int valid[8] alignas(32) = { -1, -1, -1, -1, -1, -1, -1, -1 };
             f(valid, scene, hits[i]);
