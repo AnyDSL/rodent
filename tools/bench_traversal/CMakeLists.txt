@@ -23,5 +23,5 @@ add_executable(bench_traversal
 target_include_directories(bench_traversal PUBLIC ../common)
 target_link_libraries(bench_traversal ${AnyDSL_runtime_LIBRARIES})
 if (EXISTS ${CMAKE_CURRENT_BINARY_DIR}/bench_traversal.nvvm.bc)
-    add_custom_command(TARGET bench_traversal POST_BUILD COMMAND ${CMAKE_COMMAND} copy ${CMAKE_CURRENT_BINARY_DIR}/bench_traversal.nvvm.bc ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+    add_custom_command(TARGET bench_traversal POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/bench_traversal.nvvm.bc ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
 endif()

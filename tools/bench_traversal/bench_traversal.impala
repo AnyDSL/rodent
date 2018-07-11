@@ -1,46 +1,46 @@
 // CPU BVH4 variants ---------------------------------------------------------------
 
 extern fn cpu_intersect_bvh4_packet8_avx2(bvh: &Bvh4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () {
-    /*cpu_traverse_hybrid(
-        make_ray_box_intrinsics_avx2(),
+    cpu_traverse_hybrid(
+        make_cpu_int_min_max(),
         make_cpu_ray8_layout(rays as &mut [Ray8SoA], hits),
         make_cpu_bvh4(*bvh),
         false,
         false,
         ray_count,
-        1);*/
+        1);
 }
 extern fn cpu_occluded_bvh4_packet8_avx2(bvh: &Bvh4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () {
-    /*cpu_traverse_hybrid(
-        make_ray_box_intrinsics_avx2(),
+    cpu_traverse_hybrid(
+        make_cpu_int_min_max(),
         make_cpu_ray8_layout(rays as &mut [Ray8SoA], hits),
         make_cpu_bvh4(*bvh),
         false,
         true,
         ray_count,
-        1);*/
+        1);
 }
 extern fn cpu_intersect_bvh4_single_avx2(bvh: &Bvh4, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () {
-    /*cpu_traverse_single(
-        make_ray_box_intrinsics_avx2(),
+    cpu_traverse_single(
+        make_cpu_int_min_max(),
         make_cpu_ray1_layout(rays as &mut [Ray1AoS], hits),
         make_cpu_bvh4(*bvh),
         false,
         ray_count,
-        1);*/
+        1);
 }
 extern fn cpu_occluded_bvh4_single_avx2(bvh: &Bvh4, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () {
-    /*cpu_traverse_single(
-        make_ray_box_intrinsics_avx2(),
+    cpu_traverse_single(
+        make_cpu_int_min_max(),
         make_cpu_ray1_layout(rays as &mut [Ray1AoS], hits),
         make_cpu_bvh4(*bvh),
         true,
         ray_count,
-        1);*/
+        1);
 }
 extern fn cpu_intersect_bvh4_hybrid8_avx2(bvh: &Bvh4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () {
     cpu_traverse_hybrid(
-        make_ray_box_intrinsics_avx2(),
+        make_cpu_int_min_max(),
         make_cpu_ray8_layout(rays as &mut [Ray8SoA], hits),
         make_cpu_bvh4(*bvh),
         true,
@@ -49,98 +49,98 @@ extern fn cpu_intersect_bvh4_hybrid8_avx2(bvh: &Bvh4, rays: &[Ray8SoA], hits: &m
         1);
 }
 extern fn cpu_occluded_bvh4_hybrid8_avx2(bvh: &Bvh4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () {
-    /*cpu_traverse_hybrid(
-        make_ray_box_intrinsics_avx2(),
+    cpu_traverse_hybrid(
+        make_cpu_int_min_max(),
         make_cpu_ray8_layout(rays as &mut [Ray8SoA], hits),
         make_cpu_bvh4(*bvh),
         true,
         true,
         ray_count,
-        1);*/
+        1);
 }
 
 // CPU BVH8 variants ---------------------------------------------------------------
 
 extern fn cpu_intersect_bvh8_tri4_packet8_avx2(bvh: &Bvh8Tri4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () {
-    /*cpu_traverse_hybrid(
-        make_ray_box_intrinsics_avx2(),
+    cpu_traverse_hybrid(
+        make_cpu_int_min_max(),
         make_cpu_ray8_layout(rays as &mut [Ray8SoA], hits),
         make_cpu_bvh8_tri4(*bvh),
         false,
         false,
         ray_count,
-        1);*/
+        1);
 }
 extern fn cpu_occluded_bvh8_tri4_packet8_avx2(bvh: &Bvh8Tri4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () {
-    /*cpu_traverse_hybrid(
-        make_ray_box_intrinsics_avx2(),
+    cpu_traverse_hybrid(
+        make_cpu_int_min_max(),
         make_cpu_ray8_layout(rays as &mut [Ray8SoA], hits),
         make_cpu_bvh8_tri4(*bvh),
         false,
         true,
         ray_count,
-        1);*/
+        1);
 }
 extern fn cpu_intersect_bvh8_tri4_single_avx2(bvh: &Bvh8Tri4, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () {
-    /*cpu_traverse_single(
-        make_ray_box_intrinsics_avx2(),
+    cpu_traverse_single(
+        make_cpu_int_min_max(),
         make_cpu_ray1_layout(rays as &mut [Ray1AoS], hits),
         make_cpu_bvh8_tri4(*bvh),
         false,
         ray_count,
-        1);*/
+        1);
 }
 extern fn cpu_occluded_bvh8_tri4_single_avx2(bvh: &Bvh8Tri4, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () {
-    /*cpu_traverse_single(
-        make_ray_box_intrinsics_avx2(),
+    cpu_traverse_single(
+        make_cpu_int_min_max(),
         make_cpu_ray1_layout(rays as &mut [Ray1AoS], hits),
         make_cpu_bvh8_tri4(*bvh),
         true,
         ray_count,
-        1);*/
+        1);
 }
 extern fn cpu_intersect_bvh8_tri4_hybrid8_avx2(bvh: &Bvh8Tri4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () {
-    /*cpu_traverse_hybrid(
-        make_ray_box_intrinsics_avx2(),
+    cpu_traverse_hybrid(
+        make_cpu_int_min_max(),
         make_cpu_ray8_layout(rays as &mut [Ray8SoA], hits),
         make_cpu_bvh8_tri4(*bvh),
         true,
         false,
         ray_count,
-        1);*/
+        1);
 }
 extern fn cpu_occluded_bvh8_tri4_hybrid8_avx2(bvh: &Bvh8Tri4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () {
-    /*cpu_traverse_hybrid(
-        make_ray_box_intrinsics_avx2(),
+    cpu_traverse_hybrid(
+        make_cpu_int_min_max(),
         make_cpu_ray8_layout(rays as &mut [Ray8SoA], hits),
         make_cpu_bvh8_tri4(*bvh),
         true,
         true,
         ray_count,
-        1);*/
+        1);
 }
 
 // GPU variants --------------------------------------------------------------------
 
 extern fn gpu_intersect_nvvm(bvh: &Bvh2, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () {
-    /*gpu_traverse_single(
+    gpu_traverse_single(
         nvvm_accelerator(0),
         nvvm_intrinsics,
-        make_ray_box_intrinsics_nvvm(),
-        make_ray_layout_nvvm(rays, hits),
-        make_bvh2_nvvm(*bvh),
+        make_nvvm_min_max(),
+        make_gpu_ray1_layout(rays as &mut [Ray1AoS], hits),
+        make_nvvm_bvh2(*bvh),
         false,
         ray_count,
-        1);*/
+        1);
 }
 extern fn gpu_occluded_nvvm(bvh: &Bvh2, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () {
-    /*gpu_traverse_single(
+    gpu_traverse_single(
         nvvm_accelerator(0),
         nvvm_intrinsics,
-        make_ray_box_intrinsics_nvvm(),
-        make_ray_layout_nvvm(rays, hits),
-        make_bvh2_nvvm(*bvh),
+        make_nvvm_min_max(),
+        make_gpu_ray1_layout(rays as &mut [Ray1AoS], hits),
+        make_nvvm_bvh2(*bvh),
         true,
         ray_count,
-        1);*/
+        1);
 }

@@ -79,7 +79,7 @@ fn @cpu_eye_trace(scene: Scene, eye_tracer: EyeTracer) -> () {
     let width_div = make_fast_div(film_data.width as u32);
 
     for xmin, ymin, xmax, ymax in cpu_parallel_tiles(film_data.width, film_data.height, tile_size, tile_size) {
-        let ray_box_intrinsics = make_ray_box_intrinsics_avx2();
+        let ray_box_intrinsics = make_cpu_int_min_max();
         let primary_layout = make_cpu_ray_packet(vector_width);
         let shadow_layout  = make_cpu_ray_packet(vector_width);
         let tile_div = make_fast_div((xmax - xmin) as u32);

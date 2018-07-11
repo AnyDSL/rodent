@@ -29,7 +29,7 @@ struct Bvh2Node {
     pad2:  i32
 }
 
-fn @make_bvh2_tri_nvvm(tri_ptr: &Bvh2Tri) -> BvhTri {
+fn @make_nvvm_bvh2_tri(tri_ptr: &Bvh2Tri) -> BvhTri {
     let simd_ptr = tri_ptr as &[1][simd[f32 * 4]];
     let tri0 = nvvm_ldg4_f32(&simd_ptr(0));
     let tri1 = nvvm_ldg4_f32(&simd_ptr(1));
@@ -46,7 +46,7 @@ fn @make_bvh2_tri_nvvm(tri_ptr: &Bvh2Tri) -> BvhTri {
     }
 }
 
-fn @make_bvh2_node_nvvm(node_ptr: &Bvh2Node) -> BvhNode {
+fn @make_nvvm_bvh2_node(node_ptr: &Bvh2Node) -> BvhNode {
     let simd_ptr = node_ptr as &[1][simd[f32 * 4]];
     let bb0 = nvvm_ldg4_f32(&simd_ptr(0));
     let bb1 = nvvm_ldg4_f32(&simd_ptr(1));
@@ -70,10 +70,10 @@ fn @make_bvh2_node_nvvm(node_ptr: &Bvh2Node) -> BvhNode {
     }
 }
 
-fn @make_bvh2_nvvm(bvh2: Bvh2) -> Bvh {
+fn @make_nvvm_bvh2(bvh2: Bvh2) -> Bvh {
     Bvh {
-        node: @ |j| make_bvh2_node_nvvm(&bvh2.nodes(j)),
-        tri:  @ |j| make_bvh2_tri_nvvm(&bvh2.tris(j)),
+        node: @ |j| make_nvvm_bvh2_node(&bvh2.nodes(j)),
+        tri:  @ |j| make_nvvm_bvh2_tri(&bvh2.tris(j)),
         order: @ |_| undef[[i32 * 6]](), // Not implemented
         prefetch: @ |_| (), // Not implemented
         arity: 2,
@@ -81,18 +81,17 @@ fn @make_bvh2_nvvm(bvh2: Bvh2) -> Bvh {
     }
 }
 
-// Ray-box intrinsics  -------------------------------------------------------------
+// Min/Max functions  --------------------------------------------------------------
 
-fn @make_ray_box_intrinsics_nvvm() -> RayBoxIntrinsics {
+fn @make_nvvm_min_max() -> MinMax {
     // Use video instructions to speed-up the ray-box test
-    RayBoxIntrinsics {
+    MinMax {
         fminf: nvvm_fminf,
         fmaxf: nvvm_fmaxf,
         fminminf: @ |a, b, c| bitcast[f32](nvvm_minmin(bitcast[i32](a), bitcast[i32](b), bitcast[i32](c))),
         fmaxmaxf: @ |a, b, c| bitcast[f32](nvvm_maxmax(bitcast[i32](a), bitcast[i32](b), bitcast[i32](c))),
         fminmaxf: @ |a, b, c| bitcast[f32](nvvm_minmax(bitcast[i32](a), bitcast[i32](b), bitcast[i32](c))),
         fmaxminf: @ |a, b, c| bitcast[f32](nvvm_maxmin(bitcast[i32](a), bitcast[i32](b), bitcast[i32](c))),
-        fcmp_le: @ |a, b| a <= b
     }
 }
 
@@ -129,7 +128,7 @@ fn @make_gpu_ray1_layout(rays: &mut [Ray1AoS], hits: &mut[Hit1AoS]) -> RayLayout
 // Mappings  -----------------------------------------------------------------------
 
 fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
-                              , ray_box_intrinsics: RayBoxIntrinsics
+                              , min_max: MinMax
                               , mut ray: Ray
                               , bvh: Bvh
                               , any_hit: bool
@@ -147,9 +146,10 @@ fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
         let mut mask = 0;
         let tmp = make_small_stack(bvh.arity);
         for k in unroll(0, bvh.arity) @{
-            let (hit, t, _) = intersect_ray_box(ray_box_intrinsics, false, ray, node.bbox(k));
+            let (t0, t1) = intersect_ray_box(min_max, false, ray, node.bbox(k));
+            let hit = t0 <= t1;
             mask = mask | select(hit, 1 << k, 0);
-            tmp.write(k, (node.child(k), t));
+            tmp.write(k, (node.child(k), t0));
         }
 
         if mask == 0 { stack.pop() }
@@ -221,7 +221,7 @@ fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
 
 fn @gpu_traverse_single( acc: Accelerator
                        , gpu_intrinsics: Intrinsics
-                       , ray_box_intrinsics: RayBoxIntrinsics
+                       , min_max: MinMax
                        , ray_layout: RayLayout
                        , bvh: Bvh
                        , any_hit: bool
@@ -239,7 +239,7 @@ fn @gpu_traverse_single( acc: Accelerator
         if (i + j) >= ray_count { continue() }
 
         let ray = ray_layout.read_ray(i, j);
-        let hit = gpu_traverse_single_helper(gpu_intrinsics, ray_box_intrinsics, ray, bvh, any_hit, root);
+        let hit = gpu_traverse_single_helper(gpu_intrinsics, min_max, ray, bvh, any_hit, root);
         ray_layout.write_hit(i, j, hit)
     }
 }

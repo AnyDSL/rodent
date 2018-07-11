@@ -1,9 +1,8 @@
 #include <fstream>
 #include <limits>
 
-#include <embree2/rtcore.h>
+#include <embree3/rtcore.h>
 
-#include <config.h>
 #include <kernels/bvh/bvh.h>
 #include <kernels/geometry/triangle.h>
 
@@ -13,25 +12,25 @@
 
 using namespace embree;
 
-static void error_handler(const RTCError code, const char* str) {
-    if (code == RTC_NO_ERROR)
+static void error_handler(void*, const RTCError code, const char* str) {
+    if (code == RTC_ERROR_NONE)
         return;
 
     std::cerr << "Embree error: ";
     switch (code) {
-        case RTC_UNKNOWN_ERROR:     std::cerr << "RTC_UNKNOWN_ERROR";       break;
-        case RTC_INVALID_ARGUMENT:  std::cerr << "RTC_INVALID_ARGUMENT";    break;
-        case RTC_INVALID_OPERATION: std::cerr << "RTC_INVALID_OPERATION";   break;
-        case RTC_OUT_OF_MEMORY:     std::cerr << "RTC_OUT_OF_MEMORY";       break;
-        case RTC_UNSUPPORTED_CPU:   std::cerr << "RTC_UNSUPPORTED_CPU";     break;
-        case RTC_CANCELLED:         std::cerr << "RTC_CANCELLED";           break;
-        default:                    std::cerr << "invalid error code";      break;
+        case RTC_ERROR_UNKNOWN:           std::cerr << "RTC_ERROR_UNKNOWN";       break;
+        case RTC_ERROR_INVALID_ARGUMENT:  std::cerr << "RTC_ERROR_INVALID_ARGUMENT";    break;
+        case RTC_ERROR_INVALID_OPERATION: std::cerr << "RTC_ERROR_INVALID_OPERATION";   break;
+        case RTC_ERROR_OUT_OF_MEMORY:     std::cerr << "RTC_ERROR_OUT_OF_MEMORY";       break;
+        case RTC_ERROR_UNSUPPORTED_CPU:   std::cerr << "RTC_ERROR_UNSUPPORTED_CPU";     break;
+        case RTC_ERROR_CANCELLED:         std::cerr << "RTC_ERROR_CANCELLED";           break;
+        default:                          std::cerr << "invalid error code";      break;
     }
 
     if (str) std::cerr << " (" << str << ")";
     std::cerr << std::endl;
 
-    abort();
+    exit(1);
 }
 
 template <int M, typename NodeRef, typename BvhTri>
@@ -140,29 +139,41 @@ int build_embree_bvh(std::ofstream& out, const std::vector<Tri>& tris) {
 
     const char* init = N == 4 ? "tri_accel=bvh4.triangle4" : "tri_accel=bvh8.triangle4";
     auto device = rtcNewDevice(init);
-    error_handler(rtcDeviceGetError(device), "");
-    rtcDeviceSetErrorFunction(device, error_handler);
+    error_handler(nullptr, rtcGetDeviceError(device), "");
+    rtcSetDeviceErrorFunction(device, error_handler, nullptr);
 
-    auto scene = rtcDeviceNewScene(device, RTC_SCENE_STATIC, RTC_INTERSECT8 | RTC_INTERSECT1);
-    auto mesh = rtcNewTriangleMesh(scene, RTC_GEOMETRY_STATIC, tris.size(), tris.size() * 3);
+    auto scene = rtcNewScene(device);
+    auto mesh = rtcNewGeometry(device, RTC_GEOMETRY_TYPE_TRIANGLE);
 
-    auto vertices = (Vec3fa*)rtcMapBuffer(scene, mesh, RTC_VERTEX_BUFFER); 
+    auto vertices = (float*)rtcSetNewGeometryBuffer(mesh, RTC_BUFFER_TYPE_VERTEX, 0, RTC_FORMAT_FLOAT3, sizeof(float) * 4, tris.size() * 3);
     for (int i = 0; i < tris.size(); i++) {
-        vertices[3 * i + 0] = Vec3fa(tris[i].v0.x, tris[i].v0.y, tris[i].v0.z);
-        vertices[3 * i + 1] = Vec3fa(tris[i].v1.x, tris[i].v1.y, tris[i].v1.z);
-        vertices[3 * i + 2] = Vec3fa(tris[i].v2.x, tris[i].v2.y, tris[i].v2.z);
-    }
-    rtcUnmapBuffer(scene, mesh, RTC_VERTEX_BUFFER);
+        vertices[12 * i +  0] = tris[i].v0.x;
+        vertices[12 * i +  1] = tris[i].v0.y;
+        vertices[12 * i +  2] = tris[i].v0.z;
+        vertices[12 * i +  3] = 1.0f;
 
-    auto triangles = (int*)rtcMapBuffer(scene, mesh, RTC_INDEX_BUFFER);
-    for (int i = 0; i < tris.size(); i++) {
-        triangles[i * 3 + 0] = i * 3 + 0;
-        triangles[i * 3 + 1] = i * 3 + 1;
-        triangles[i * 3 + 2] = i * 3 + 2;
+        vertices[12 * i +  4] = tris[i].v1.x;
+        vertices[12 * i +  5] = tris[i].v1.y;
+        vertices[12 * i +  6] = tris[i].v1.z;
+        vertices[12 * i +  7] = 1.0f;
+
+        vertices[12 * i +  8] = tris[i].v2.x;
+        vertices[12 * i +  9] = tris[i].v2.y;
+        vertices[12 * i + 10] = tris[i].v2.z;
+        vertices[12 * i + 11] = 1.0f;
     }
-    rtcUnmapBuffer(scene, mesh, RTC_INDEX_BUFFER);
-    
-    rtcCommit(scene);
+
+    auto indices = (int*)rtcSetNewGeometryBuffer(mesh, RTC_BUFFER_TYPE_INDEX, 0, RTC_FORMAT_UINT3, sizeof(int) * 3, tris.size());
+    for (int i = 0; i < tris.size(); i++) {
+        indices[i * 3 + 0] = i * 3 + 0;
+        indices[i * 3 + 1] = i * 3 + 1;
+        indices[i * 3 + 2] = i * 3 + 2;
+    }
+
+    rtcCommitGeometry(mesh);
+    rtcAttachGeometry(scene, mesh);
+    rtcReleaseGeometry(mesh);
+    rtcCommitScene(scene);
 
     Bvh* bvh = nullptr;
     AccelData* accel = ((Accel*)scene)->intersectors.ptr;
@@ -192,8 +203,8 @@ int build_embree_bvh(std::ofstream& out, const std::vector<Tri>& tris) {
     out.write((char*)new_nodes.data(), sizeof(BvhNode) * new_nodes.size());
     out.write((char*)new_tris.data(),  sizeof(BvhTri)  * new_tris.size());
 
-    rtcDeleteScene(scene);
-    rtcDeleteDevice(device);
+    rtcReleaseScene(scene);
+    rtcReleaseDevice(device);
 
     return new_nodes.size();
 }

@@ -49,33 +49,30 @@ struct BvhTri {
     id:   fn (i32) -> i32,          // Identifier of the given triangle in the packet
 }
 
-// Intrinsics required to perform the ray-box test
-struct RayBoxIntrinsics {
+// Min/max functions required to perform the ray-box test
+struct MinMax {
     fmaxmaxf: fn (f32, f32, f32) -> f32,
     fminminf: fn (f32, f32, f32) -> f32,
     fminmaxf: fn (f32, f32, f32) -> f32,
     fmaxminf: fn (f32, f32, f32) -> f32,
     fmaxf:    fn (f32, f32) -> f32,
-    fminf:    fn (f32, f32) -> f32,
-    fcmp_le:  fn (f32, f32) -> bool
+    fminf:    fn (f32, f32) -> f32
 }
 
 type Intersector = fn (Ray, fn (Hit) -> ()) -> ();
 
-// Constructs a set of intrinsics from min and max functions.
+// Constructs a set of comparators from min and max functions.
 // May not be the optimal intrinsics if the hardware provides a combined min/max instruction.
-fn @make_ray_box_intrinsics( fminf: fn (f32, f32) -> f32
-                           , fmaxf: fn (f32, f32) -> f32
-                           , fcmp_le: fn (f32, f32) -> bool
-                           ) -> RayBoxIntrinsics {
-    RayBoxIntrinsics {
+fn @make_min_max( fminf: fn (f32, f32) -> f32
+                , fmaxf: fn (f32, f32) -> f32
+                ) -> MinMax {
+    MinMax {
         fminf: fminf,
         fmaxf: fmaxf,
         fminminf: @ |a, b, c| fminf(fminf(a, b), c),
         fmaxmaxf: @ |a, b, c| fmaxf(fmaxf(a, b), c),
         fminmaxf: @ |a, b, c| fmaxf(fminf(a, b), c),
         fmaxminf: @ |a, b, c| fminf(fmaxf(a, b), c),
-        fcmp_le: fcmp_le
     }
 }
 
@@ -170,18 +167,18 @@ fn @intersect_ray_tri(math: Intrinsics, early_exit: bool, mut mask: bool, ray: R
     (mask, t * inv_det, u * inv_det, v * inv_det)
 }
 
-fn @intersect_ray_box(math: RayBoxIntrinsics, ordered: bool, ray: Ray, bbox: BBox) -> (bool, f32, f32) {
+fn @intersect_ray_box(min_max: MinMax, ordered: bool, ray: Ray, bbox: BBox) -> (f32, f32) {
     let t0 = vec3_add(vec3_mul(ray.inv_dir, bbox.min), ray.inv_org);
     let t1 = vec3_add(vec3_mul(ray.inv_dir, bbox.max), ray.inv_org);
 
     let (tentry, texit) =
         if ordered {
-            (math.fmaxmaxf(t0.x, t0.y, math.fmaxf(t0.z, ray.tmin)),
-             math.fminminf(t1.x, t1.y, math.fminf(t1.z, ray.tmax)))
+            (min_max.fmaxmaxf(t0.x, t0.y, min_max.fmaxf(t0.z, ray.tmin)),
+             min_max.fminminf(t1.x, t1.y, min_max.fminf(t1.z, ray.tmax)))
         } else {
-            (math.fmaxmaxf(math.fminf(t0.x, t1.x), math.fminf(t0.y, t1.y), math.fminmaxf(t0.z, t1.z, ray.tmin)),
-             math.fminminf(math.fmaxf(t0.x, t1.x), math.fmaxf(t0.y, t1.y), math.fmaxminf(t0.z, t1.z, ray.tmax)))
+            (min_max.fmaxmaxf(min_max.fminf(t0.x, t1.x), min_max.fminf(t0.y, t1.y), min_max.fminmaxf(t0.z, t1.z, ray.tmin)),
+             min_max.fminminf(min_max.fmaxf(t0.x, t1.x), min_max.fmaxf(t0.y, t1.y), min_max.fmaxminf(t0.z, t1.z, ray.tmax)))
         };
 
-    (math.fcmp_le(tentry, texit), tentry, texit)
+    (tentry, texit)
 }

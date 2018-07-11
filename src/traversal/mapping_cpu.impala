@@ -225,14 +225,14 @@ fn @make_cpu_bvh8_tri4(bvh8tri4: Bvh8Tri4) -> Bvh {
     }
 }
 
-// Ray-box intrinsics  -------------------------------------------------------------
+// Min/Max functions  --------------------------------------------------------------
 
-fn @make_ray_box_intrinsics_avx() -> RayBoxIntrinsics {
-    make_ray_box_intrinsics(@ |a, b| select(a < b, a, b), @ |a, b| select(a > b, a, b), @ |a, b| a <= b)
+fn @make_cpu_min_max() -> MinMax {
+    make_min_max(@ |a, b| select(a < b, a, b), @ |a, b| select(a > b, a, b))
 }
 
-fn @make_ray_box_intrinsics_avx2() -> RayBoxIntrinsics {
-    // AVX2 intrinsics: use integer min/max instead of floating point min/max
+fn make_cpu_int_min_max() -> MinMax {
+    // Integer min/max instead of floating point min/max
     let fminf = @ |x, y| {
         let (x_, y_) = (bitcast[i32](x), bitcast[i32](y));
         bitcast[f32](select(x_ < y_, x_, y_))
@@ -241,8 +241,7 @@ fn @make_ray_box_intrinsics_avx2() -> RayBoxIntrinsics {
         let (x_, y_) = (bitcast[i32](x), bitcast[i32](y));
         bitcast[f32](select(x_ > y_, x_, y_))
     };
-    // There is no integer <= on AVX2, only >
-    make_ray_box_intrinsics(fminf, fmaxf, @ |a, b| { !(bitcast[i32](a) > bitcast[i32](b)) })
+    make_min_max(fminf, fmaxf)
 }
 
 // Ray layouts  --------------------------------------------------------------------
@@ -347,7 +346,7 @@ fn @make_cpu_ray8_layout(rays: &mut [Ray8SoA], hits: &mut [Hit8SoA]) -> RayLayou
 
 // Variants  -----------------------------------------------------------------------
 
-fn @cpu_traverse_single_helper( ray_box_intrinsics: RayBoxIntrinsics
+fn @cpu_traverse_single_helper( min_max: MinMax
                               , mut ray: Ray
                               , bvh: Bvh
                               , order: [i32 * 6]
@@ -377,7 +376,8 @@ fn @cpu_traverse_single_helper( ray_box_intrinsics: RayBoxIntrinsics
                 if unlikely(node_ref.tmin >= ray.tmax) { continue() }
 
                 let node = bvh.node(node_ref.node - 1);
-                let (hit, tentry, _) = intersect_ray_box(ray_box_intrinsics, true, ray, node.ordered_bbox(j, order));
+                let (tentry, texit) = intersect_ray_box(min_max, true, ray, node.ordered_bbox(j, order));
+                let hit = tentry <= texit;
 
                 let mask = !rv_ballot(!hit) & ((1 << bvh.arity) - 1);
                 if likely(mask == 0) { continue() }
@@ -443,7 +443,7 @@ fn @cpu_traverse_single_helper( ray_box_intrinsics: RayBoxIntrinsics
                             }
                         } else if rv_any(found) {
                             let found_t = select(found, t, flt_max);
-                            let min_t = reduce(found_t, bvh.tri_size, ray_box_intrinsics.fminf);
+                            let min_t = reduce(found_t, bvh.tri_size, min_max.fminf);
                             let lane = index_of(found_t, min_t);
 
                             hit = make_hit(
@@ -466,7 +466,7 @@ fn @cpu_traverse_single_helper( ray_box_intrinsics: RayBoxIntrinsics
     hit
 }
 
-fn @cpu_traverse_hybrid_helper( ray_box_intrinsics: RayBoxIntrinsics
+fn @cpu_traverse_hybrid_helper( min_max: MinMax
                               , vector_width: i32
                               , mut ray: Ray
                               , bvh: Bvh
@@ -501,7 +501,7 @@ fn @cpu_traverse_hybrid_helper( ray_box_intrinsics: RayBoxIntrinsics
                         for i in unroll(0, 6) {
                             lane_order(i) = bitcast[i32](rv_load(bitcast[&f32](&order(i)), lane));
                         }
-                        let lane_hit = cpu_traverse_single_helper(ray_box_intrinsics, lane_ray, bvh, lane_order, any_hit, stack.top().node);
+                        let lane_hit = cpu_traverse_single_helper(min_max, lane_ray, bvh, lane_order, any_hit, stack.top().node);
                         if lane_hit.prim_id >= 0 {
                             store_hit(&mut hit, lane, lane_hit);
                             ray.tmax = rv_insert(ray.tmax, lane, select(any_hit, -flt_max, lane_hit.distance));
@@ -529,7 +529,8 @@ fn @cpu_traverse_hybrid_helper( ray_box_intrinsics: RayBoxIntrinsics
                 let child_id = node.child(k);
                 if unlikely(child_id == 0) { break() }
 
-                let (hit, tentry, _) = intersect_ray_box(ray_box_intrinsics, false, ray, node.bbox(k));
+                let (tentry, texit) = intersect_ray_box(min_max, false, ray, node.bbox(k));
+                let hit = tentry <= texit;
 
                 // Equivalent to rv_any(hit) but use MOVMASK instead of PTEST
                 if !rv_ballot(!hit) & ((1 << vector_width) - 1) != 0 {
@@ -590,7 +591,7 @@ fn @cpu_traverse_hybrid_helper( ray_box_intrinsics: RayBoxIntrinsics
     hit
 }
 
-fn @cpu_traverse_single( ray_box_intrinsics: RayBoxIntrinsics
+fn @cpu_traverse_single( min_max: MinMax
                        , ray_layout: RayLayout
                        , bvh: Bvh
                        , any_hit: bool
@@ -601,12 +602,12 @@ fn @cpu_traverse_single( ray_box_intrinsics: RayBoxIntrinsics
         let (packet_id, ray_id) = (i / ray_layout.packet_size, i % ray_layout.packet_size);
         let ray = ray_layout.read_ray(packet_id, ray_id);
         let order = bvh.order(ray_octant(ray));
-        let hit = cpu_traverse_single_helper(ray_box_intrinsics, ray, bvh, order, any_hit, root);
+        let hit = cpu_traverse_single_helper(min_max, ray, bvh, order, any_hit, root);
         ray_layout.write_hit(packet_id, ray_id, hit)
     }
 }
 
-fn @cpu_traverse_hybrid( ray_box_intrinsics: RayBoxIntrinsics
+fn @cpu_traverse_hybrid( min_max: MinMax
                        , ray_layout: RayLayout
                        , bvh: Bvh
                        , single: bool
@@ -619,7 +620,7 @@ fn @cpu_traverse_hybrid( ray_box_intrinsics: RayBoxIntrinsics
         for j in vectorize(vector_width, vector_width * sizeof[f32](), 0, vector_width) {
             let ray = ray_layout.read_ray(i, j);
             let order = bvh.order(ray_octant(ray));
-            let hit = cpu_traverse_hybrid_helper(ray_box_intrinsics, vector_width, ray, bvh, &order, single, any_hit, root);
+            let hit = cpu_traverse_hybrid_helper(min_max, vector_width, ray, bvh, &order, single, any_hit, root);
             ray_layout.write_hit(i, j, hit);
         }
     }
