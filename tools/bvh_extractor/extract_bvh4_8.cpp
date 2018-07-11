@@ -18,13 +18,13 @@ static void error_handler(void*, const RTCError code, const char* str) {
 
     std::cerr << "Embree error: ";
     switch (code) {
-        case RTC_ERROR_UNKNOWN:           std::cerr << "RTC_ERROR_UNKNOWN";       break;
-        case RTC_ERROR_INVALID_ARGUMENT:  std::cerr << "RTC_ERROR_INVALID_ARGUMENT";    break;
-        case RTC_ERROR_INVALID_OPERATION: std::cerr << "RTC_ERROR_INVALID_OPERATION";   break;
-        case RTC_ERROR_OUT_OF_MEMORY:     std::cerr << "RTC_ERROR_OUT_OF_MEMORY";       break;
-        case RTC_ERROR_UNSUPPORTED_CPU:   std::cerr << "RTC_ERROR_UNSUPPORTED_CPU";     break;
-        case RTC_ERROR_CANCELLED:         std::cerr << "RTC_ERROR_CANCELLED";           break;
-        default:                          std::cerr << "invalid error code";      break;
+        case RTC_ERROR_UNKNOWN:           std::cerr << "RTC_ERROR_UNKNOWN";           break;
+        case RTC_ERROR_INVALID_ARGUMENT:  std::cerr << "RTC_ERROR_INVALID_ARGUMENT";  break;
+        case RTC_ERROR_INVALID_OPERATION: std::cerr << "RTC_ERROR_INVALID_OPERATION"; break;
+        case RTC_ERROR_OUT_OF_MEMORY:     std::cerr << "RTC_ERROR_OUT_OF_MEMORY";     break;
+        case RTC_ERROR_UNSUPPORTED_CPU:   std::cerr << "RTC_ERROR_UNSUPPORTED_CPU";   break;
+        case RTC_ERROR_CANCELLED:         std::cerr << "RTC_ERROR_CANCELLED";         break;
+        default:                          std::cerr << "invalid error code";          break;
     }
 
     if (str) std::cerr << " (" << str << ")";
