@@ -1,17 +1,3 @@
-// Vectorizer intrinsics  ----------------------------------------------------------
-
-extern "C" {
-    fn rv_any(bool) -> bool;
-    fn rv_all(bool) -> bool;
-    fn rv_ballot(bool) -> i32;
-    fn rv_extract(f32, i32) -> f32;
-    fn rv_insert(f32, i32, f32) -> f32;
-    fn rv_load(&f32, i32) -> f32;
-    fn rv_store(&mut f32, i32, f32) -> ();
-    fn rv_shuffle(f32, i32) -> f32;
-    fn rv_align(&i8, i32)-> &i8;
-}
-
 // Misc. ---------------------------------------------------------------------------
 
 // Computes the indices of the bounding box corners for a given octant
@@ -35,37 +21,6 @@ fn @make_cpu_ordered_bbox(bounds_ptr: &[i8], k: i32, order: [i32 * 6], size: i32
     );
 
     make_bbox(make_vec3(xmin, ymin, zmin), make_vec3(xmax, ymax, zmax))
-}
-
-// Iterate over the bit that are set in a mask (assumes that mask != 0)
-fn one_bits(mask: i32, body: fn (i32) -> ()) -> () {
-    if mask != 0 {
-        let lane = cpu_ctz32(mask, true);
-        @@body(lane);
-        one_bits(mask & (mask - 1), body, return)
-    }
-}
-
-// Performs a horizontal reduction over vector lanes
-fn @reduce(value: f32, n: i32, op: fn (f32, f32) -> f32) -> f32 {
-    if (n >= 2) {
-        let m = n / 2;
-        reduce(op(value, rv_shuffle(value, m)), m, op)
-    } else {
-        value
-    }
-}
-
-// Prefetches a chunk of memory
-fn @prefetch_bytes(ptr: &[u8], bytes: i32) -> () {
-    for i in unroll_step(0, bytes, 64) {
-        cpu_prefetch(&ptr(i),  0 /* read */, 3 /* closest locality */, 1 /* data */);
-    }
-}
-
-// Returns the first vector lane index i for which value[i] == lane
-fn @index_of(value: f32, lane: f32) -> i32 {
-    cpu_ctz32(rv_ballot(value == lane), true)
 }
 
 // Load one ray from a packet of rays
@@ -140,7 +95,7 @@ fn @make_cpu_bvh4(bvh4: Bvh4) -> Bvh {
         order: @ |octant| make_cpu_octant_order(octant, 16),
         prefetch: @ |id| {
             let ptr = select(id < 0, &bvh4.tris(!id) as &[u8], &bvh4.nodes(id - 1) as &[u8]);
-            prefetch_bytes(ptr, 128)
+            cpu_prefetch_bytes(ptr, 128)
         },
         arity: 4,
         tri_size: 4
@@ -204,7 +159,7 @@ fn @make_cpu_bvh8_tri8(bvh8: Bvh8) -> Bvh {
         order: @ |octant| make_cpu_octant_order(octant, 32),
         prefetch: @ |id| {
             let ptr = select(id < 0, &bvh8.tris(!id) as &[u8], &bvh8.nodes(id - 1) as &[u8]);
-            prefetch_bytes(ptr, 256)
+            cpu_prefetch_bytes(ptr, 256)
         },
         arity: 8,
         tri_size: 8
@@ -218,7 +173,7 @@ fn @make_cpu_bvh8_tri4(bvh8tri4: Bvh8Tri4) -> Bvh {
         order: @ |octant| make_cpu_octant_order(octant, 32),
         prefetch: @ |id| {
             let ptr = select(id < 0, &bvh8tri4.tris(!id) as &[u8], &bvh8tri4.nodes(id - 1) as &[u8]);
-            prefetch_bytes(ptr, 256)
+            cpu_prefetch_bytes(ptr, 256)
         },
         arity: 8,
         tri_size: 4
@@ -384,7 +339,7 @@ fn @cpu_traverse_single_helper( min_max: MinMax
 
                 // Push intersected nodes on the stack
                 let mut n = 0;
-                for bit in one_bits(mask) {
+                for bit in cpu_one_bits(mask) {
                     let child_id = node.child(bit);
                     if unlikely(child_id == 0) { break() }
 
@@ -443,8 +398,8 @@ fn @cpu_traverse_single_helper( min_max: MinMax
                             }
                         } else if rv_any(found) {
                             let found_t = select(found, t, flt_max);
-                            let min_t = reduce(found_t, bvh.tri_size, min_max.fminf);
-                            let lane = index_of(found_t, min_t);
+                            let min_t = cpu_reduce(found_t, bvh.tri_size, min_max.fminf);
+                            let lane = cpu_index_of(found_t, min_t);
 
                             hit = make_hit(
                                 undef[i32](),
@@ -495,7 +450,7 @@ fn @cpu_traverse_hybrid_helper( min_max: MinMax
             if likely(mask != 0) {
                 if single && unlikely(cpu_popcount32(mask) <= switch_threshold) {
                     // Switch to single ray tracing when SIMD utilization is too low
-                    for lane in one_bits(mask) {
+                    for lane in cpu_one_bits(mask) {
                         let lane_ray = load_ray(&mut ray, lane);
                         let mut lane_order : [i32 * 6];
                         for i in unroll(0, 6) {

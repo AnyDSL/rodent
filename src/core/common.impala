@@ -36,6 +36,18 @@ extern "device" {
 fn @  likely(cond: bool) -> bool { expect(cond,  true) }
 fn @unlikely(cond: bool) -> bool { expect(cond, false) }
 
+fn @vectorized_range(vector_width: i32, a: i32, b: i32, body: fn (i32) -> ()) -> () {
+    let n_vec = round_down(b - a, vector_width);
+    if n_vec > 0 {
+        for i in vectorize(vector_width, sizeof[float](), a, a + n_vec) {
+            body(i)
+        }
+    }
+    for i in range(a + n_vec, b) {
+        body(i)
+    }
+}
+
 fn @once(body: fn () -> ()) -> () {
     @@body()
 }
@@ -61,6 +73,10 @@ fn @safe_rcp(x: f32) -> f32 {
 
 fn @round_up(n: i32, d: i32) -> i32 {
     n / d + (if n % d != 0 { 1 } else { 0 })
+}
+
+fn @round_down(n: i32, d: i32) -> i32 {
+    (n / d) * d
 }
 
 fn @ilog2(i: i32) -> i32 {
@@ -98,4 +114,16 @@ fn @fresnel_factor(n1: f32, n2: f32, cos_i: f32, cos_t: f32) -> f32 {
 fn @positive_cos(a: Vec3, b: Vec3) -> f32 {
     let cos = vec3_dot(a, b);
     if cos >= 0.0f { cos } else { 0.0f }
+}
+
+fn @swap_f32(a: &mut f32, b: &mut f32) -> () {
+    let tmp = *a;
+    *a = *b;
+    *b = tmp;
+}
+
+fn @swap_i32(a: &mut i32, b: &mut i32) -> () {
+    let tmp = *a;
+    *a = *b;
+    *b = tmp;
 }

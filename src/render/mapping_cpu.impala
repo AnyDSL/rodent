@@ -1,8 +1,468 @@
+// Driver functions ----------------------------------------------------------------
+
 extern "C" {
     fn rodent_cpu_get_bvh8_tri4(&mut Bvh8Tri4) -> ();
     fn rodent_cpu_get_film_data(&mut PixelData) -> ();
     fn rodent_cpu_load_tri_mesh(&[u8], &mut TriMesh) -> ();
     fn rodent_cpu_load_pixel_data(&[u8], &mut PixelData) -> ();
+    fn rodent_cpu_get_primary_stream(&mut PrimaryStream, i32) -> ();
+    fn rodent_cpu_get_secondary_stream(&mut SecondaryStream, i32) -> ();
+}
+
+// Ray streams ---------------------------------------------------------------------
+
+struct RayStream {
+    id: &mut [i32], // this field is also used to indicate if the ray is alive
+    org_x: &mut [f32],
+    org_y: &mut [f32],
+    org_z: &mut [f32],
+    dir_x: &mut [f32],
+    dir_y: &mut [f32],
+    dir_z: &mut [f32],
+    tmin: &mut [f32],
+    tmax: &mut [f32],
+}
+
+struct PrimaryStream {
+    size: i32,
+    capacity: i32,
+    rays: RayStream,
+    shader_id: &mut [i32],
+    geom_id: &mut [i32],
+    prim_id: &mut [i32],
+    t: &mut [f32],
+    u: &mut [f32],
+    v: &mut [f32],
+    rnd: &mut [RndState],
+    mis: &mut [f32],
+    color_r: &mut [f32],
+    color_g: &mut [f32],
+    color_b: &mut [f32],
+    contrib_r: &mut [f32],
+    contrib_g: &mut [f32],
+    contrib_b: &mut [f32],
+    depth: &mut [i32]
+}
+
+struct SecondaryStream {
+    size: i32,
+    capacity: i32,
+    rays: RayStream,
+    prim_id: &mut [i32],
+    color_r: &mut [f32],
+    color_g: &mut [f32],
+    color_b: &mut [f32]
+}
+
+fn @cpu_get_primary_state(primary: PrimaryStream, i: i32) -> RayState {
+    RayState {
+        rnd:     primary.rnd(i),
+        contrib: make_color(primary.contrib_r(i), primary.contrib_g(i), primary.contrib_b(i)),
+        mis:     primary.mis(i),
+        depth:   primary.depth(i)
+    }
+}
+
+fn @cpu_set_primary_state(primary: PrimaryStream, i: i32, state: RayState) -> () {
+    primary.rnd(i) = state.rnd;
+    primary.contrib_r(i) = state.contrib.r;
+    primary.contrib_g(i) = state.contrib.g;
+    primary.contrib_b(i) = state.contrib.b;
+    primary.mis(i) = state.mis;
+    primary.depth(i) = state.depth;
+}
+
+fn @make_cpu_ray_accesors(rays: RayStream) -> (fn (i32, i32) -> Ray, fn (i32, i32, Ray) -> ()) {
+    let read_ray = @ |i, j| {
+        let k = i * vector_width + j;
+        make_ray(
+            make_vec3(rays.org_x(k),
+                      rays.org_y(k),
+                      rays.org_z(k)),
+            make_vec3(rays.dir_x(k),
+                      rays.dir_y(k),
+                      rays.dir_z(k)),
+            rays.tmin(k),
+            rays.tmax(k)
+        )
+    };
+    let write_ray = @ |i, j| {
+        let k = i * vector_width + j;
+        rays.org_x(k) = ray.org.x;
+        rays.org_y(k) = ray.org.y;
+        rays.org_z(k) = ray.org.z;
+        rays.dir_x(k) = ray.dir.x;
+        rays.dir_y(k) = ray.dir.y;
+        rays.dir_z(k) = ray.dir.z;
+        rays.tmin(k)  = ray.tmin;
+        rays.tmax(k)  = ray.tmax;
+    };
+    (read_ray, write_ray)
+}
+
+fn @cpu_make_primary_ray_layout(primary: PrimaryStream, vector_width: i32) -> RayLayout {
+    let (read_ray, write_ray) = make_cpu_ray_accessors(primary.rays);
+    RayLayout {
+        packet_size: vector_width,
+        read_ray: read_ray,
+        write_ray: write_ray,
+        read_hit: @ |i, j| {
+            let k = i * vector_width + j;
+            make_hit(
+                primary.geom_id(k),
+                primary.prim_id(k),
+                primary.t(k),
+                make_vec2(primary.u(k),
+                          primary.v(k))
+            )
+        },
+        write_hit: @ |i, j, hit| {
+            let k = i * vector_width + j;
+            primary.geom_id(k) = hit.geom_id;
+            primary.prim_id(k) = hit.prim_id;
+            primary.t(k) = hit.distance;
+            primary.u(k) = hit.uv_coords.x;
+            primary.v(k) = hit.uv_coords.y;
+        }
+    }
+}
+
+fn @cpu_make_secondary_ray_layout(secondary: SecondaryStream, vector_width: i32) -> RayLayout {
+    let (read_ray, write_ray) = make_cpu_ray_accessors(secondary.rays);
+    RayLayout {
+        packet_size: vector_width,
+        read_ray: read_ray,
+        write_ray: write_ray,
+        read_hit: @ |i, j| {
+            let k = i * vector_width + j;
+            make_hit(-1, secondary.prim_id(k), 0.0f, make_vec2(0.0f, 0.0f))
+        },
+        write_hit: @ |i, j, hit| {
+            let k = i * vector_width + j;
+            secondary.prim_id(k) = hit.prim_id;
+        }
+    }
+}
+
+// Trace function ------------------------------------------------------------------
+
+fn @cpu_parallel_tiles( width: i32
+                      , height: i32
+                      , tile_width: i32
+                      , tile_height: i32
+                      , num_cores: i32
+                      , body: fn (i32, i32, i32, i32) -> ()) -> () {
+    let num_tiles_x = round_up(width , tile_width);
+    let num_tiles_y = round_up(height, tile_height);
+    let num_tiles = num_tiles_x * num_tiles_y;
+    let tiles_div = make_fast_div(num_tiles_x as u32);
+
+    for i in parallel(0, 0, num_tiles) {
+        let y = fast_div(tiles_div, i as u32) as i32;
+        let x = i - num_tiles_x * y;
+        let xmin = x * tile_width;
+        let ymin = y * tile_height;
+        let xmax = cpu_intrinsics.min(xmin + tile_width,  width);
+        let ymax = cpu_intrinsics.min(ymin + tile_height, height);
+        @@body(xmin, ymin, xmax, ymax);
+    }
+}
+
+fn @cpu_sort_primary(scene: Scene, primary: PrimaryStream, ray_begins: &mut [i32], ray_ends: &mut[i32]) -> () {
+    let primary_layout_as_ray1 = cpu_make_primary_ray_layout(primary, 1);
+
+    // Compute shader ids
+    for i in vectorized_range(0, primary.size) {
+        let mut shader_id = scene.num_shaders;
+        let hit = primary_layout_as_ray1.read_hit(i);
+        if hit.geom_id >= 0 {
+           shader_id = scene.geometries(hit.geom_id).shader_id(hit);
+        } 
+        primary.shader_id(i) = shader_id;
+    }
+
+    // Count the number of rays per shader
+    for i in range(0, scene.num_shaders + 1) {
+        ray_ends(i) = 0;
+    }
+    for i in range(0, primary.size) {
+        ray_ends(primary.shader_id(i))++;
+    }
+    // Compute scan over shader bins
+    let mut n = 0;
+    for i in range(0, scene.num_shaders + 1) {
+        ray_begins(i) = n;
+        n += ray_ends(i);
+        ray_ends(i) = n;
+    }
+
+    // Sort by shader
+    for i in range(0, scene.num_shaders) {
+        let (begin, end) = (ray_begins(i), ray_ends(i + 1));
+        let mut j = begin;
+        while j < end {
+            let shader_id = primary.shader_id(i);
+            if shader_id != i {
+                let k = ray_begins(shader_id)++;
+
+                swap_i32(&mut primary.rays.id(k),    &mut primary.rays.id(j));
+                swap_f32(&mut primary.rays.org_x(k), &mut primary.rays.org_x(j));
+                swap_f32(&mut primary.rays.org_y(k), &mut primary.rays.org_y(j));
+                swap_f32(&mut primary.rays.org_z(k), &mut primary.rays.org_z(j));
+                swap_f32(&mut primary.rays.dir_x(k), &mut primary.rays.dir_x(j));
+                swap_f32(&mut primary.rays.dir_y(k), &mut primary.rays.dir_y(j));
+                swap_f32(&mut primary.rays.dir_z(k), &mut primary.rays.dir_z(j));
+                swap_f32(&mut primary.rays.tmin(k),  &mut primary.rays.tmin(j));
+                swap_f32(&mut primary.rays.tmax(k),  &mut primary.rays.tmax(j));
+
+                swap_i32(&mut primary.shader_id(k), &mut primary.shader_id(j));
+                swap_i32(&mut primary.geom_id(k),   &mut primary.geom_id(j));
+                swap_i32(&mut primary.prim_id(k),   &mut primary.prim_id(j));
+                swap_f32(&mut primary.t(k),         &mut primary.t(j));
+                swap_f32(&mut primary.u(k),         &mut primary.u(j));
+                swap_f32(&mut primary.v(k),         &mut primary.v(j));
+                swap_i32(&mut primary.rnd(k),       &mut primary.rnd(j));
+                swap_f32(&mut primary.mis(k),       &mut primary.mis(j));
+                swap_f32(&mut primary.color_r(k),   &mut primary.color_r(j));
+                swap_f32(&mut primary.color_g(k),   &mut primary.color_g(j));
+                swap_f32(&mut primary.color_b(k),   &mut primary.color_b(j));
+                swap_f32(&mut primary.contrib_r(k), &mut primary.contrib_r(j));
+                swap_f32(&mut primary.contrib_g(k), &mut primary.contrib_g(j));
+                swap_f32(&mut primary.contrib_b(k), &mut primary.contrib_b(j));
+                swap_i32(&mut primary.depth(k),     &mut primary.depth(j));
+            } else {
+                j++;
+            }
+        }
+    }
+
+    // Resize ray stream
+    primary.size = ray_ends(scene.num_shaders - 1);
+}
+
+fn @cpu_permute_ray_stream(rays: RayStream, i: i32, j: i32, perm: Perm) -> () {
+    rays.org_x(i) = cpu_permute_f32(rays.org_x(j), perm);
+    rays.org_y(i) = cpu_permute_f32(rays.org_y(j), perm);
+    rays.org_z(i) = cpu_permute_f32(rays.org_z(j), perm);
+    rays.dir_x(i) = cpu_permute_f32(rays.dir_x(j), perm);
+    rays.dir_y(i) = cpu_permute_f32(rays.dir_y(j), perm);
+    rays.dir_z(i) = cpu_permute_f32(rays.dir_z(j), perm);
+    rays.tmin(i)  = cpu_permute_f32(rays.tmin(j), perm);
+    rays.tmax(i)  = cpu_permute_f32(rays.tmax(j), perm);
+}
+
+fn @cpu_compact_primary(primary: PrimaryStream) -> (i32, i32) {
+    let lut = generate_compaction_lut();
+    let prev_size = primary.size;
+    let mut k = 0;
+    for i in range_step(0, primary.size, 8) {
+        for j in vectorize(8, sizeof[float](), 0, 8) {
+            let id = primary.id(i + j);
+            let mask = rv_ballot(id >= 0);
+            let perm = lut(mask);
+
+            primary.rays.id(k + j)    = cpu_permute_i32(id, perm);
+
+            cpu_permute_ray_stream(primary.rays, k + j, i + j, perm);
+
+            primary.shader_id(k + j) = cpu_permute_i32(primary.shader_id(i + j), perm);
+            primary.geom_id(k + j)   = cpu_permute_i32(primary.geom_id(i + j), perm);
+            primary.prim_id(k + j)   = cpu_permute_i32(primary.prim_id(i + j), perm);
+            primary.t(k + j)         = cpu_permute_f32(primary.t(i + j), perm);
+            primary.u(k + j)         = cpu_permute_f32(primary.u(i + j), perm);
+            primary.v(k + j)         = cpu_permute_f32(primary.v(i + j), perm);
+            primary.rnd(k + j)       = cpu_permute_i32(primary.rnd(i + j), perm);
+            primary.mis(k + j)       = cpu_permute_f32(primary.mis(i + j), perm);
+            primary.color_r(k + j)   = cpu_permute_f32(primary.color_r(i + j), perm);
+            primary.color_g(k + j)   = cpu_permute_f32(primary.color_g(i + j), perm);
+            primary.color_b(k + j)   = cpu_permute_f32(primary.color_b(i + j), perm);
+            primary.contrib_r(k + j) = cpu_permute_f32(primary.contrib_r(i + j), perm);
+            primary.contrib_g(k + j) = cpu_permute_f32(primary.contrib_g(i + j), perm);
+            primary.contrib_b(k + j) = cpu_permute_f32(primary.contrib_b(i + j), perm);
+            primary.depth(k + j)     = cpu_permute_i32(primary.depth(i + j), perm);
+
+            k += cpu_popcount32(mask);
+        }
+    }
+    (k, prev_size)
+}
+
+fn @cpu_compact_secondary(secondary: SecondaryStream) -> (i32, i32) {
+    let lut = generate_compaction_lut();
+    let prev_size = secondary.size;
+    let mut k = 0;
+    for i in range_step(0, secondary.size, 8) {
+        for j in vectorize(8, sizeof[float](), 0, 8) {
+            let id = secondary.id(i + j);
+            let mask = rv_ballot(id >= 0);
+            let perm = lut(mask);
+
+            secondary.rays.id(k + j) = cpu_permute_i32(id, perm);
+
+            cpu_permute_ray_stream(secondary.rays, k + j, i + j, perm);
+
+            secondary.prim_id(k + j)   = cpu_permute_i32(secondary.prim_id(i + j), perm);
+            secondary.color_r(k + j)   = cpu_permute_f32(secondary.color_r(i + j), perm);
+            secondary.color_g(k + j)   = cpu_permute_f32(secondary.color_g(i + j), perm);
+            secondary.color_b(k + j)   = cpu_permute_f32(secondary.color_b(i + j), perm);
+
+            k += cpu_popcount32(mask);
+        }
+    }
+    (k, prev_size)
+}
+
+fn @cpu_generate_rays( primary: PrimaryStream
+                     , path_tracer: PathTracer
+                     , id: &mut i32
+                     , xmin: i32
+                     , ymin: i32
+                     , tile_size: i32
+                     , film_width: i32
+                     , film_height: i32
+                     ) -> () {
+
+}
+
+fn @cpu_trace( scene: Scene
+             , path_tracer: PathTracer
+             , min_max: MinMax
+             , single: bool
+             , tile_size: i32
+             , num_cores: i32
+             , vector_width: i32
+             ) -> () {
+    let mut film_data : FilmData;
+    let mut bvh8tri4  : Bvh8Tri4;
+    rodent_cpu_get_film_data(&mut film_data);
+    rodent_cpu_get_bvh8_tri4(&mut bvh8tri4);
+
+    let bvh = make_cpu_bvh8_tri4(bvh8tri4);
+    for xmin, ymin, xmax, ymax in cpu_parallel_tiles(film_data.width, film_data.height, tile_size, tile_size, num_cores) {
+        // Get ray streams/states from the CPU driver
+        let mut primary   : PrimaryStream;
+        let mut secondary : SecondaryStream;
+        rodent_cpu_get_primary_stream(&primary,     tile_size * tile_size);
+        rodent_cpu_get_secondary_stream(&secondary, tile_size * tile_size);
+
+        // Make them look like packets to the traversal interface
+        let primary_layout           = cpu_make_primary_ray_layout(primary,     vector_width);
+        let primary_layout_as_ray1   = cpu_make_primary_ray_layout(primary,     1);
+        let secondary_layout         = cpu_make_secondary_ray_layout(secondary, vector_width);
+        let secondary_layout_as_ray1 = cpu_make_secondary_ray_layout(secondary, 1);
+
+        let mut id = 0;
+        let num_rays = tile_size * tile_size;
+        while id < num_rays {
+            // (Re-)generate primary rays
+            if primary.size < primary.capacity {
+                cpu_generate_rays(primary, path_tracer, &mut id, xmin, ymin, tile_size, film_data.width, film_data.height);
+            }
+
+            // Trace primary rays
+            cpu_traverse_hybrid(
+                min_max,
+                primary_layout,
+                bvh,
+                single,
+                false,
+                vector_width,
+                1);
+
+            // Sort hits by shader id, and filter invalid hits
+            let mut ray_begins : [i32 * 1024];
+            let mut ray_ends   : [i32 * 1024];
+            let dead_end = primary.size;
+            cpu_sort_primary(scene, primary, &mut ray_begins, &mut ray_ends);
+
+            // Perform (vectorized) shading
+            for shader_id in unroll(0, scene.num_shaders) {
+                let shader = scene.shaders(shader_id);
+                for i in vectorized_range(ray_begins(shader_id), ray_ends(shader_id + 1)) {
+                    let ray = primary_layout_as_ray1.read_ray(i, 0);
+                    let hit = primary_layout_as_ray1.read_hit(i, 0);
+                    let mut state = cpu_get_primary_state(primary, i);
+                    let id = primary.id(i);
+
+                    let geom = scene.geometries(hit.geom_id);
+                    let surf = geom.surface_element(intrinsics, ray, hit);
+                    let mat = shader(intrinsics, scene, surf);
+
+                    for once() {
+                        // Execute hit point shading
+                        @@(eye_tracer.on_hit)(ray, hit, &mut state, surf, mat, @ |color| -> ! {
+                            primary.color_r(i) += color.r;
+                            primary.color_g(i) += color.g;
+                            primary.color_b(i) += color.b;
+                            break()
+                        });
+                    }
+                    for once() {
+                        // Compute shadow rays
+                        @@(eye_tracer.on_shadow)(loaded_ray, loaded_hit, &mut state, surf, mat, @ |ray, color| -> ! {
+                            secondary_layout_as_ray1.write_ray(i, ray);
+                            secondary.color_r(i) = color.r;
+                            secondary.color_g(i) = color.g;
+                            secondary.color_b(i) = color.b;
+                            secondary.id(i) = id;
+                            break()
+                        });
+                        secondary.id(i) = -1;
+                    }
+                    for once() {
+                        // Sample new rays
+                        @@(eye_tracer.on_bounce)(loaded_ray, loaded_hit, &mut state, surf, mat, @ |new_ray, new_state| -> ! {
+                            primary_layout_as_ray1.write_ray(i, 0, new_ray);
+                            cpu_set_primary_state(primary, i, new_state);
+                            break()
+                        }, @ || -> ! {
+                            primary.id(i) = -1;
+                            break()
+                        })
+                    }
+                }
+            }
+
+            // Filter terminated rays, and add contribution to the frame buffer
+            cpu_compact_primary(primary);
+            let dead_begin = primary.size;
+            for i in range(dead_begin, dead_end) {
+                let j = primary.id(i);
+                let r = primary.color_r(i);
+                let g = primary.color_g(i);
+                let b = primary.color_b(i);
+                film_data.pixels(j).r += r;
+                film_data.pixels(j).g += g;
+                film_data.pixels(j).b += b;
+            }
+
+            // Compact and trace secondary rays
+            cpu_compact_secondary(secondary);
+            if likely(secondary.size > 0) {
+                cpu_traverse_hybrid(
+                    min_max,
+                    secondary_layout,
+                    bvh,
+                    single,
+                    true,
+                    vector_width,
+                    1);
+            }
+
+            // Add the contribution for secondary rays to the frame buffer
+            for i in range(0, secondary.size) {
+                if secondary.prim_id(i) < 0 {
+                    let j = secondary.id(i);
+                    let r = secondary.color_r(i);
+                    let g = secondary.color_g(i);
+                    let b = secondary.color_b(i);
+                    film_data.pixels(j).r += r;
+                    film_data.pixels(j).g += g;
+                    film_data.pixels(j).b += b;
+                }
+            }
+        }
+    }
 }
 
 fn @make_cpu_mesh_loader() -> fn (&[u8]) -> Geometry {
@@ -21,195 +481,10 @@ fn @make_cpu_image_loader() -> fn (&[u8]) -> Image {
     }
 }
 
-fn @make_cpu_ray_packet(vector_width: i32) -> RayLayout {
-    if vector_width == 4 {
-        let mut rays : [Ray4SoA * 1];
-        let mut hits : [Hit4SoA * 1];
-        make_cpu_ray4_layout(&mut rays, &mut hits)
-    } else /* if vector_width == 8 */ {
-        let mut rays : [Ray8SoA * 1];
-        let mut hits : [Hit8SoA * 1];
-        make_cpu_ray8_layout(&mut rays, &mut hits)
-    }
-}
-
-fn @cpu_parallel_tiles( width: i32
-                      , height: i32
-                      , tile_width: i32
-                      , tile_height: i32
-                      , body: fn (i32, i32, i32, i32) -> ()) -> () {
-    let num_tiles_x = round_up(width , tile_width);
-    let num_tiles_y = round_up(height, tile_height);
-    let num_tiles = num_tiles_x * num_tiles_y;
-    let tiles_div = make_fast_div(num_tiles_x as u32);
-
-    for i in parallel(0, 0, num_tiles) {
-        let y = fast_div(tiles_div, i as u32) as i32;
-        let x = i - num_tiles_x * y;
-        let xmin = x * tile_width;
-        let ymin = y * tile_height;
-        let xmax = cpu_intrinsics.min(xmin + tile_width,  width);
-        let ymax = cpu_intrinsics.min(ymin + tile_height, height);
-        @@body(xmin, ymin, xmax, ymax);
-    }
-}
-
-fn @vector_scan(value: i32, j: i32, step: i32) -> i32 {
-    if step == 1 {
-        value
-    } else {
-        let new_step = step / 2;
-        let new_value = value + select(j >= new_step, bitcast[i32](rv_shuffle(bitcast[f32](value), -new_step)), 0);
-        vector_scan(new_value, j, new_step)
-    }
-}
-
-fn @cpu_eye_trace(scene: Scene, eye_tracer: EyeTracer) -> () {
-    let tile_size = 32;
-    let vector_width = 8;
-    let single_ray = true;
-
-    let mut film_data;
-    rodent_cpu_get_film_data(&mut film_data);
-
-    let mut bvh8tri4;
-    rodent_cpu_get_bvh8_tri4(&mut bvh8tri4);
-
-    let bvh = make_cpu_bvh8_tri4(bvh8tri4);
-    let width_div = make_fast_div(film_data.width as u32);
-
-    for xmin, ymin, xmax, ymax in cpu_parallel_tiles(film_data.width, film_data.height, tile_size, tile_size) {
-        let ray_box_intrinsics = make_cpu_int_min_max();
-        let primary_layout = make_cpu_ray_packet(vector_width);
-        let shadow_layout  = make_cpu_ray_packet(vector_width);
-        let tile_div = make_fast_div((xmax - xmin) as u32);
-        let k_max = (xmax - xmin) * (ymax - ymin);
-
-        for j in vectorize(vector_width, 32, 0, vector_width) {
-            let mut color : Color;
-            let mut pixel : i32;
-            let mut state : RayState;
-            let mut alive = false;
-            let mut k = 0;
-
-            let accumulate = @ |c| {
-                color.r += c.r;
-                color.g += c.g;
-                color.b += c.b;
-            };
-
-            while k < k_max || rv_any(alive) {
-                // Ray regeneration
-                let regen = !alive & (k + j < k_max);
-                let ray_id = vector_scan(select(regen, 1, 0), j, vector_width) - 1;
-                if regen {
-                    // Compute the position of the pixel in the tile
-                    let in_tile_y = fast_div(tile_div, (k + ray_id) as u32) as i32;
-                    let in_tile_x = k + ray_id - (xmax - xmin) * in_tile_y;
-                    let x = xmin + in_tile_x;
-                    let y = ymin + in_tile_y;
-                    let new_pixel = y * film_data.width + x;
-                    let (new_ray, new_state) = @@(eye_tracer.on_emit)(x, y, film_data.width, film_data.height);
-
-                    primary_layout.write_ray(0, j, new_ray);
-                    color = make_color(0.0f, 0.0f, 0.0f);
-                    pixel = new_pixel;
-                    state = new_state;
-                    alive = true;
-                }
-                k += cpu_popcount32(rv_ballot(regen));
-
-                // Primary ray traversal
-                cpu_traverse_hybrid(
-                    ray_box_intrinsics,
-                    primary_layout,
-                    bvh,
-                    single_ray,
-                    false,
-                    vector_width,
-                    1);
-
-                let loaded_ray = primary_layout.read_ray(0, j);
-                let loaded_hit = primary_layout.read_hit(0, j);
-
-                // Kill rays that have not hit anything
-                let prev_alive = alive;
-                alive &= loaded_hit.prim_id >= 0;
-
-                // Compute surface parameters
-                let (surf, mat) = if alive {
-                    compute_surface_parameters(cpu_intrinsics, scene, loaded_ray, loaded_hit)
-                } else {
-                    make_dummy_surface_parameters()
-                };
-
-                // Shading
-                let mut shadow_needed = false;
-                let mut shadow_color : Color;
-                if alive {
-                    for once() {
-                        @@(eye_tracer.on_hit)(loaded_ray, loaded_hit, &mut state, surf, mat, @ |color| -> ! {
-                            accumulate(color);
-                            break()
-                        })
-                    }
-                    for once() {
-                        @@(eye_tracer.on_shadow)(loaded_ray, loaded_hit, &mut state, surf, mat, @ |ray, color| -> ! {
-                            shadow_layout.write_ray(0, j, ray);
-                            shadow_needed = true;
-                            shadow_color  = color;
-                            break()
-                        });
-                    }
-                }
-
-                // Shadow ray traversal
-                if rv_any(shadow_needed) {
-                    cpu_traverse_hybrid(
-                        ray_box_intrinsics,
-                        shadow_layout,
-                        bvh,
-                        single_ray,
-                        true,
-                        vector_width,
-                        1);
-
-                    let loaded_shadow_hit = shadow_layout.read_hit(0, j);
-                    if shadow_needed & (loaded_shadow_hit.prim_id < 0) {
-                        accumulate(shadow_color);
-                    }
-                }
-
-                // Bounces
-                if alive {
-                    for once() {
-                        @@(eye_tracer.on_bounce)(loaded_ray, loaded_hit, &mut state, surf, mat, @ |new_ray, new_state| -> ! {
-                            primary_layout.write_ray(0, j, new_ray);
-                            state = new_state;
-                            break()
-                        }, @ || -> ! {
-                            alive = false;
-                            break()
-                        })
-                    }
-                }
-
-                // For every path that just died
-                for i in one_bits(rv_ballot(prev_alive & !alive)) {
-                    let j = bitcast[i32](rv_extract(bitcast[f32](pixel), i));
-                    film_data.pixels(j).r += rv_extract(color.r, i);
-                    film_data.pixels(j).g += rv_extract(color.g, i);
-                    film_data.pixels(j).b += rv_extract(color.b, i);
-                }
-            }
-        }
-    }
-}
-
 fn @make_cpu_device() -> Device {
     Device {
         intrinsics: cpu_intrinsics,
-        eye_trace:  cpu_eye_trace,
+        trace:      cpu_trace,
         load_mesh:  make_cpu_mesh_loader(),
         load_image: make_cpu_image_loader()
     }

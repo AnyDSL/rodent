@@ -1,4 +1,4 @@
-struct EyeTracer {
+struct PathTracer {
     on_emit:   fn (i32, i32, i32, i32) -> (Ray, RayState),
     on_hit:    fn (Ray, Hit, &mut RayState, SurfaceElement, Material, fn (Color) -> !) -> (),
     on_shadow: fn (Ray, Hit, &mut RayState, SurfaceElement, Material, fn (Ray, Color) -> !) -> (),
@@ -49,18 +49,18 @@ fn @make_debug_renderer() -> Renderer {
             accumulate(color_mulf(white, -vec3_dot(ray.dir, surf.local.col(2))))
         };
 
-        let eye_tracer = EyeTracer {
+        let path_tracer = PathTracer {
             on_emit:   on_emit,
             on_hit:    on_hit,
             on_shadow: on_shadow,
             on_bounce: on_bounce
         };
 
-        device.eye_trace(scene, eye_tracer);
+        device.trace(scene, path_tracer);
     }
 }
 
-fn @make_path_tracer(max_path_len: i32) -> Renderer {
+fn @make_path_tracing_renderer(max_path_len: i32) -> Renderer {
     @ |scene, device, iter| {
         let offset = 0.001f;
         let pdf_lightpick = 1.0f / (scene.num_lights as f32);
@@ -144,13 +144,13 @@ fn @make_path_tracer(max_path_len: i32) -> Renderer {
             )
         }
 
-        let eye_tracer = EyeTracer {
+        let path_tracer = PathTracer {
             on_emit:   on_emit,
             on_hit:    on_hit,
             on_shadow: on_shadow,
             on_bounce: on_bounce
         };
 
-        device.eye_trace(scene, eye_tracer);
+        device.trace(scene, path_tracer);
     }
 }

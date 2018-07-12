@@ -3,7 +3,7 @@ fn @diffuse_shader(math: Intrinsics, scene: Scene, surf: SurfaceElement) -> Mate
         make_repeat_border(),
         make_bilinear_filter(),
         scene.images(0));
-    let bsdf = make_diffuse_bsdf(surf, make_color(0.5f, 0.5f, 0.5f)/*texture(surf.uv_coords)*/);
+    let bsdf = make_diffuse_bsdf(surf, texture(surf.uv_coords));
     make_material(bsdf)
 }
 
@@ -18,7 +18,7 @@ struct Settings {
 
 extern fn render(settings: &Settings, iter: i32) -> () {
     let device   = make_cpu_device();
-    let renderer = make_path_tracer(64);
+    let renderer = make_path_tracing_renderer(64);
     let image    = device.load_image("data/textures/wall.png");
     let tri_mesh = device.load_mesh("data/cube.obj");
 

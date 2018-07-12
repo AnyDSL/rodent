@@ -1,0 +1,97 @@
+// Vectorizer intrinsics  ----------------------------------------------------------
+
+extern "C" {
+    fn rv_any(bool) -> bool;
+    fn rv_all(bool) -> bool;
+    fn rv_ballot(bool) -> i32;
+    fn rv_extract(f32, i32) -> f32;
+    fn rv_insert(f32, i32, f32) -> f32;
+    fn rv_load(&f32, i32) -> f32;
+    fn rv_store(&mut f32, i32, f32) -> ();
+    fn rv_shuffle(f32, i32) -> f32;
+    fn rv_align(&i8, i32)-> &i8;
+}
+
+// Permutations --------------------------------------------------------------------
+
+type Perm = simd[i32 * 8];
+
+// Creates the identity permutation
+fn @make_id_perm() -> Perm { simd[0, 1, 2, 3, 4, 5, 6, 7] }
+
+// Applies a permutation to a vector
+fn @cpu_permute_f32(value: f32, perm: Perm) -> f32 {
+    fn @fold(cur: f32, i: i32) -> f32 {
+        if i < 8 {
+            fold(rv_insert(cur, i, rv_extract(value, perm(i))), i + 1)
+        } else {
+            cur
+        }
+    }
+    fold(value, 0)
+}
+
+fn @cpu_permute_i32(val: i32, perm: Perm) -> i32 {
+    bitcast[i32](cpu_permute_f32(bitcast[f32](val), perm))
+}
+
+// Generates an entry of the table of permutations for compaction
+fn @generate_compaction_lut_entry(case: i32) -> Perm {
+    fn @fold(cur: Perm, i: i32, j: i32) -> Perm {
+        if i < 8 {
+            if (case & (1 << i)) != 0 {
+                fold(insert(cur, j, i), i + 1, j + 1)
+            } else {
+                fold(cur, i + 1, j)
+            }
+        } else {
+            cur
+        }
+    }
+    fold(make_id_perm(), 0, 0)
+}
+
+// Generates a table of permutations for compaction
+fn @generate_compaction_lut() -> [Perm * 256] {
+    fn @fold(cur: [Perm * 256], i: i32) -> [Perm * 256] {
+        if i < 256 {
+            fold(insert(cur, i, generate_compaction_lut_entry(i)), i + 1)
+        } else {
+            cur
+        }
+    }
+    fold([make_id_perm(),..256], 0)
+}
+
+// Misc. ---------------------------------------------------------------------------
+
+// Iterate over the bit that are set in a mask (assumes that mask != 0)
+fn cpu_one_bits(mask: i32, body: fn (i32) -> ()) -> () {
+    if mask != 0 {
+        let lane = cpu_ctz32(mask, true);
+        @@body(lane);
+        cpu_one_bits(mask & (mask - 1), body, return)
+    }
+}
+
+// Performs a horizontal reduction over vector lanes
+fn @cpu_reduce(value: f32, n: i32, op: fn (f32, f32) -> f32) -> f32 {
+    if (n >= 2) {
+        let m = n / 2;
+        cpu_reduce(op(value, rv_shuffle(value, m)), m, op)
+    } else {
+        value
+    }
+}
+
+// Prefetches a chunk of memory
+fn @cpu_prefetch_bytes(ptr: &[u8], bytes: i32) -> () {
+    for i in unroll_step(0, bytes, 64) {
+        cpu_prefetch(&ptr(i),  0 /* read */, 3 /* closest locality */, 1 /* data */);
+    }
+}
+
+// Returns the first vector lane index i for which value[i] == lane
+fn @cpu_index_of(value: f32, lane: f32) -> i32 {
+    cpu_ctz32(rv_ballot(value == lane), true)
+}

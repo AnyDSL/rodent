@@ -18,6 +18,7 @@ set(RODENT_SRCS
     main.impala
     core/color.impala
     core/common.impala
+    core/cpu_common.impala
     core/image.impala
     core/matrix.impala
     core/random.impala

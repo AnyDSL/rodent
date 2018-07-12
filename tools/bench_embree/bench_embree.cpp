@@ -380,7 +380,7 @@ int main(int argc, char** argv) {
 
     auto num_rays = single_ray
         ? (any_hit ? rays1.size() : rayhits1.size())
-        : (any_hit ? rays8.size() : rayhits8.size() * 8);
+        : (any_hit ? rays8.size() : rayhits8.size()) * 8;
     std::cout << num_rays << " ray(s) in the distribution file." << std::endl;
 
     bench(bvh_width, tris, iter_fn, count_hits, iters, warmup, num_rays);
