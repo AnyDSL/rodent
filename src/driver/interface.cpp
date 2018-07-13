@@ -615,6 +615,54 @@ extern "C" void rodent_cpu_load_pixel_data(const char* file, PixelData* pixel_da
     *pixel_data = cpu_interface->image(file);
 }
 
+static void cpu_get_ray_stream(RayStream& rays, float* ptr, size_t capacity) {
+    rays.id = (int*)ptr + 0 * capacity;
+    rays.org_x = ptr + 1 * capacity;
+    rays.org_y = ptr + 2 * capacity;
+    rays.org_z = ptr + 3 * capacity;
+    rays.dir_x = ptr + 4 * capacity;
+    rays.dir_y = ptr + 5 * capacity;
+    rays.dir_z = ptr + 6 * capacity;
+    rays.tmin  = ptr + 7 * capacity;
+    rays.tmax  = ptr + 8 * capacity;
+}
+
+extern "C" void rodent_cpu_get_primary_stream(PrimaryStream* primary, int size) {
+    static thread_local anydsl::Array<float> array;
+    size_t capacity = (size & ~((1 << 5) - 1)) + 32; // round to 32
+    if (array.size() < capacity)
+        array = std::move(anydsl::Array<float>(capacity * 21));
+
+    primary->size = 0;
+    cpu_get_ray_stream(primary->rays, array.data(), capacity);
+    primary->shader_id = (int*)array.data() +  9 * capacity;
+    primary->geom_id   = (int*)array.data() + 10 * capacity;
+    primary->prim_id   = (int*)array.data() + 11 * capacity;
+    primary->t         = array.data() + 12 * capacity;
+    primary->u         = array.data() + 13 * capacity;
+    primary->v         = array.data() + 14 * capacity;
+    primary->rnd       = (unsigned int*)array.data() + 15 * capacity;
+    primary->mis       = array.data() + 16 * capacity;
+    primary->contrib_r = array.data() + 17 * capacity;
+    primary->contrib_g = array.data() + 18 * capacity;
+    primary->contrib_b = array.data() + 19 * capacity;
+    primary->depth     = (int*)array.data() + 20 * capacity;
+}
+
+extern "C" void rodent_cpu_get_secondary_stream(SecondaryStream* secondary, int size) {
+    static thread_local anydsl::Array<float> array;
+    size_t capacity = (size & ~((1 << 5) - 1)) + 32; // round to 32
+    if (array.size() < capacity)
+        array = std::move(anydsl::Array<float>(capacity * 13));
+
+    secondary->size = 0;
+    cpu_get_ray_stream(secondary->rays, array.data(), capacity);
+    secondary->prim_id   = (int*)array.data() + 9 * capacity;
+    secondary->color_r   = array.data() + 10 * capacity;
+    secondary->color_g   = array.data() + 11 * capacity;
+    secondary->color_b   = array.data() + 12 * capacity;
+}
+
 // GPU Interface -------------------------------------------------------------------
 
 // TODO

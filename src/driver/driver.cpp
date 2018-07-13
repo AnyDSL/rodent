@@ -151,7 +151,7 @@ int main(int argc, char** argv) {
     setup_cpu_interface(width, height);
 
     Camera cam(
-        float3(0.0f, 0.0f, 10.0f),
+        float3(0.0f, 0.0f, 1.8f),
         float3(0.0f, 0.0f, -1.0f),
         float3(0.0f, 1.0f, 0.0f),
         60.0f,

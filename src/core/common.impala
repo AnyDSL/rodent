@@ -36,18 +36,6 @@ extern "device" {
 fn @  likely(cond: bool) -> bool { expect(cond,  true) }
 fn @unlikely(cond: bool) -> bool { expect(cond, false) }
 
-fn @vectorized_range(vector_width: i32, a: i32, b: i32, body: fn (i32) -> ()) -> () {
-    let n_vec = round_down(b - a, vector_width);
-    if n_vec > 0 {
-        for i in vectorize(vector_width, sizeof[float](), a, a + n_vec) {
-            body(i)
-        }
-    }
-    for i in range(a + n_vec, b) {
-        body(i)
-    }
-}
-
 fn @once(body: fn () -> ()) -> () {
     @@body()
 }
@@ -72,7 +60,8 @@ fn @safe_rcp(x: f32) -> f32 {
 }
 
 fn @round_up(n: i32, d: i32) -> i32 {
-    n / d + (if n % d != 0 { 1 } else { 0 })
+    let m = n % d;
+    n + (if m != 0 { d - m } else { 0 })
 }
 
 fn @round_down(n: i32, d: i32) -> i32 {

@@ -25,7 +25,6 @@ struct RayStream {
 
 struct PrimaryStream {
     size: i32,
-    capacity: i32,
     rays: RayStream,
     shader_id: &mut [i32],
     geom_id: &mut [i32],
@@ -35,9 +34,6 @@ struct PrimaryStream {
     v: &mut [f32],
     rnd: &mut [RndState],
     mis: &mut [f32],
-    color_r: &mut [f32],
-    color_g: &mut [f32],
-    color_b: &mut [f32],
     contrib_r: &mut [f32],
     contrib_g: &mut [f32],
     contrib_b: &mut [f32],
@@ -46,7 +42,6 @@ struct PrimaryStream {
 
 struct SecondaryStream {
     size: i32,
-    capacity: i32,
     rays: RayStream,
     prim_id: &mut [i32],
     color_r: &mut [f32],
@@ -64,12 +59,12 @@ fn @cpu_get_primary_state(primary: PrimaryStream, i: i32) -> RayState {
 }
 
 fn @cpu_set_primary_state(primary: PrimaryStream, i: i32, state: RayState) -> () {
-    primary.rnd(i) = state.rnd;
+    primary.rnd(i)       = state.rnd;
     primary.contrib_r(i) = state.contrib.r;
     primary.contrib_g(i) = state.contrib.g;
     primary.contrib_b(i) = state.contrib.b;
-    primary.mis(i) = state.mis;
-    primary.depth(i) = state.depth;
+    primary.mis(i)       = state.mis;
+    primary.depth(i)     = state.depth;
 }
 
 fn @make_cpu_ray_accessors(rays: RayStream, vector_width: i32) -> (fn (i32, i32) -> Ray, fn (i32, i32, Ray) -> ()) {
@@ -120,9 +115,9 @@ fn @make_cpu_primary_ray_layout(primary: PrimaryStream, vector_width: i32) -> Ra
             let k = i * vector_width + j;
             primary.geom_id(k) = hit.geom_id;
             primary.prim_id(k) = hit.prim_id;
-            primary.t(k) = hit.distance;
-            primary.u(k) = hit.uv_coords.x;
-            primary.v(k) = hit.uv_coords.y;
+            primary.t(k)       = hit.distance;
+            primary.u(k)       = hit.uv_coords.x;
+            primary.v(k)       = hit.uv_coords.y;
         }
     }
 }
@@ -152,12 +147,12 @@ fn @cpu_parallel_tiles( width: i32
                       , tile_height: i32
                       , num_cores: i32
                       , body: fn (i32, i32, i32, i32) -> ()) -> () {
-    let num_tiles_x = round_up(width , tile_width);
-    let num_tiles_y = round_up(height, tile_height);
+    let num_tiles_x = round_up(width , tile_width)  / tile_width;
+    let num_tiles_y = round_up(height, tile_height) / tile_height;
     let num_tiles = num_tiles_x * num_tiles_y;
     let tiles_div = make_fast_div(num_tiles_x as u32);
 
-    for i in parallel(0, 0, num_tiles) {
+    for i in parallel(num_cores, 0, num_tiles) {
         let y = fast_div(tiles_div, i as u32) as i32;
         let x = i - num_tiles_x * y;
         let xmin = x * tile_width;
@@ -175,9 +170,9 @@ fn @cpu_sort_primary(scene: Scene, primary: PrimaryStream, ray_begins: &mut [i32
     for i in vectorized_range(vector_width, 0, primary.size) {
         let mut shader_id = scene.num_shaders;
         let hit = primary_layout_as_ray1.read_hit(i, 0);
-        if hit.geom_id >= 0 {
-           shader_id = scene.geometries(hit.geom_id).shader_id(hit);
-        } 
+        if hit.prim_id/*hit.geom_id*/ >= 0 {
+            shader_id = scene.geometries(0/*hit.geom_id*/).shader_id(hit);
+        }
         primary.shader_id(i) = shader_id;
     }
 
@@ -198,10 +193,10 @@ fn @cpu_sort_primary(scene: Scene, primary: PrimaryStream, ray_begins: &mut [i32
 
     // Sort by shader
     for i in range(0, scene.num_shaders) {
-        let (begin, end) = (ray_begins(i), ray_ends(i + 1));
+        let (begin, end) = (ray_begins(i), ray_ends(i));
         let mut j = begin;
         while j < end {
-            let shader_id = primary.shader_id(i);
+            let shader_id = primary.shader_id(j);
             if shader_id != i {
                 let k = ray_begins(shader_id)++;
 
@@ -223,9 +218,6 @@ fn @cpu_sort_primary(scene: Scene, primary: PrimaryStream, ray_begins: &mut [i32
                 swap_f32(&mut primary.v(k),         &mut primary.v(j));
                 swap_u32(&mut primary.rnd(k),       &mut primary.rnd(j));
                 swap_f32(&mut primary.mis(k),       &mut primary.mis(j));
-                swap_f32(&mut primary.color_r(k),   &mut primary.color_r(j));
-                swap_f32(&mut primary.color_g(k),   &mut primary.color_g(j));
-                swap_f32(&mut primary.color_b(k),   &mut primary.color_b(j));
                 swap_f32(&mut primary.contrib_r(k), &mut primary.contrib_r(j));
                 swap_f32(&mut primary.contrib_g(k), &mut primary.contrib_g(j));
                 swap_f32(&mut primary.contrib_b(k), &mut primary.contrib_b(j));
@@ -236,8 +228,13 @@ fn @cpu_sort_primary(scene: Scene, primary: PrimaryStream, ray_begins: &mut [i32
         }
     }
 
-    // Return new stream size
-    ray_ends(scene.num_shaders - 1)
+    // Kill rays that have not intersected anything
+    let last = ray_ends(scene.num_shaders - 1);
+    for i in range(last, primary.size) {
+        primary.rays.id(i) = -1;
+    }
+
+    last
 }
 
 fn @cpu_permute_ray_stream(rays: RayStream, i: i32, j: i32, perm: Perm) -> () {
@@ -255,12 +252,14 @@ fn @cpu_compact_primary(primary: PrimaryStream) -> i32 {
     let lut = generate_compaction_lut();
     let mut k = 0;
     for i in range_step(0, primary.size, 8) {
+        let d = primary.size - i;
+        let valid_mask = if d < 8 { (1 << d) - 1 } else { -1 };
         for j in vectorize(8, sizeof[float](), 0, 8) {
             let id = primary.rays.id(i + j);
-            let mask = rv_ballot(id >= 0);
+            let mask = rv_ballot(id >= 0) & valid_mask;
             let perm = lut(mask);
 
-            primary.rays.id(k + j)    = cpu_permute_i32(id, perm);
+            primary.rays.id(k + j) = cpu_permute_i32(id, perm);
 
             cpu_permute_ray_stream(primary.rays, k + j, i + j, perm);
 
@@ -272,9 +271,6 @@ fn @cpu_compact_primary(primary: PrimaryStream) -> i32 {
             primary.v(k + j)         = cpu_permute_f32(primary.v(i + j), perm);
             primary.rnd(k + j)       = cpu_permute_u32(primary.rnd(i + j), perm);
             primary.mis(k + j)       = cpu_permute_f32(primary.mis(i + j), perm);
-            primary.color_r(k + j)   = cpu_permute_f32(primary.color_r(i + j), perm);
-            primary.color_g(k + j)   = cpu_permute_f32(primary.color_g(i + j), perm);
-            primary.color_b(k + j)   = cpu_permute_f32(primary.color_b(i + j), perm);
             primary.contrib_r(k + j) = cpu_permute_f32(primary.contrib_r(i + j), perm);
             primary.contrib_g(k + j) = cpu_permute_f32(primary.contrib_g(i + j), perm);
             primary.contrib_b(k + j) = cpu_permute_f32(primary.contrib_b(i + j), perm);
@@ -288,22 +284,23 @@ fn @cpu_compact_primary(primary: PrimaryStream) -> i32 {
 
 fn @cpu_compact_secondary(secondary: SecondaryStream) -> i32 {
     let lut = generate_compaction_lut();
-    let prev_size = secondary.size;
     let mut k = 0;
     for i in range_step(0, secondary.size, 8) {
+        let d = secondary.size - i;
+        let valid_mask = if d < 8 { (1 << d) - 1 } else { -1 };
         for j in vectorize(8, sizeof[float](), 0, 8) {
             let id = secondary.rays.id(i + j);
-            let mask = rv_ballot(id >= 0);
+            let mask = rv_ballot(id >= 0) & valid_mask;
             let perm = lut(mask);
 
             secondary.rays.id(k + j) = cpu_permute_i32(id, perm);
 
             cpu_permute_ray_stream(secondary.rays, k + j, i + j, perm);
 
-            secondary.prim_id(k + j)   = cpu_permute_i32(secondary.prim_id(i + j), perm);
-            secondary.color_r(k + j)   = cpu_permute_f32(secondary.color_r(i + j), perm);
-            secondary.color_g(k + j)   = cpu_permute_f32(secondary.color_g(i + j), perm);
-            secondary.color_b(k + j)   = cpu_permute_f32(secondary.color_b(i + j), perm);
+            secondary.prim_id(k + j) = cpu_permute_i32(secondary.prim_id(i + j), perm);
+            secondary.color_r(k + j) = cpu_permute_f32(secondary.color_r(i + j), perm);
+            secondary.color_g(k + j) = cpu_permute_f32(secondary.color_g(i + j), perm);
+            secondary.color_b(k + j) = cpu_permute_f32(secondary.color_b(i + j), perm);
 
             k += cpu_popcount32(mask);
         }
@@ -312,6 +309,7 @@ fn @cpu_compact_secondary(secondary: SecondaryStream) -> i32 {
 }
 
 fn @cpu_generate_rays( primary: PrimaryStream
+                     , capacity: i32
                      , path_tracer: PathTracer
                      , id: &mut i32
                      , xmin: i32
@@ -319,8 +317,28 @@ fn @cpu_generate_rays( primary: PrimaryStream
                      , tile_size: i32
                      , film_width: i32
                      , film_height: i32
-                     ) -> () {
-    // TODO
+                     , vector_width: i32
+                     ) -> i32 {
+    let primary_layout_as_ray1 = make_cpu_primary_ray_layout(primary, 1);
+    let first_id = *id;
+    let num_rays = cpu_intrinsics.min(tile_size * tile_size - first_id, capacity - primary.size);
+    let tile_div = make_fast_div(tile_size as u32);
+    for i in vectorized_range(vector_width, 0, num_rays) {
+        let in_tile_id = first_id + i;
+
+        // Compute x, y of ray
+        let in_tile_y = fast_div(tile_div, in_tile_id as u32) as i32;
+        let in_tile_x = in_tile_id - in_tile_y * tile_size;
+        let x = xmin + in_tile_x;
+        let y = ymin + in_tile_y;
+        let (ray, state) = @@(path_tracer.on_emit)(x, y, film_width, film_height);
+        let cur_ray = primary.size + i;
+        primary_layout_as_ray1.write_ray(cur_ray, 0, ray);
+        cpu_set_primary_state(primary, cur_ray, state);
+        primary.rays.id(cur_ray) = y * film_width + x;
+    }
+    *id = first_id + num_rays;
+    primary.size + num_rays
 }
 
 fn @cpu_trace( scene: Scene
@@ -341,75 +359,84 @@ fn @cpu_trace( scene: Scene
         // Get ray streams/states from the CPU driver
         let mut primary   : PrimaryStream;
         let mut secondary : SecondaryStream;
-        rodent_cpu_get_primary_stream(&mut primary,     tile_size * tile_size);
-        rodent_cpu_get_secondary_stream(&mut secondary, tile_size * tile_size);
-
-        // Make them look like packets to the traversal interface
-        let primary_layout           = make_cpu_primary_ray_layout(primary,     vector_width);
-        let primary_layout_as_ray1   = make_cpu_primary_ray_layout(primary,     1);
-        let secondary_layout         = make_cpu_secondary_ray_layout(secondary, vector_width);
-        let secondary_layout_as_ray1 = make_cpu_secondary_ray_layout(secondary, 1);
+        let capacity = 1024;
+        rodent_cpu_get_primary_stream(&mut primary,     capacity);
+        rodent_cpu_get_secondary_stream(&mut secondary, capacity);
 
         let mut id = 0;
         let num_rays = tile_size * tile_size;
-        while id < num_rays {
+        while id < num_rays || primary.size > 0 {
             // (Re-)generate primary rays
-            if primary.size < primary.capacity {
-                cpu_generate_rays(primary, path_tracer, &mut id, xmin, ymin, tile_size, film_data.width, film_data.height);
+            if primary.size < capacity {
+                primary.size = cpu_generate_rays(primary, capacity, path_tracer, &mut id, xmin, ymin, tile_size, film_data.width, film_data.height, vector_width);
             }
 
             // Trace primary rays
             cpu_traverse_hybrid(
                 min_max,
-                primary_layout,
+                make_cpu_primary_ray_layout(primary, vector_width),
                 bvh,
                 single,
                 false,
-                vector_width,
+                round_up(primary.size, vector_width),
                 1);
 
             // Sort hits by shader id, and filter invalid hits
             let mut ray_begins : [i32 * 1024];
             let mut ray_ends   : [i32 * 1024];
-            let dead_end = primary.size;
             primary.size = cpu_sort_primary(scene, primary, &mut ray_begins, &mut ray_ends, vector_width);
 
             // Perform (vectorized) shading
+            let mut begin = 0;
             for shader_id in unroll(0, scene.num_shaders) {
-                let shader = scene.shaders(shader_id);
-                for i in vectorized_range(vector_width, ray_begins(shader_id), ray_ends(shader_id + 1)) {
+                let end = ray_ends(shader_id);
+                for i in vectorized_range(vector_width, begin, end) {
+                    let primary_layout_as_ray1   = make_cpu_primary_ray_layout(primary,     1);
+                    let secondary_layout_as_ray1 = make_cpu_secondary_ray_layout(secondary, 1);
                     let ray = primary_layout_as_ray1.read_ray(i, 0);
                     let hit = primary_layout_as_ray1.read_hit(i, 0);
                     let mut state = cpu_get_primary_state(primary, i);
-                    let id = primary.rays.id(i);
+                    let ray_id = primary.rays.id(i);
 
-                    let geom = scene.geometries(hit.geom_id);
-                    let surf = geom.surface_element(cpu_intrinsics, ray, hit);
-                    let mat = shader(cpu_intrinsics, scene, surf);
+                    let geom   = scene.geometries(hit.geom_id);
+                    let surf   = geom.surface_element(cpu_intrinsics, ray, hit);
+                    let shader = scene.shaders(shader_id);
+                    let mat    = shader(cpu_intrinsics, scene, surf);
 
+                    // Execute hit point shading, and add the contribution of each lane to the frame buffer
+                    let mut hit_color = make_color(0.0f, 0.0f, 0.0f);
+                    let mut add_color = false;
                     for once() {
-                        // Execute hit point shading
                         @@(path_tracer.on_hit)(ray, hit, &mut state, surf, mat, @ |color| -> ! {
-                            primary.color_r(i) += color.r;
-                            primary.color_g(i) += color.g;
-                            primary.color_b(i) += color.b;
+                            add_color = true;
+                            hit_color = color;
                             break()
                         });
                     }
+                    for lane in cpu_one_bits(rv_ballot(add_color)) {
+                        let j = bitcast[i32](rv_extract(bitcast[f32](ray_id), lane));
+                        film_data.pixels(j).r += rv_extract(hit_color.r, lane);
+                        film_data.pixels(j).g += rv_extract(hit_color.g, lane);
+                        film_data.pixels(j).b += rv_extract(hit_color.b, lane);
+                    }
+
+                    // Compute shadow rays
                     for once() {
-                        // Compute shadow rays
                         @@(path_tracer.on_shadow)(ray, hit, &mut state, surf, mat, @ |ray, color| -> ! {
                             secondary_layout_as_ray1.write_ray(i, 0, ray);
                             secondary.color_r(i) = color.r;
                             secondary.color_g(i) = color.g;
                             secondary.color_b(i) = color.b;
-                            secondary.rays.id(i) = id;
+                            secondary.rays.id(i) = ray_id;
                             break()
-                        });
-                        secondary.rays.id(i) = -1;
+                        }, @ || -> ! {
+                            secondary.rays.id(i) = -1;
+                            break()
+                        })
                     }
+
+                    // Sample new rays
                     for once() {
-                        // Sample new rays
                         @@(path_tracer.on_bounce)(ray, hit, &mut state, surf, mat, @ |new_ray, new_state| -> ! {
                             primary_layout_as_ray1.write_ray(i, 0, new_ray);
                             cpu_set_primary_state(primary, i, new_state);
@@ -420,31 +447,23 @@ fn @cpu_trace( scene: Scene
                         })
                     }
                 }
+                begin = end;
             }
 
-            // Filter terminated rays, and add contribution to the frame buffer
-            primary.size = cpu_compact_primary(primary);
-            let dead_begin = primary.size;
-            for i in range(dead_begin, dead_end) {
-                let j = primary.rays.id(i);
-                let r = primary.color_r(i);
-                let g = primary.color_g(i);
-                let b = primary.color_b(i);
-                film_data.pixels(j).r += r;
-                film_data.pixels(j).g += g;
-                film_data.pixels(j).b += b;
-            }
-
+            // Filter terminated rays
+            secondary.size = primary.size;
+            primary.size   = cpu_compact_primary(primary);
+  
             // Compact and trace secondary rays
             secondary.size = cpu_compact_secondary(secondary);
             if likely(secondary.size > 0) {
                 cpu_traverse_hybrid(
                     min_max,
-                    secondary_layout,
+                    make_cpu_secondary_ray_layout(secondary, vector_width),
                     bvh,
                     single,
                     true,
-                    vector_width,
+                    round_up(secondary.size, vector_width),
                     1);
             }
 
@@ -452,12 +471,9 @@ fn @cpu_trace( scene: Scene
             for i in range(0, secondary.size) {
                 if secondary.prim_id(i) < 0 {
                     let j = secondary.rays.id(i);
-                    let r = secondary.color_r(i);
-                    let g = secondary.color_g(i);
-                    let b = secondary.color_b(i);
-                    film_data.pixels(j).r += r;
-                    film_data.pixels(j).g += g;
-                    film_data.pixels(j).b += b;
+                    film_data.pixels(j).r += secondary.color_r(i);
+                    film_data.pixels(j).g += secondary.color_g(i);
+                    film_data.pixels(j).b += secondary.color_b(i);
                 }
             }
         }
@@ -483,7 +499,17 @@ fn @make_cpu_image_loader() -> fn (&[u8]) -> Image {
 fn @make_cpu_device() -> Device {
     Device {
         intrinsics: cpu_intrinsics,
-        trace:      cpu_trace,
+        trace:      @ |scene, path_tracer| {
+            cpu_trace(
+                scene,
+                path_tracer,
+                make_cpu_int_min_max(),
+                /* single */    true,
+                /* tile_size */   64,
+                /* num_cores */    0,
+                /* vector_width */ 8
+            )
+        },
         load_mesh:  make_cpu_mesh_loader(),
         load_image: make_cpu_image_loader()
     }

@@ -40,8 +40,6 @@ fn @make_camera_emitter(scene: Scene, device: Device, iter: i32) -> Emitter {
 
 fn @make_debug_renderer() -> Renderer {
     @ |scene, device, iter| {
-        let offset = 0.001f;
-
         let on_emit = make_camera_emitter(scene, device, iter);
         let on_shadow = @ |_, _, _, _, _, _| ();
         let on_bounce = @ |_, _, _, _, _, _| ();

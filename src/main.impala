@@ -18,7 +18,7 @@ struct Settings {
 
 extern fn render(settings: &Settings, iter: i32) -> () {
     let device   = make_cpu_device();
-    let renderer = make_path_tracing_renderer(64);
+    let renderer = make_path_tracing_renderer(32);
     let image    = device.load_image("data/textures/wall.png");
     let tri_mesh = device.load_mesh("data/cube.obj");
 
@@ -35,7 +35,7 @@ extern fn render(settings: &Settings, iter: i32) -> () {
     );
 
     let scene = Scene {
-        num_shaders:    1,
+        num_shaders:    3,
         num_geometries: 1,
         num_images:     1,
         num_lights:     1,

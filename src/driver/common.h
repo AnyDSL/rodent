@@ -25,7 +25,8 @@ inline uint32_t pdep(uint32_t val, uint32_t mask) {
 
 // Round to the integer above the division.
 inline uint32_t round_up(uint32_t val, uint32_t div) {
-    return val / div + (val % div != 0 ? 1 : 0);
+    auto mod = val % div;
+    return val + (mod ? div - mod : 0);
 }
 
 /// Clamps a between b and c.
