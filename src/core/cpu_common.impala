@@ -35,6 +35,10 @@ fn @cpu_permute_i32(val: i32, perm: Perm) -> i32 {
     bitcast[i32](cpu_permute_f32(bitcast[f32](val), perm))
 }
 
+fn @cpu_permute_u32(val: u32, perm: Perm) -> u32 {
+    bitcast[u32](cpu_permute_f32(bitcast[f32](val), perm))
+}
+
 // Generates an entry of the table of permutations for compaction
 fn @generate_compaction_lut_entry(case: i32) -> Perm {
     fn @fold(cur: Perm, i: i32, j: i32) -> Perm {
