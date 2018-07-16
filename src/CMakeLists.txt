@@ -19,11 +19,11 @@ set(RODENT_SRCS
     core/color.impala
     core/common.impala
     core/cpu_common.impala
-    core/image.impala
     core/matrix.impala
     core/random.impala
     core/sort.impala
     core/vector.impala
+    render/image.impala
     render/camera.impala
     render/geometry.impala
     render/light.impala

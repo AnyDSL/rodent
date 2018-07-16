@@ -2,9 +2,9 @@
 
 extern "C" {
     fn rodent_cpu_get_bvh8_tri4(&mut Bvh8Tri4) -> ();
-    fn rodent_cpu_get_film_data(&mut PixelData) -> ();
+    fn rodent_cpu_get_film_data(&mut FilmData) -> ();
     fn rodent_cpu_load_tri_mesh(&[u8], &mut TriMesh) -> ();
-    fn rodent_cpu_load_pixel_data(&[u8], &mut PixelData) -> ();
+    fn rodent_cpu_load_image_rgba8(&[u8], &mut &[u8], &mut i32, &mut i32) -> ();
     fn rodent_cpu_get_primary_stream(&mut PrimaryStream, i32) -> ();
     fn rodent_cpu_get_secondary_stream(&mut SecondaryStream, i32) -> ();
 }
@@ -349,7 +349,7 @@ fn @cpu_trace( scene: Scene
              , num_cores: i32
              , vector_width: i32
              ) -> () {
-    let mut film_data : PixelData;
+    let mut film_data : FilmData;
     let mut bvh8tri4  : Bvh8Tri4;
     rodent_cpu_get_film_data(&mut film_data);
     rodent_cpu_get_bvh8_tri4(&mut bvh8tri4);
@@ -398,7 +398,7 @@ fn @cpu_trace( scene: Scene
                     let mut state = cpu_get_primary_state(primary, i);
                     let ray_id = primary.rays.id(i);
 
-                    let geom   = scene.geometries(hit.geom_id);
+                    let geom   = scene.geometries(0/*hit.geom_id*/);
                     let surf   = geom.surface_element(cpu_intrinsics, ray, hit);
                     let shader = scene.shaders(shader_id);
                     let mat    = shader(cpu_intrinsics, scene, surf);
@@ -491,8 +491,19 @@ fn @make_cpu_mesh_loader() -> fn (&[u8]) -> Geometry {
 fn @make_cpu_image_loader() -> fn (&[u8]) -> Image {
     @ |file_name| {
         let mut pixel_data;
-        rodent_cpu_load_pixel_data(file_name, &mut pixel_data);
-        make_image(pixel_data)
+        let mut width;
+        let mut height;
+        rodent_cpu_load_image_rgba8(file_name, &mut pixel_data, &mut width, &mut height);
+        let pixels = @ |x, y| {
+            let pixel = (pixel_data as &[u32])(width * y + x);
+            let r = pixel & 0xFFu;
+            let g = (pixel >> 8u) & 0xFFu;
+            let b = (pixel >> 16u) & 0xFFu;
+            make_color((r as f32) * (1.0f / 255.0f),
+                       (g as f32) * (1.0f / 255.0f),
+                       (b as f32) * (1.0f / 255.0f))
+        };
+        make_image(pixels, width, height)
     }
 }
 

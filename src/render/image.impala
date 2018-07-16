@@ -1,15 +1,8 @@
-// Images are discrete collections of pixels, and
-// can be generated procedurally or stored in memory
+// Images are discrete collections of pixels with a fixed number of channels
 struct Image {
-    pixels: fn (i32, i32) -> Color,
-    width:  i32,
-    height: i32
-}
-
-struct PixelData {
-    pixels: &mut [Color],
-    width:  i32,
-    height: i32
+    pixels:   fn (i32, i32) -> Color,
+    width:    i32,
+    height:   i32
 }
 
 struct BorderHandling {
@@ -17,22 +10,14 @@ struct BorderHandling {
     upper: fn (Intrinsics, f32) -> f32
 }
 
-type ImageFilter = fn (Intrinsics, Image, Vec2) -> Color;
 type Texture = fn (Vec2) -> Color;
+type ImageFilter = fn (Intrinsics, Image, Vec2) -> Color;
 
-fn @make_pixel_data(pixels: &mut [Color], width: i32, height: i32) -> PixelData {
-    PixelData {
-        pixels: pixels,
-        width:  width,
-        height: height
-    }
-}
-
-fn @make_image(data: PixelData) -> Image {
+fn @make_image(pixels: fn (i32, i32) -> Color, width: i32, height: i32) -> Image {
     Image {
-        pixels: |x, y| data.pixels(y * data.width + x),
-        width:  data.width,
-        height: data.height
+        pixels:   pixels,
+        width:    width,
+        height:   height
     }
 }
 

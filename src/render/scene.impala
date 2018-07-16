@@ -21,5 +21,11 @@ struct Device {
     load_image: fn (&[u8]) -> Image
 }
 
+struct FilmData {
+    pixels: &mut [Color],
+    width: i32,
+    height: i32
+}
+
 type Renderer = fn (Scene, Device, i32) -> ();
 type Shader   = fn (Intrinsics, Scene, SurfaceElement) -> Material;

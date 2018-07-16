@@ -213,12 +213,18 @@ static void release_tri_mesh(int32_t dev, TriMesh tri_mesh) {
 
 // Images --------------------------------------------------------------------------
 
+struct Image {
+    uint8_t* pixels;
+    size_t channels;
+    size_t width, height;
+};
+
 static void read_from_stream(png_structp png_ptr, png_bytep data, png_size_t length) {
     png_voidp a = png_get_io_ptr(png_ptr);
     ((std::istream*)a)->read((char*)data, length);
 }
 
-static bool load_png(int32_t dev, std::string file_name, PixelData& pixel_data) {
+static bool load_png(int32_t dev, std::string file_name, Image& img, size_t channels) {
     std::ifstream file(file_name, std::ifstream::binary);
     if (!file)
         return false;
@@ -248,8 +254,10 @@ static bool load_png(int32_t dev, std::string file_name, PixelData& pixel_data) 
     png_set_read_fn(png_ptr, (png_voidp)&file, read_from_stream);
     png_read_info(png_ptr, info_ptr);
 
-    size_t width  = png_get_image_width(png_ptr, info_ptr);
-    size_t height = png_get_image_height(png_ptr, info_ptr);
+    assert(channels <= 4);
+    img.width    = png_get_image_width(png_ptr, info_ptr);
+    img.height   = png_get_image_height(png_ptr, info_ptr);
+    img.channels = channels;
 
     png_uint_32 color_type = png_get_color_type(png_ptr, info_ptr);
     png_uint_32 bit_depth  = png_get_bit_depth(png_ptr, info_ptr);
@@ -274,38 +282,30 @@ static bool load_png(int32_t dev, std::string file_name, PixelData& pixel_data) 
     else
         png_set_filler(png_ptr, 0xFF, PNG_FILLER_AFTER);
 
-    std::vector<Color> pixels(width * height);
-    std::vector<png_byte> row_bytes(width * 4);
-    for (size_t y = 0; y < height; y++) {
+    img.pixels = reinterpret_cast<uint8_t*>(anydsl_alloc(dev, img.channels * img.width * img.height));
+    std::vector<png_byte> row_bytes(img.width * 4);
+    for (size_t y = 0; y < img.height; y++) {
         png_read_row(png_ptr, row_bytes.data(), nullptr);
-        Color* img_row = pixels.data() + width * y;
-        for (size_t x = 0; x < width; x++) {
-            img_row[x].r = row_bytes[x * 4 + 0] / 255.0f;
-            img_row[x].g = row_bytes[x * 4 + 1] / 255.0f;
-            img_row[x].b = row_bytes[x * 4 + 2] / 255.0f;
+        uint8_t* img_row = img.pixels + img.channels * img.width * y;
+        for (size_t x = 0; x < img.width; x++) {
+            for (size_t c = 0; c < img.channels; ++c)
+                img_row[x * img.channels + c] = row_bytes[x * 4 + c];
         }
     }
 
     png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
-
-    auto pixels_ptr = reinterpret_cast<Color*>(anydsl_alloc(dev, sizeof(Color) * width * height));
-    anydsl_copy(0, pixels.data(), 0, dev, pixels_ptr, 0, sizeof(Color) * width * height);
-
-    pixel_data.pixels = pixels_ptr;
-    pixel_data.width  = static_cast<int>(width);
-    pixel_data.height = static_cast<int>(height);
     return true;
 }
 
-static PixelData load_image(int32_t dev, std::string file_name) {
-    PixelData image;
-    if (!load_png(dev, file_name, image))
+static Image load_image(int32_t dev, std::string file_name, size_t channels) {
+    Image img;
+    if (!load_png(dev, file_name, img, channels))
         error("Cannot load file '", file_name, "'.");
-    return image;
+    return img;
 }
 
-static void release_image(int32_t dev, PixelData pixel_data) {
-    anydsl_release(dev, const_cast<Color*>(pixel_data.pixels));
+static void release_image(int32_t dev, Image& img) {
+    anydsl_release(dev, img.pixels);
 }
 
 // BVH -----------------------------------------------------------------------------
@@ -539,11 +539,11 @@ public:
             release_image(dev_, image.second);
     }
 
-    PixelData image(const char* file) {
+    Image image(const char* file, size_t channels) {
         auto it = images_.find(file);
         if (it != images_.end())
             return it->second;
-        return images_[file] = load_image(dev_, file);
+        return images_[file] = load_image(dev_, file, channels);
     }
 
     TriMesh tri_mesh(const char* file) {
@@ -553,11 +553,11 @@ public:
         return tri_meshes_[file] = load_tri_mesh(dev_, file, tris_);
     }
 
-    PixelData film_data() {
+    FilmData film_data() {
         if (film_data_)
             return *film_data_;
         auto pixels = anydsl_alloc(dev_, sizeof(Color) * width_ * height_);
-        film_data_.reset(new PixelData {
+        film_data_.reset(new FilmData {
             reinterpret_cast<Color*>(pixels),
             static_cast<int>(width_),
             static_cast<int>(height_)
@@ -574,9 +574,9 @@ public:
     }
 
 private:
-    std::unordered_map<std::string, PixelData> images_;
-    std::unordered_map<std::string, TriMesh>   tri_meshes_;
-    std::unique_ptr<PixelData> film_data_;
+    std::unordered_map<std::string, Image>   images_;
+    std::unordered_map<std::string, TriMesh> tri_meshes_;
+    std::unique_ptr<FilmData> film_data_;
     std::unique_ptr<BvhType> bvh_;
     std::vector<Tri> tris_;
     size_t width_, height_;
@@ -603,7 +603,7 @@ extern "C" void rodent_cpu_get_bvh8_tri4(Bvh8Tri4* bvh) {
     *bvh = cpu_interface->bvh();
 }
 
-extern "C" void rodent_cpu_get_film_data(PixelData* film_data) {
+extern "C" void rodent_cpu_get_film_data(FilmData* film_data) {
     *film_data = cpu_interface->film_data();
 }
 
@@ -611,8 +611,11 @@ extern "C" void rodent_cpu_load_tri_mesh(const char* file, TriMesh* tri_mesh) {
     *tri_mesh = cpu_interface->tri_mesh(file);
 }
 
-extern "C" void rodent_cpu_load_pixel_data(const char* file, PixelData* pixel_data) {
-    *pixel_data = cpu_interface->image(file);
+extern "C" void rodent_cpu_load_image_rgba8(const char* file, uint8_t** pixels, int32_t* width, int32_t* height) {
+    auto img = cpu_interface->image(file, 4);
+    *pixels = img.pixels;
+    *width  = img.width;
+    *height = img.height;
 }
 
 static void cpu_get_ray_stream(RayStream& rays, float* ptr, size_t capacity) {
