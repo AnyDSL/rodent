@@ -192,7 +192,7 @@ int build_embree_bvh(std::ofstream& out, const std::vector<Tri>& tris) {
     uint64_t offset = sizeof(uint32_t) * 3 +
         sizeof(BvhNode) * new_nodes.size() +
         sizeof(BvhTri)  * new_tris.size();
-    uint32_t block_type = uint32_t(N == 4 ? BvhType::BVH4 : BvhType::BVH8_TRI4);
+    uint32_t block_type = uint32_t(N == 4 ? BvhType::BVH4_TRI4 : BvhType::BVH8_TRI4);
     uint32_t num_nodes = new_nodes.size();
     uint32_t num_tris  = new_tris.size();
 
@@ -210,9 +210,9 @@ int build_embree_bvh(std::ofstream& out, const std::vector<Tri>& tris) {
 }
 
 void build_bvh4(std::ofstream& out, const std::vector<Tri>& tris) {
-    build_embree_bvh<4, BVH4, Bvh4Node, Bvh4Tri>(out, tris);
+    build_embree_bvh<4, BVH4, Node4, Tri4>(out, tris);
 }
 
 void build_bvh8(std::ofstream& out, const std::vector<Tri>& tris) {
-    build_embree_bvh<8, BVH8, Bvh8Node, Bvh4Tri>(out, tris);
+    build_embree_bvh<8, BVH8, Node8, Tri4>(out, tris);
 }

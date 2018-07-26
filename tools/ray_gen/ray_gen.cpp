@@ -60,7 +60,7 @@ private:
 class ShadowRayGen : public RayGen {
 public:
     ShadowRayGen(const float3& light,
-                 const anydsl::Array<Ray1AoS>& rays,
+                 const anydsl::Array<Ray1>& rays,
                  const std::vector<float>& float_buffer)
         : light_(light)
         , rays_(rays)
@@ -80,7 +80,7 @@ public:
 
 private:
     float3 light_;
-    const anydsl::Array<Ray1AoS>& rays_;
+    const anydsl::Array<Ray1>& rays_;
     const std::vector<float>& float_buffer_;
 };
 
@@ -132,9 +132,9 @@ inline void usage() {
 }
 
 static bool extract_bounds(const std::string& bvh_file, BBox& bounds) {
-    anydsl::Array<Bvh4Node> nodes;
-    anydsl::Array<Bvh4Tri>  tris;
-    if (!load_bvh(bvh_file, nodes, tris, BvhType::BVH4, false)) return false;
+    anydsl::Array<Node4> nodes;
+    anydsl::Array<Tri4>  tris;
+    if (!load_bvh(bvh_file, nodes, tris, BvhType::BVH4_TRI4, false)) return false;
     bounds = BBox::empty();
     for (int i = 0; i < 4; i++) {
         bounds.min = min(bounds.min, float3(nodes[0].bounds[0][i], nodes[0].bounds[2][i], nodes[0].bounds[4][i]));
@@ -179,7 +179,7 @@ int main(int argc, char** argv) {
         auto height = strtol(argv[8], nullptr, 10);
         output = argv[9];
 
-        anydsl::Array<Ray1AoS> rays;
+        anydsl::Array<Ray1> rays;
         if (!load_rays(ray_file, rays, 0.0f, 1.0f, false)) {
             std::cerr << "Cannot load rays" << std::endl;
             return 1;

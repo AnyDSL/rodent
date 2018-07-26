@@ -3,28 +3,28 @@
 #include "traversal.h"
 #include "sbvh_builder.h"
 
-static void fill_dummy_parent(Bvh2Node& node, const BBox& leaf_bb, int index) {
+static void fill_dummy_parent(Node2& node, const BBox& leaf_bb, int index) {
     node.left  = index;
     node.right = 0;
 
-    node.left_bb.lo_x = leaf_bb.min.x;
-    node.left_bb.lo_y = leaf_bb.min.y;
-    node.left_bb.lo_z = leaf_bb.min.z;
-    node.left_bb.hi_x = leaf_bb.max.x;
-    node.left_bb.hi_y = leaf_bb.max.y;
-    node.left_bb.hi_z = leaf_bb.max.z;
+    node.min1[0] = leaf_bb.min.x;
+    node.min1[1] = leaf_bb.min.y;
+    node.min1[2] = leaf_bb.min.z;
+    node.max1[0] = leaf_bb.max.x;
+    node.max1[1] = leaf_bb.max.y;
+    node.max1[2] = leaf_bb.max.z;
 
-    node.right_bb.lo_x = 0.0f;
-    node.right_bb.lo_y = 0.0f;
-    node.right_bb.lo_z = 0.0f;
-    node.right_bb.hi_x = -0.0f;
-    node.right_bb.hi_y = -0.0f;
-    node.right_bb.hi_z = -0.0f;
+    node.min2[0] = 0.0f;
+    node.min2[1] = 0.0f;
+    node.min2[2] = 0.0f;
+    node.max2[0] = -0.0f;
+    node.max2[1] = -0.0f;
+    node.max2[2] = -0.0f;
 }
 
 class Bvh2Builder {
 public:
-    Bvh2Builder(std::vector<Bvh2Node>& nodes, std::vector<Bvh2Tri>& tris)
+    Bvh2Builder(std::vector<Node2>& nodes, std::vector<Tri1>& tris)
         : nodes_(nodes), tris_(tris)
     {}
 
@@ -69,20 +69,20 @@ private:
             assert(count == 2);
 
             const BBox& left_bb = bboxes(0);
-            nodes[i].left_bb.lo_x = left_bb.min.x;
-            nodes[i].left_bb.lo_y = left_bb.min.y;
-            nodes[i].left_bb.lo_z = left_bb.min.z;
-            nodes[i].left_bb.hi_x = left_bb.max.x;
-            nodes[i].left_bb.hi_y = left_bb.max.y;
-            nodes[i].left_bb.hi_z = left_bb.max.z;
+            nodes[i].min1[0] = left_bb.min.x;
+            nodes[i].min1[1] = left_bb.min.y;
+            nodes[i].min1[2] = left_bb.min.z;
+            nodes[i].max1[0] = left_bb.max.x;
+            nodes[i].max1[1] = left_bb.max.y;
+            nodes[i].max1[2] = left_bb.max.z;
 
             const BBox& right_bb = bboxes(1);
-            nodes[i].right_bb.lo_x = right_bb.min.x;
-            nodes[i].right_bb.lo_y = right_bb.min.y;
-            nodes[i].right_bb.lo_z = right_bb.min.z;
-            nodes[i].right_bb.hi_x = right_bb.max.x;
-            nodes[i].right_bb.hi_y = right_bb.max.y;
-            nodes[i].right_bb.hi_z = right_bb.max.z;
+            nodes[i].min2[0] = right_bb.min.x;
+            nodes[i].min2[1] = right_bb.min.y;
+            nodes[i].min2[2] = right_bb.min.z;
+            nodes[i].max2[0] = right_bb.max.x;
+            nodes[i].max2[1] = right_bb.max.y;
+            nodes[i].max2[2] = right_bb.max.z;
 
             stack.push(i, 1);
             stack.push(i, 0);
@@ -117,7 +117,7 @@ private:
                 auto e1 = tri.v0 - tri.v1;
                 auto e2 = tri.v2 - tri.v0;
                 auto n = cross(e1, e2);
-                Bvh2Tri new_tri{
+                Tri1 new_tri{
                     { tri.v0.x, tri.v0.y, tri.v0.z}, n.x,
                     { e1.x, e1.y, e1.z}, n.y,
                     { e2.x, e2.y, e2.z}, ref
@@ -138,20 +138,20 @@ private:
 
     Stack<StackElem> stack_;
     SplitBvhBuilder<2, CostFn> builder_;
-    std::vector<Bvh2Node>& nodes_;
-    std::vector<Bvh2Tri>& tris_;
+    std::vector<Node2>& nodes_;
+    std::vector<Tri1>& tris_;
 };
 
 int build_bvh2(std::ofstream& out, const std::vector<Tri>& tris) {
-    std::vector<Bvh2Node> new_nodes;
-    std::vector<Bvh2Tri>  new_tris;
+    std::vector<Node2> new_nodes;
+    std::vector<Tri1>  new_tris;
     Bvh2Builder builder(new_nodes, new_tris);
 
     builder.build(tris.data(), tris.size());
 
     uint64_t offset = sizeof(uint32_t) * 3 +
-        sizeof(Bvh2Node) * new_nodes.size() +
-        sizeof(Bvh2Tri)  * new_tris.size();
+        sizeof(Node2) * new_nodes.size() +
+        sizeof(Tri1)  * new_tris.size();
     uint32_t block_type = 1;
     uint32_t num_nodes = new_nodes.size();
     uint32_t num_tris  = new_tris.size();
@@ -160,8 +160,8 @@ int build_bvh2(std::ofstream& out, const std::vector<Tri>& tris) {
     out.write((char*)&block_type, sizeof(uint32_t));
     out.write((char*)&num_nodes,  sizeof(uint32_t));
     out.write((char*)&num_tris,   sizeof(uint32_t));
-    out.write((char*)new_nodes.data(), sizeof(Bvh2Node) * new_nodes.size());
-    out.write((char*)new_tris.data(),  sizeof(Bvh2Tri)  * new_tris.size());
+    out.write((char*)new_nodes.data(), sizeof(Node2) * new_nodes.size());
+    out.write((char*)new_tris.data(),  sizeof(Tri1)  * new_tris.size());
 
     return new_nodes.size();
 }
