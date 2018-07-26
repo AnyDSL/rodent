@@ -6,9 +6,19 @@ static enable_cpu_single      = true;
 static enable_cpu_bvh4_tri4   = true;
 static enable_cpu_bvh8_tri4   = true;
 static enable_gpu_bvh2_tri1   = true;
-static enable_cpu_ray4        = true; // Currently not used
+static enable_cpu_ray4        = true;
 static enable_cpu_ray8        = true;
 static enable_cpu_int_min_max = true; // Faster, but requires AVX2 or higher for the ray8/bvh8 variants on x86
+
+// Misc. ---------------------------------------------------------------------------
+
+extern "C" { fn abort() -> (); }
+
+fn variant_not_available(name: &[u8]) -> () {
+    print_string(name);
+    print_string(" has been disabled at compile-time\n");
+    abort()
+}
 
 // Ray layouts ---------------------------------------------------------------------
 
@@ -146,8 +156,68 @@ fn @make_cpu_hit8(hits: &mut [Hit8], any_hit: bool) -> fn (i32, i32, Hit) -> () 
 
 // CPU BVH4 variants ---------------------------------------------------------------
 
+extern fn cpu_intersect_hybrid_ray4_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], rays: &[Ray4], hits: &mut [Hit4], num_packets: i32) -> () {
+    if enable_cpu_bvh4_tri4 && enable_cpu_ray4 && enable_cpu_hybrid {
+        cpu_traverse_hybrid(
+            if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
+            make_cpu_bvh4_tri4(nodes, tris),
+            make_cpu_ray4(rays),
+            make_cpu_hit4(hits, false /*any_hit*/),
+            4 /*packet_size*/,
+            num_packets,
+            true /*single*/,
+            false /*any_hit*/
+        );
+    } else { variant_not_available("cpu_intersect_hybrid_ray4_bvh4_tri4"); }
+}
+
+extern fn cpu_occluded_hybrid_ray4_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], rays: &[Ray4], hits: &mut [Hit4], num_packets: i32) -> () {
+    if enable_cpu_bvh4_tri4 && enable_cpu_ray4 && enable_cpu_hybrid {
+        cpu_traverse_hybrid(
+            if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
+            make_cpu_bvh4_tri4(nodes, tris),
+            make_cpu_ray4(rays),
+            make_cpu_hit4(hits, true /*any_hit*/),
+            4 /*packet_size*/,
+            num_packets,
+            true /*single*/,
+            true /*any_hit*/
+        );
+    } else { variant_not_available("cpu_occluded_hybrid_ray4_bvh4_tri4"); }
+}
+
+extern fn cpu_intersect_packet_ray4_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], rays: &[Ray4], hits: &mut [Hit4], num_packets: i32) -> () {
+    if enable_cpu_bvh4_tri4 && enable_cpu_ray4 && enable_cpu_packet {
+        cpu_traverse_hybrid(
+            if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
+            make_cpu_bvh4_tri4(nodes, tris),
+            make_cpu_ray4(rays),
+            make_cpu_hit4(hits, false /*any_hit*/),
+            4 /*packet_size*/,
+            num_packets,
+            false /*single*/,
+            false /*any_hit*/
+        );
+    } else { variant_not_available("cpu_intersect_packet_ray4_bvh4_tri4"); }
+}
+
+extern fn cpu_occluded_packet_ray4_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], rays: &[Ray4], hits: &mut [Hit4], num_packets: i32) -> () {
+    if enable_cpu_bvh4_tri4 && enable_cpu_ray4 && enable_cpu_packet {
+        cpu_traverse_hybrid(
+            if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
+            make_cpu_bvh4_tri4(nodes, tris),
+            make_cpu_ray4(rays),
+            make_cpu_hit4(hits, true /*any_hit*/),
+            4 /*packet_size*/,
+            num_packets,
+            false /*single*/,
+            true /*any_hit*/
+        );
+    } else { variant_not_available("cpu_occluded_packet_ray4_bvh4_tri4"); }
+}
+
 extern fn cpu_intersect_hybrid_ray8_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], rays: &[Ray8], hits: &mut [Hit8], num_packets: i32) -> () {
-    if enable_cpu_bvh4_tri4 && enable_cpu_hybrid {
+    if enable_cpu_bvh4_tri4 && enable_cpu_ray8 && enable_cpu_hybrid {
         cpu_traverse_hybrid(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
             make_cpu_bvh4_tri4(nodes, tris),
@@ -158,11 +228,11 @@ extern fn cpu_intersect_hybrid_ray8_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], ra
             true /*single*/,
             false /*any_hit*/
         );
-    }
+    } else { variant_not_available("cpu_intersect_hybrid_ray8_bvh4_tri4"); }
 }
 
 extern fn cpu_occluded_hybrid_ray8_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], rays: &[Ray8], hits: &mut [Hit8], num_packets: i32) -> () {
-    if enable_cpu_bvh4_tri4 && enable_cpu_hybrid {
+    if enable_cpu_bvh4_tri4 && enable_cpu_ray8 && enable_cpu_hybrid {
         cpu_traverse_hybrid(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
             make_cpu_bvh4_tri4(nodes, tris),
@@ -173,11 +243,11 @@ extern fn cpu_occluded_hybrid_ray8_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], ray
             true /*single*/,
             true /*any_hit*/
         );
-    }
+    } else { variant_not_available("cpu_occluded_hybrid_ray8_bvh4_tri4"); }
 }
 
 extern fn cpu_intersect_packet_ray8_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], rays: &[Ray8], hits: &mut [Hit8], num_packets: i32) -> () {
-    if enable_cpu_bvh4_tri4 && enable_cpu_packet {
+    if enable_cpu_bvh4_tri4 && enable_cpu_ray8 && enable_cpu_packet {
         cpu_traverse_hybrid(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
             make_cpu_bvh4_tri4(nodes, tris),
@@ -188,11 +258,11 @@ extern fn cpu_intersect_packet_ray8_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], ra
             false /*single*/,
             false /*any_hit*/
         );
-    }
+    } else { variant_not_available("cpu_intersect_packet_ray8_bvh4_tri4"); }
 }
 
 extern fn cpu_occluded_packet_ray8_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], rays: &[Ray8], hits: &mut [Hit8], num_packets: i32) -> () {
-    if enable_cpu_bvh4_tri4 && enable_cpu_packet {
+    if enable_cpu_bvh4_tri4 && enable_cpu_ray8 && enable_cpu_packet {
         cpu_traverse_hybrid(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
             make_cpu_bvh4_tri4(nodes, tris),
@@ -203,7 +273,7 @@ extern fn cpu_occluded_packet_ray8_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], ray
             false /*single*/,
             true /*any_hit*/
         );
-    }
+    } else { variant_not_available("cpu_occluded_packet_ray8_bvh4_tri4"); }
 }
 
 extern fn cpu_intersect_single_ray1_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], rays: &[Ray1], hits: &mut [Hit1], num_packets: i32) -> () {
@@ -217,7 +287,7 @@ extern fn cpu_intersect_single_ray1_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], ra
             num_packets,
             false /*any_hit*/
         );
-    }
+    } else { variant_not_available("cpu_intersect_single_ray1_bvh4_tri4"); }
 }
 
 extern fn cpu_occluded_single_ray1_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], rays: &[Ray1], hits: &mut [Hit1], num_packets: i32) -> () {
@@ -231,13 +301,73 @@ extern fn cpu_occluded_single_ray1_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], ray
             num_packets,
             true /*any_hit*/
         );
-    }
+    } else { variant_not_available("cpu_occluded_single_ray1_bvh4_tri4"); }
 }
 
 // CPU BVH8 variants ---------------------------------------------------------------
 
+extern fn cpu_intersect_hybrid_ray4_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], rays: &[Ray4], hits: &mut [Hit4], num_packets: i32) -> () {
+    if enable_cpu_bvh4_tri4 && enable_cpu_ray4 && enable_cpu_hybrid {
+        cpu_traverse_hybrid(
+            if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
+            make_cpu_bvh8_tri4(nodes, tris),
+            make_cpu_ray4(rays),
+            make_cpu_hit4(hits, false /*any_hit*/),
+            4 /*packet_size*/,
+            num_packets,
+            true /*single*/,
+            false /*any_hit*/
+        );
+    } else { variant_not_available("cpu_intersect_hybrid_ray4_bvh8_tri4"); }
+}
+
+extern fn cpu_occluded_hybrid_ray4_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], rays: &[Ray4], hits: &mut [Hit4], num_packets: i32) -> () {
+    if enable_cpu_bvh4_tri4 && enable_cpu_ray4 && enable_cpu_hybrid {
+        cpu_traverse_hybrid(
+            if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
+            make_cpu_bvh8_tri4(nodes, tris),
+            make_cpu_ray4(rays),
+            make_cpu_hit4(hits, true /*any_hit*/),
+            4 /*packet_size*/,
+            num_packets,
+            true /*single*/,
+            true /*any_hit*/
+        );
+    } else { variant_not_available("cpu_occluded_hybrid_ray4_bvh8_tri4"); }
+}
+
+extern fn cpu_intersect_packet_ray4_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], rays: &[Ray4], hits: &mut [Hit4], num_packets: i32) -> () {
+    if enable_cpu_bvh4_tri4 && enable_cpu_ray4 && enable_cpu_packet {
+        cpu_traverse_hybrid(
+            if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
+            make_cpu_bvh8_tri4(nodes, tris),
+            make_cpu_ray4(rays),
+            make_cpu_hit4(hits, false /*any_hit*/),
+            4 /*packet_size*/,
+            num_packets,
+            false /*single*/,
+            false /*any_hit*/
+        );
+    } else { variant_not_available("cpu_intersect_packet_ray4_bvh8_tri4"); }
+}
+
+extern fn cpu_occluded_packet_ray4_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], rays: &[Ray4], hits: &mut [Hit4], num_packets: i32) -> () {
+    if enable_cpu_bvh4_tri4 && enable_cpu_ray4 && enable_cpu_packet {
+        cpu_traverse_hybrid(
+            if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
+            make_cpu_bvh8_tri4(nodes, tris),
+            make_cpu_ray4(rays),
+            make_cpu_hit4(hits, true /*any_hit*/),
+            4 /*packet_size*/,
+            num_packets,
+            false /*single*/,
+            true /*any_hit*/
+        );
+    } else { variant_not_available("cpu_occluded_packet_ray4_bvh8_tri4"); }
+}
+
 extern fn cpu_intersect_hybrid_ray8_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], rays: &[Ray8], hits: &mut [Hit8], num_packets: i32) -> () {
-    if enable_cpu_bvh8_tri4 && enable_cpu_hybrid {
+    if enable_cpu_bvh8_tri4 && enable_cpu_ray8 && enable_cpu_hybrid {
         cpu_traverse_hybrid(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
             make_cpu_bvh8_tri4(nodes, tris),
@@ -248,11 +378,11 @@ extern fn cpu_intersect_hybrid_ray8_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], ra
             true /*single*/,
             false /*any_hit*/
         );
-    }
+    } else { variant_not_available("cpu_intersect_hybrid_ray8_bvh8_tri4"); }
 }
 
 extern fn cpu_occluded_hybrid_ray8_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], rays: &[Ray8], hits: &mut [Hit8], num_packets: i32) -> () {
-    if enable_cpu_bvh8_tri4 && enable_cpu_hybrid {
+    if enable_cpu_bvh8_tri4 && enable_cpu_ray8 && enable_cpu_hybrid {
         cpu_traverse_hybrid(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
             make_cpu_bvh8_tri4(nodes, tris),
@@ -263,11 +393,11 @@ extern fn cpu_occluded_hybrid_ray8_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], ray
             true /*single*/,
             true /*any_hit*/
         );
-    }
+    } else { variant_not_available("cpu_occluded_hybrid_ray8_bvh8_tri4"); }
 }
 
 extern fn cpu_intersect_packet_ray8_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], rays: &[Ray8], hits: &mut [Hit8], num_packets: i32) -> () {
-    if enable_cpu_bvh8_tri4 && enable_cpu_packet {
+    if enable_cpu_bvh8_tri4 && enable_cpu_ray8 && enable_cpu_packet {
         cpu_traverse_hybrid(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
             make_cpu_bvh8_tri4(nodes, tris),
@@ -278,11 +408,11 @@ extern fn cpu_intersect_packet_ray8_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], ra
             false /*single*/,
             false /*any_hit*/
         );
-    }
+    } else { variant_not_available("cpu_intersect_packet_ray8_bvh8_tri4"); }
 }
 
 extern fn cpu_occluded_packet_ray8_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], rays: &[Ray8], hits: &mut [Hit8], num_packets: i32) -> () {
-    if enable_cpu_bvh8_tri4 && enable_cpu_packet {
+    if enable_cpu_bvh8_tri4 && enable_cpu_ray8 && enable_cpu_packet {
         cpu_traverse_hybrid(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
             make_cpu_bvh8_tri4(nodes, tris),
@@ -293,7 +423,7 @@ extern fn cpu_occluded_packet_ray8_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], ray
             false /*single*/,
             true /*any_hit*/
         );
-    }
+    } else { variant_not_available("cpu_occluded_packet_ray8_bvh8_tri4"); }
 }
 
 extern fn cpu_intersect_single_ray1_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], rays: &[Ray1], hits: &mut [Hit1], num_packets: i32) -> () {
@@ -307,7 +437,7 @@ extern fn cpu_intersect_single_ray1_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], ra
             num_packets,
             false /*any_hit*/
         );
-    }
+    } else { variant_not_available("cpu_intersect_single_ray1_bvh8_tri4"); }
 }
 
 extern fn cpu_occluded_single_ray1_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], rays: &[Ray1], hits: &mut [Hit1], num_packets: i32) -> () {
@@ -321,7 +451,7 @@ extern fn cpu_occluded_single_ray1_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], ray
             num_packets,
             true /*any_hit*/
         );
-    }
+    } else { variant_not_available("cpu_occluded_single_ray1_bvh8_tri4"); }
 }
 
 // GPU BVH2 variants ---------------------------------------------------------------
@@ -339,7 +469,7 @@ extern fn nvvm_intersect_single_ray1_bvh2_tri1(nodes: &[Node2], tris: &[Tri1], r
             num_rays,
             false /*any_hit*/,
         );
-    }
+    } else { variant_not_available("nvvm_intersect_single_ray1_bvh2_tri1"); }
 }
 
 extern fn nvvm_occluded_single_ray1_bvh2_tri1(nodes: &[Node2], tris: &[Tri1], rays: &[Ray1], hits: &mut [Hit1], num_rays: i32) -> () {
@@ -355,5 +485,5 @@ extern fn nvvm_occluded_single_ray1_bvh2_tri1(nodes: &[Node2], tris: &[Tri1], ra
             num_rays,
             true /*any_hit*/,
         );
-    }
+    } else { variant_not_available("nvvm_occluded_single_ray1_bvh2_tri1"); }
 }

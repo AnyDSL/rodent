@@ -33,10 +33,10 @@ The current settings assume a machine with AVX2 or higher. To change this, follo
 Test files are provided in the `testing` directory. Use the following commands to test the code:
 
     cd build/bin
-    ./bench_traversal -bvh ../../testing/sponza.bvh -ray ../../testing/sponza-primary.rays -bench 50 -warmup 10 -tmax 5000 -o output-hybrid-primary.fbuf
-    ./bench_traversal -bvh ../../testing/sponza.bvh -ray ../../testing/sponza-primary.rays -bench 50 -warmup 10 -tmax 5000 -s -o output-single-primary.fbuf
-    ./bench_traversal -bvh ../../testing/sponza.bvh -ray ../../testing/sponza-random.rays -bench 50 -warmup 10 -tmax 1 -o output-hybrid-random.fbuf
-    ./bench_traversal -bvh ../../testing/sponza.bvh -ray ../../testing/sponza-random.rays -bench 50 -warmup 10 -tmax 1 -s -o output-single-random.fbuf
+    ./bench_traversal -bvh ../../testing/sponza.bvh -ray ../../testing/sponza-primary.rays --bench 50 --warmup 10 --tmax 5000 -o output-hybrid-primary.fbuf
+    ./bench_traversal -bvh ../../testing/sponza.bvh -ray ../../testing/sponza-primary.rays --bench 50 --warmup 10 --tmax 5000 -s -o output-single-primary.fbuf
+    ./bench_traversal -bvh ../../testing/sponza.bvh -ray ../../testing/sponza-random.rays --bench 50 --warmup 10 --tmax 1 -o output-hybrid-random.fbuf
+    ./bench_traversal -bvh ../../testing/sponza.bvh -ray ../../testing/sponza-random.rays --bench 50 --warmup 10 --tmax 1 -s -o output-single-random.fbuf
     ./fbuf2png -n output-hybrid-primary.fbuf output-hybrid-primary.png
     ./fbuf2png -n output-single-primary.fbuf output-single-primary.png
     ./fbuf2png -n output-hybrid-random.fbuf output-hybrid-random.png

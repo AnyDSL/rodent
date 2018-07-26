@@ -5,7 +5,14 @@ iters = "50"
 warmups = "10"
 bench_rodent = "../build/bin/bench_traversal"
 bench_embree = "../build/bin/bench_embree"
-variants = ["-w 4", "-w 4 -p", "-w 4 -s", "-w 8", "-w 8 -p", "-w 8 -s"]
+variants = [
+    "--bvh-width 4",
+    "--bvh-width 4 -p",
+    "--bvh-width 4 -s",
+    "--bvh-width 8",
+    "--bvh-width 8 -p",
+    "--bvh-width 8 -s"
+]
 scenes = [
     "sponza", 
     "crown",
@@ -34,11 +41,11 @@ def main():
             for rays in distribs:
                 (tmin, ao_max) = offsets[scene]
                 tmax = 1.0e9
-                args = ["-ray", "scenes/" + scene + "/" + rays + ".rays", "-bench", iters, "-warmup", warmups]
+                args = ["-ray", "scenes/" + scene + "/" + rays + ".rays", "--bench", iters, "--warmup", warmups]
                 if rays == "ao":
                     tmax = ao_max
                     args += ["-any"]
-                args += ["-tmin", str(tmin), "-tmax", str(tmax)]
+                args += ["--tmin", str(tmin), "--tmax", str(tmax)]
                 args += variant.split()
                 #print(scene, ": ", " ".join(args))
                 mrays_embree = bench_mrays([bench_embree, "-obj", "scenes/" + scene + "/" + scene + ".obj"] + args) if not "-p" in variant else None

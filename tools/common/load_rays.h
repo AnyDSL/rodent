@@ -23,6 +23,22 @@ struct RayTraits<Ray1> {
     }
 };
 
+struct Ray4;
+template <>
+struct RayTraits<Ray4> {
+    enum { RayPerPacket = 4 };
+    static void write_ray(const float* org_dir, float tmin, float tmax, int j, Ray4& ray) {
+        ray.org[0][j] = org_dir[0];
+        ray.org[1][j] = org_dir[1];
+        ray.org[2][j] = org_dir[2];
+        ray.dir[0][j] = org_dir[3];
+        ray.dir[1][j] = org_dir[4];
+        ray.dir[2][j] = org_dir[5];
+        ray.tmin[j] = tmin;
+        ray.tmax[j] = tmax;
+    }
+};
+
 struct Ray8;
 template <>
 struct RayTraits<Ray8> {
