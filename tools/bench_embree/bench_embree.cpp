@@ -20,24 +20,6 @@
 #include "tri.h"
 
 template <>
-struct RayTraits<RTCRay8> {
-    enum { RayPerPacket = 8 };
-    static void write_ray(const float* org_dir, float tmin, float tmax, int j, RTCRay8& ray) {
-        ray.org_x[j] = org_dir[0];
-        ray.org_y[j] = org_dir[1];
-        ray.org_z[j] = org_dir[2];
-        ray.tnear[j] = tmin;
-        ray.dir_x[j] = org_dir[3];
-        ray.dir_y[j] = org_dir[4];
-        ray.dir_z[j] = org_dir[5];
-        ray.tfar[j] = tmax;
-        ray.mask[j] = 0xFFFFFFFF;
-        ray.time[j] = 0.0f;
-        ray.flags[j] = 0;
-    }
-};
-
-template <>
 struct RayTraits<RTCRay> {
     enum { RayPerPacket = 1 };
     static void write_ray(const float* org_dir, float tmin, float tmax, int j, RTCRay& ray) {
@@ -56,24 +38,38 @@ struct RayTraits<RTCRay> {
 };
 
 template <>
-struct RayTraits<RTCRayHit8> {
+struct RayTraits<RTCRay4> {
+    enum { RayPerPacket = 4 };
+    static void write_ray(const float* org_dir, float tmin, float tmax, int j, RTCRay4& ray) {
+        ray.org_x[j] = org_dir[0];
+        ray.org_y[j] = org_dir[1];
+        ray.org_z[j] = org_dir[2];
+        ray.tnear[j] = tmin;
+        ray.dir_x[j] = org_dir[3];
+        ray.dir_y[j] = org_dir[4];
+        ray.dir_z[j] = org_dir[5];
+        ray.tfar[j] = tmax;
+        ray.mask[j] = 0xFFFFFFFF;
+        ray.time[j] = 0.0f;
+        ray.flags[j] = 0;
+    }
+};
+
+template <>
+struct RayTraits<RTCRay8> {
     enum { RayPerPacket = 8 };
-    static void write_ray(const float* org_dir, float tmin, float tmax, int j, RTCRayHit8& ray) {
-        ray.ray.org_x[j] = org_dir[0];
-        ray.ray.org_y[j] = org_dir[1];
-        ray.ray.org_z[j] = org_dir[2];
-        ray.ray.tnear[j] = tmin;
-        ray.ray.dir_x[j] = org_dir[3];
-        ray.ray.dir_y[j] = org_dir[4];
-        ray.ray.dir_z[j] = org_dir[5];
-        ray.ray.tfar[j] = tmax;
-        ray.ray.mask[j] = 0xFFFFFFFF;
-        ray.ray.time[j] = 0.0f;
-        ray.ray.flags[j] = 0;
-        ray.hit.geomID[j] = RTC_INVALID_GEOMETRY_ID;
-        ray.hit.primID[j] = RTC_INVALID_GEOMETRY_ID;
-        for (int i = 0; i < RTC_MAX_INSTANCE_LEVEL_COUNT; ++i)
-            ray.hit.instID[i][j] = RTC_INVALID_GEOMETRY_ID;
+    static void write_ray(const float* org_dir, float tmin, float tmax, int j, RTCRay8& ray) {
+        ray.org_x[j] = org_dir[0];
+        ray.org_y[j] = org_dir[1];
+        ray.org_z[j] = org_dir[2];
+        ray.tnear[j] = tmin;
+        ray.dir_x[j] = org_dir[3];
+        ray.dir_y[j] = org_dir[4];
+        ray.dir_z[j] = org_dir[5];
+        ray.tfar[j] = tmax;
+        ray.mask[j] = 0xFFFFFFFF;
+        ray.time[j] = 0.0f;
+        ray.flags[j] = 0;
     }
 };
 
@@ -99,6 +95,50 @@ struct RayTraits<RTCRayHit> {
     }
 };
 
+template <>
+struct RayTraits<RTCRayHit4> {
+    enum { RayPerPacket = 4 };
+    static void write_ray(const float* org_dir, float tmin, float tmax, int j, RTCRayHit4& ray) {
+        ray.ray.org_x[j] = org_dir[0];
+        ray.ray.org_y[j] = org_dir[1];
+        ray.ray.org_z[j] = org_dir[2];
+        ray.ray.tnear[j] = tmin;
+        ray.ray.dir_x[j] = org_dir[3];
+        ray.ray.dir_y[j] = org_dir[4];
+        ray.ray.dir_z[j] = org_dir[5];
+        ray.ray.tfar[j] = tmax;
+        ray.ray.mask[j] = 0xFFFFFFFF;
+        ray.ray.time[j] = 0.0f;
+        ray.ray.flags[j] = 0;
+        ray.hit.geomID[j] = RTC_INVALID_GEOMETRY_ID;
+        ray.hit.primID[j] = RTC_INVALID_GEOMETRY_ID;
+        for (int i = 0; i < RTC_MAX_INSTANCE_LEVEL_COUNT; ++i)
+            ray.hit.instID[i][j] = RTC_INVALID_GEOMETRY_ID;
+    }
+};
+
+template <>
+struct RayTraits<RTCRayHit8> {
+    enum { RayPerPacket = 8 };
+    static void write_ray(const float* org_dir, float tmin, float tmax, int j, RTCRayHit8& ray) {
+        ray.ray.org_x[j] = org_dir[0];
+        ray.ray.org_y[j] = org_dir[1];
+        ray.ray.org_z[j] = org_dir[2];
+        ray.ray.tnear[j] = tmin;
+        ray.ray.dir_x[j] = org_dir[3];
+        ray.ray.dir_y[j] = org_dir[4];
+        ray.ray.dir_z[j] = org_dir[5];
+        ray.ray.tfar[j] = tmax;
+        ray.ray.mask[j] = 0xFFFFFFFF;
+        ray.ray.time[j] = 0.0f;
+        ray.ray.flags[j] = 0;
+        ray.hit.geomID[j] = RTC_INVALID_GEOMETRY_ID;
+        ray.hit.primID[j] = RTC_INVALID_GEOMETRY_ID;
+        for (int i = 0; i < RTC_MAX_INSTANCE_LEVEL_COUNT; ++i)
+            ray.hit.instID[i][j] = RTC_INVALID_GEOMETRY_ID;
+    }
+};
+
 inline void check_argument(int i, int argc, char** argv) {
     if (i + 1 >= argc) {
         std::cerr << "Missing argument for " << argv[i] << std::endl;
@@ -111,13 +151,14 @@ inline void usage() {
                  "Available options:\n"
                  "  -obj     --obj-file        Sets the OBJ file to use\n"
                  "  -ray     --ray-file        Sets the ray file to use\n"
-                 "  -tmin                      Sets the minimum distance along the rays (default: 0)\n"
-                 "  -tmax                      Sets the maximum distance along the rays (default: 1e9)\n"
-                 "  -bench   --bench-iters     Sets the number of benchmark iterations (default: 1)\n"
-                 "  -warmup  --bench-warmup    Sets the number of warmup iterations (default: 0)\n"
+                 "           --tmin            Sets the minimum distance along the rays (default: 0)\n"
+                 "           --tmax            Sets the maximum distance along the rays (default: 1e9)\n"
+                 "           --bench           Sets the number of benchmark iterations (default: 1)\n"
+                 "           --warmup          Sets the number of warmup iterations (default: 0)\n"
                  "  -any                       Exit at the first intersection (disabled by default)\n"
                  "  -s       --single          Use single rays (disabled by default)\n"
-                 "  -w       --bvh-width       Sets the BVH width (4 or 8, default: 4)\n"
+                 "           --bvh-width       Sets the BVH width (4 or 8, default: 4)\n"
+                 "           --ray-width       Sets the ray width (4 or 8, default: 8)\n"
                  "  -o       --output          Sets the output file name (no file is generated by default)\n";
 }
 
@@ -249,6 +290,7 @@ int main(int argc, char** argv) {
     float tmin = 0.0f, tmax = 1e9f;
     int iters = 1;
     int warmup = 0;
+    int ray_width = 8;
     int bvh_width = 4;
     bool any_hit = false;
     bool single_ray = false;
@@ -265,25 +307,28 @@ int main(int argc, char** argv) {
             } else if (!strcmp(arg, "-ray") || !strcmp(arg, "--ray-file")) {
                 check_argument(i, argc, argv);
                 ray_file = argv[++i];
-            } else if (!strcmp(arg, "-tmin")) {
+            } else if (!strcmp(arg, "--tmin")) {
                 check_argument(i, argc, argv);
                 tmin = strtof(argv[++i], nullptr);
-            } else if (!strcmp(arg, "-tmax")) {
+            } else if (!strcmp(arg, "--tmax")) {
                 check_argument(i, argc, argv);
                 tmax = strtof(argv[++i], nullptr);
-            } else if (!strcmp(arg, "-bench") || !strcmp(arg, "--bench-iters")) {
+            } else if (!strcmp(arg, "--bench")) {
                 check_argument(i, argc, argv);
                 iters = strtol(argv[++i], nullptr, 10);
-            } else if (!strcmp(arg, "-warmup") || !strcmp(arg, "--warmup-iters")) {
+            } else if (!strcmp(arg, "--warmup")) {
                 check_argument(i, argc, argv);
                 warmup = strtol(argv[++i], nullptr, 10);
             } else if (!strcmp(arg, "-any")) {
                 any_hit = true;
             } else if (!strcmp(arg, "-s") || !strcmp(arg, "--single")) {
                 single_ray = true;
-            } else if (!strcmp(arg, "-w") || !strcmp(arg, "--bvh-width")) {
+            } else if (!strcmp(arg, "--bvh-width")) {
                 check_argument(i, argc, argv);
                 bvh_width = strtol(argv[++i], nullptr, 10);
+            } else if (!strcmp(arg, "--ray-width")) {
+                check_argument(i, argc, argv);
+                ray_width = strtol(argv[++i], nullptr, 10);
             } else if (!strcmp(arg, "-o") || !strcmp(arg, "--output")) {
                 check_argument(i, argc, argv);
                 out_file = argv[++i];
@@ -305,9 +350,12 @@ int main(int argc, char** argv) {
         std::cerr << "No ray file specified" << std::endl;
         return 1;
     }
-
     if (bvh_width != 4 && bvh_width != 8) {
         std::cerr << "Invalid BVH width" << std::endl;
+        return 1;
+    }
+    if (ray_width != 4 && ray_width != 8) {
+        std::cerr << "Invalid ray width" << std::endl;
         return 1;
     }
 
@@ -321,8 +369,10 @@ int main(int argc, char** argv) {
     create_triangles(obj, tris);
 
     anydsl::Array<RTCRayHit>  rayhits1, rayhits1_res;
+    anydsl::Array<RTCRayHit4> rayhits4, rayhits4_res;
     anydsl::Array<RTCRayHit8> rayhits8, rayhits8_res;
     anydsl::Array<RTCRay>  rays1, rays1_res;
+    anydsl::Array<RTCRay4> rays4, rays4_res;
     anydsl::Array<RTCRay8> rays8, rays8_res;
 
     const int valid[8] alignas(32) = { -1, -1, -1, -1, -1, -1, -1, -1 };
@@ -330,6 +380,7 @@ int main(int argc, char** argv) {
     std::function<double(RTCScene, RTCIntersectContext*)> iter_fn;
     std::function<size_t()> count_hits;
 
+    size_t ray_count = 0;
     if (single_ray) {
         bool rays_loaded = any_hit
             ? load_rays(ray_file, rays1, tmin, tmax, false)
@@ -338,6 +389,7 @@ int main(int argc, char** argv) {
             std::cerr << "Cannot load rays" << std::endl;
             return 1;
         }
+        ray_count = any_hit ? rays1.size() : rayhits1.size();
         rays1_res    = std::move(anydsl::Array<RTCRay>(rays1.size()));
         rayhits1_res = std::move(anydsl::Array<RTCRayHit>(rayhits1.size()));
         if (any_hit) iter_fn = [&] (RTCScene scene, RTCIntersectContext* context) { return intersect_scene(rays1, rays1_res, rtcOccluded1,  scene, context); };
@@ -351,6 +403,32 @@ int main(int argc, char** argv) {
             }
             return intr; 
         };
+    } else if (ray_width == 4) {
+        bool rays_loaded = any_hit
+            ? load_rays(ray_file, rays4, tmin, tmax, false)
+            : load_rays(ray_file, rayhits4, tmin, tmax, false);
+        if (!rays_loaded) {
+            std::cerr << "Cannot load rays" << std::endl;
+            return 1;
+        }
+        ray_count = (any_hit ? rays4.size() : rayhits4.size()) * 4;
+        rays4_res    = std::move(anydsl::Array<RTCRay4>(rays4.size()));
+        rayhits4_res = std::move(anydsl::Array<RTCRayHit4>(rayhits4.size()));
+        if (any_hit) iter_fn = [&] (RTCScene scene, RTCIntersectContext* context) { return intersect_scene(rays4, rays4_res, rtcOccluded4,  valid, scene, context); };
+        else         iter_fn = [&] (RTCScene scene, RTCIntersectContext* context) { return intersect_scene(rayhits4, rayhits4_res, rtcIntersect4, valid, scene, context); };
+        count_hits = [&] {
+            size_t intr = 0;
+            if (any_hit) {
+                for (auto hit : rays4_res) {
+                    for (int i = 0; i < 4; i++) intr += hit.tfar[i] < 0.0f;
+                }
+            } else {
+                for (auto hit : rayhits4_res) {
+                    for (int i = 0; i < 4; i++) intr += hit.hit.geomID[i] != RTC_INVALID_GEOMETRY_ID;
+                }
+            }
+            return intr; 
+        };
     } else {
         bool rays_loaded = any_hit
             ? load_rays(ray_file, rays8, tmin, tmax, false)
@@ -359,6 +437,7 @@ int main(int argc, char** argv) {
             std::cerr << "Cannot load rays" << std::endl;
             return 1;
         }
+        ray_count = (any_hit ? rays8.size() : rayhits8.size()) * 8;
         rays8_res    = std::move(anydsl::Array<RTCRay8>(rays8.size()));
         rayhits8_res = std::move(anydsl::Array<RTCRayHit8>(rayhits8.size()));
         if (any_hit) iter_fn = [&] (RTCScene scene, RTCIntersectContext* context) { return intersect_scene(rays8, rays8_res, rtcOccluded8,  valid, scene, context); };
@@ -378,12 +457,8 @@ int main(int argc, char** argv) {
         };
     }
 
-    auto num_rays = single_ray
-        ? (any_hit ? rays1.size() : rayhits1.size())
-        : (any_hit ? rays8.size() : rayhits8.size()) * 8;
-    std::cout << num_rays << " ray(s) in the distribution file." << std::endl;
-
-    bench(bvh_width, tris, iter_fn, count_hits, iters, warmup, num_rays);
+    std::cout << ray_count << " ray(s) in the distribution file." << std::endl;
+    bench(bvh_width, tris, iter_fn, count_hits, iters, warmup, ray_count);
 
     if (out_file != "") {
         if (any_hit) {
@@ -393,6 +468,11 @@ int main(int argc, char** argv) {
         std::ofstream of(out_file, std::ofstream::binary);
         if (single_ray) {
             for (auto& hit : rayhits1_res) of.write((char*)&hit.ray.tfar, sizeof(float));
+        } else if (ray_width == 4) {
+            for (auto& hit : rayhits4_res) {
+                for (int i = 0; i < 4; i++)
+                    of.write((char*)&hit.ray.tfar[i], sizeof(float));
+            }
         } else {
             for (auto& hit : rayhits8_res) {
                 for (int i = 0; i < 8; i++)
