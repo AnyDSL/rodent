@@ -7,11 +7,11 @@
 template <typename Ray>
 struct RayTraits {};
 
-struct Ray1AoS;
+struct Ray1;
 template <>
-struct RayTraits<Ray1AoS> {
+struct RayTraits<Ray1> {
     enum { RayPerPacket = 1 };
-    static void write_ray(const float* org_dir, float tmin, float tmax, int j, Ray1AoS& ray) {
+    static void write_ray(const float* org_dir, float tmin, float tmax, int j, Ray1& ray) {
         ray.org[0] = org_dir[0];
         ray.org[1] = org_dir[1];
         ray.org[2] = org_dir[2];
@@ -23,11 +23,11 @@ struct RayTraits<Ray1AoS> {
     }
 };
 
-struct Ray8SoA;
+struct Ray8;
 template <>
-struct RayTraits<Ray8SoA> {
+struct RayTraits<Ray8> {
     enum { RayPerPacket = 8 };
-    static void write_ray(const float* org_dir, float tmin, float tmax, int j, Ray8SoA& ray) {
+    static void write_ray(const float* org_dir, float tmin, float tmax, int j, Ray8& ray) {
         ray.org[0][j] = org_dir[0];
         ray.org[1][j] = org_dir[1];
         ray.org[2][j] = org_dir[2];

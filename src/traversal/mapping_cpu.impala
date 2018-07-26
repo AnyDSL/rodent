@@ -1,57 +1,6 @@
-// Misc. ---------------------------------------------------------------------------
+// BVH layouts ---------------------------------------------------------------------
 
-// Computes the indices of the bounding box corners for a given octant
-fn @make_cpu_octant_order(octant: i32, size: i32) -> [i32 * 6] {
-    let (ox, oy, oz) = (octant & 1, (octant >> 1) & 1, (octant >> 2) & 1);
-    let (ix, iy, iz) = (ox * size, 2 * size + oy * size, 4 * size + oz * size);
-    [ix ^ size, iy ^ size, iz ^ size, ix, iy, iz]
-}
-
-// Loads a bounding box ordered by octant on the CPU
-fn @make_cpu_ordered_bbox(bounds_ptr: &[i8], k: i32, order: [i32 * 6], size: i32) -> BBox {
-    let (xmin, ymin, zmin) = (
-        *(rv_align(&bounds_ptr(order(0) + k), size) as &f32),
-        *(rv_align(&bounds_ptr(order(1) + k), size) as &f32),
-        *(rv_align(&bounds_ptr(order(2) + k), size) as &f32)
-    );
-    let (xmax, ymax, zmax) = (
-        *(rv_align(&bounds_ptr(order(3) + k), size) as &f32),
-        *(rv_align(&bounds_ptr(order(4) + k), size) as &f32),
-        *(rv_align(&bounds_ptr(order(5) + k), size) as &f32)
-    );
-
-    make_bbox(make_vec3(xmin, ymin, zmin), make_vec3(xmax, ymax, zmax))
-}
-
-// Load one ray from a packet of rays
-fn @load_ray(ray_ptr: &Ray, lane: i32) -> Ray {
-    Ray {
-        org: make_vec3(rv_load(&ray_ptr.org.x, lane), rv_load(&ray_ptr.org.y, lane), rv_load(&ray_ptr.org.z, lane)),
-        dir: make_vec3(rv_load(&ray_ptr.dir.x, lane), rv_load(&ray_ptr.dir.y, lane), rv_load(&ray_ptr.dir.z, lane)),
-        inv_org: make_vec3(rv_load(&ray_ptr.inv_org.x, lane), rv_load(&ray_ptr.inv_org.y, lane), rv_load(&ray_ptr.inv_org.z, lane)),
-        inv_dir: make_vec3(rv_load(&ray_ptr.inv_dir.x, lane), rv_load(&ray_ptr.inv_dir.y, lane), rv_load(&ray_ptr.inv_dir.z, lane)),
-        tmin: rv_load(&ray_ptr.tmin, lane),
-        tmax: rv_load(&ray_ptr.tmax, lane)
-    }
-}
-
-// Store one hit in a packet of hits
-fn @store_hit(hit_ptr: &mut Hit, lane: i32, hit: Hit) -> () {
-    rv_store(&mut hit_ptr.distance, lane, hit.distance);
-    rv_store(&mut hit_ptr.uv_coords.x, lane, hit.uv_coords.x);
-    rv_store(&mut hit_ptr.uv_coords.y, lane, hit.uv_coords.y);
-    rv_store(bitcast[&mut f32](&mut hit_ptr.prim_id), lane, bitcast[f32](hit.prim_id));
-    rv_store(bitcast[&mut f32](&mut hit_ptr.geom_id), lane, bitcast[f32](hit.geom_id));
-}
-
-// BVH4 ----------------------------------------------------------------------------
-
-struct Bvh4 {
-    nodes: &[Bvh4Node],
-    tris:  &[Bvh4Tri]
-}
-
-struct Bvh4Tri {
+struct Tri4 {
     v0: [[f32 * 4] * 3],
     e1: [[f32 * 4] * 3],
     e2: [[f32 * 4] * 3],
@@ -59,135 +8,117 @@ struct Bvh4Tri {
     id:  [i32 * 4]
 }
 
-struct Bvh4Node {
+struct Node4 {
     bounds: [[f32 * 4] * 6],
     child:   [i32 * 4],
     pad:     [i32 * 4]
 }
 
-fn @make_cpu_bvh4_node(node_ptr: &Bvh4Node) -> BvhNode {
-    BvhNode {
-        bbox: @ |i|
-            make_bbox(make_vec3(node_ptr.bounds(0)(i), node_ptr.bounds(2)(i), node_ptr.bounds(4)(i)),
-                      make_vec3(node_ptr.bounds(1)(i), node_ptr.bounds(3)(i), node_ptr.bounds(5)(i))),
-        ordered_bbox: @ |i, order| make_cpu_ordered_bbox(&node_ptr.bounds as &[i8], i, order, 16),
-        child: @ |i| node_ptr.child(i)
-    }
-}
-
-fn @make_cpu_bvh4_tri(tri_ptr: &Bvh4Tri) -> BvhTri {
-    BvhTri {
-        load: @ |i| {
-            let v0 = make_vec3(tri_ptr.v0(0)(i), tri_ptr.v0(1)(i), tri_ptr.v0(2)(i));
-            let e1 = make_vec3(tri_ptr.e1(0)(i), tri_ptr.e1(1)(i), tri_ptr.e1(2)(i));
-            let e2 = make_vec3(tri_ptr.e2(0)(i), tri_ptr.e2(1)(i), tri_ptr.e2(2)(i));
-            let n  = make_vec3(tri_ptr. n(0)(i), tri_ptr. n(1)(i), tri_ptr. n(2)(i));
-            make_tri(v0, e1, e2, n)
-        },
-        id: @ |i| tri_ptr.id(i)
-    }
-}
-
-fn @make_cpu_bvh4(bvh4: Bvh4) -> Bvh {
-    Bvh {
-        node: @ |j| make_cpu_bvh4_node(rv_align(&bvh4.nodes(j) as &i8, 16) as &Bvh4Node),
-        tri:  @ |j| make_cpu_bvh4_tri(rv_align(&bvh4.tris(j) as &i8, 16) as &Bvh4Tri),
-        order: @ |octant| make_cpu_octant_order(octant, 16),
-        prefetch: @ |id| {
-            let ptr = select(id < 0, &bvh4.tris(!id) as &[u8], &bvh4.nodes(id - 1) as &[u8]);
-            cpu_prefetch_bytes(ptr, 128)
-        },
-        arity: 4,
-        tri_size: 4
-    }
-}
-
-// BVH8 ----------------------------------------------------------------------------
-
-struct Bvh8 {
-    nodes: &[Bvh8Node],
-    tris:  &[Bvh8Tri]
-}
-
-// BVH8 with packets of 4 triangles (Embree layout)
-struct Bvh8Tri4 {
-    nodes: &[Bvh8Node],
-    tris:  &[Bvh4Tri]
-}
-
-struct Bvh8Tri {
-    v0: [[f32 * 8] * 3],
-    e1: [[f32 * 8] * 3],
-    e2: [[f32 * 8] * 3],
-    n:  [[f32 * 8] * 3],
-    id:  [i32 * 8]
-}
-
-struct Bvh8Node {
+struct Node8 {
     bounds: [[f32 * 8] * 6],
     child:   [i32 * 8],
     pad:     [i32 * 8]
 }
 
-fn @make_cpu_bvh8_node(node_ptr: &Bvh8Node) -> BvhNode {
-    BvhNode {
-        bbox: @ |i|
-            make_bbox(make_vec3(node_ptr.bounds(0)(i), node_ptr.bounds(2)(i), node_ptr.bounds(4)(i)),
-                      make_vec3(node_ptr.bounds(1)(i), node_ptr.bounds(3)(i), node_ptr.bounds(5)(i))),
-        ordered_bbox: @ |i, order| make_cpu_ordered_bbox(&node_ptr.bounds as &[i8], i, order, 32),
-        child: @ |i| node_ptr.child(i)
-    }
-}
-
-fn @make_cpu_bvh8_tri(tri_ptr: &Bvh8Tri) -> BvhTri {
-    BvhTri {
-        load: @ |i| {
-            let v0 = make_vec3(tri_ptr.v0(0)(i), tri_ptr.v0(1)(i), tri_ptr.v0(2)(i));
-            let e1 = make_vec3(tri_ptr.e1(0)(i), tri_ptr.e1(1)(i), tri_ptr.e1(2)(i));
-            let e2 = make_vec3(tri_ptr.e2(0)(i), tri_ptr.e2(1)(i), tri_ptr.e2(2)(i));
-            let n  = make_vec3(tri_ptr. n(0)(i), tri_ptr. n(1)(i), tri_ptr. n(2)(i));
-            make_tri(v0, e1, e2, n)
+fn @make_cpu_tri4(tris: &[Tri4]) -> fn (i32) -> Prim {
+    @ |j| Prim {
+        intersect: @ |i, math, mask, ray| {
+            let tri_ptr = rv_align(&tris(j) as &i8, 32) as &Tri4;
+            let v0  = make_vec3(tri_ptr.v0(0)(i), tri_ptr.v0(1)(i), tri_ptr.v0(2)(i));
+            let e1  = make_vec3(tri_ptr.e1(0)(i), tri_ptr.e1(1)(i), tri_ptr.e1(2)(i));
+            let e2  = make_vec3(tri_ptr.e2(0)(i), tri_ptr.e2(1)(i), tri_ptr.e2(2)(i));
+            let n   = make_vec3(tri_ptr.n (0)(i), tri_ptr.n (1)(i), tri_ptr.n (2)(i));
+            let tri = make_tri(v0, e1, e2, n);
+            let (mask, t, u, v) = intersect_ray_tri(math, false /*backface_culling*/, mask, ray, tri);
+            let id = tri_ptr.id(i) & 0x7FFFFFFF;
+            (mask, make_hit(0, id, t, make_vec2(u, v)))
         },
-        id: @ |i| tri_ptr.id(i)
+        is_valid: @ |i| tris(j).id(i) != -1,
+        is_last: tris(j).id(3) < 0,
+        size: 4
     }
 }
 
-fn @make_cpu_bvh8_tri8(bvh8: Bvh8) -> Bvh {
+fn @make_cpu_bvh4_tri4(nodes: &[Node4], tris: &[Tri4]) -> Bvh {
     Bvh {
-        node: @ |j| make_cpu_bvh8_node(rv_align(&bvh8.nodes(j) as &i8, 32) as &Bvh8Node),
-        tri:  @ |j| make_cpu_bvh8_tri(rv_align(&bvh8.tris(j) as &i8, 32) as &Bvh8Tri),
-        order: @ |octant| make_cpu_octant_order(octant, 32),
+        node: @ |j| Node {
+            bbox: @ |i| {
+                make_bbox(make_vec3(nodes(j).bounds(0)(i), nodes(j).bounds(2)(i), nodes(j).bounds(4)(i)),
+                          make_vec3(nodes(j).bounds(1)(i), nodes(j).bounds(3)(i), nodes(j).bounds(5)(i)))
+            },
+            ordered_bbox: @ |i, octant| {
+                let ptr = &nodes(j).bounds as &[f32];
+                let align_ptr = @ |i| rv_align(&ptr(i) as &i8, 16) as &[f32];
+                let ox = (octant & 1) << 2;
+                let oy = (octant & 2) << 1;
+                let oz = (octant & 4);
+                make_bbox(
+                    make_vec3(
+                        align_ptr(4  - ox)(i),
+                        align_ptr(12 - oy)(i),
+                        align_ptr(20 - oz)(i)
+                    ),
+                    make_vec3(
+                        align_ptr(0  + ox)(i),
+                        align_ptr(8  + oy)(i),
+                        align_ptr(16 + oz)(i)
+                    )
+                )
+            },
+            child: @ |i| nodes(j).child(i)
+        },
+        prim: make_cpu_tri4(tris),
         prefetch: @ |id| {
-            let ptr = select(id < 0, &bvh8.tris(!id) as &[u8], &bvh8.nodes(id - 1) as &[u8]);
+            let ptr = select(id < 0, &tris(!id) as &[u8], &nodes(id - 1) as &[u8]);
+            cpu_prefetch_bytes(ptr, 128)
+        },
+        arity: 4
+    }
+}
+
+fn @make_cpu_bvh8_tri4(nodes: &[Node8], tris: &[Tri4]) -> Bvh {
+    Bvh {
+        node: @ |j| Node {
+            bbox: @ |i| {
+                make_bbox(make_vec3(nodes(j).bounds(0)(i), nodes(j).bounds(2)(i), nodes(j).bounds(4)(i)),
+                          make_vec3(nodes(j).bounds(1)(i), nodes(j).bounds(3)(i), nodes(j).bounds(5)(i)))
+            },
+            ordered_bbox: @ |i, octant| {
+                let ptr = &nodes(j).bounds as &[f32];
+                let align_ptr = @ |i| rv_align(&ptr(i) as &i8, 32) as &[f32];
+                let ox = (octant & 1) << 3;
+                let oy = (octant & 2) << 2;
+                let oz = (octant & 4) << 1;
+                make_bbox(
+                    make_vec3(
+                        align_ptr(8  - ox)(i),
+                        align_ptr(24 - oy)(i),
+                        align_ptr(40 - oz)(i)
+                    ),
+                    make_vec3(
+                        align_ptr(0  + ox)(i),
+                        align_ptr(16 + oy)(i),
+                        align_ptr(32 + oz)(i)
+                    )
+                )
+            },
+            child: @ |i| nodes(j).child(i)
+        },
+        prim: make_cpu_tri4(tris),
+        prefetch: @ |id| {
+            let ptr = select(id < 0, &tris(!id) as &[u8], &nodes(id - 1) as &[u8]);
             cpu_prefetch_bytes(ptr, 256)
         },
-        arity: 8,
-        tri_size: 8
+        arity: 8
     }
 }
 
-fn @make_cpu_bvh8_tri4(bvh8tri4: Bvh8Tri4) -> Bvh {
-    Bvh {
-        node: @ |j| make_cpu_bvh8_node(rv_align(&bvh8tri4.nodes(j) as &i8, 32) as &Bvh8Node),
-        tri:  @ |j| make_cpu_bvh4_tri(rv_align(&bvh8tri4.tris(j) as &i8, 16) as &Bvh4Tri),
-        order: @ |octant| make_cpu_octant_order(octant, 32),
-        prefetch: @ |id| {
-            let ptr = select(id < 0, &bvh8tri4.tris(!id) as &[u8], &bvh8tri4.nodes(id - 1) as &[u8]);
-            cpu_prefetch_bytes(ptr, 256)
-        },
-        arity: 8,
-        tri_size: 4
-    }
-}
+// Min/max functions ---------------------------------------------------------------
 
-// Min/Max functions  --------------------------------------------------------------
-
-fn @make_cpu_min_max() -> MinMax {
-    make_min_max(@ |a, b| select(a < b, a, b), @ |a, b| select(a > b, a, b))
-}
-
-fn make_cpu_int_min_max() -> MinMax {
-    // Integer min/max instead of floating point min/max
+// Integer min/max instead of floating point min/max (~10-15% faster on x86, not measured on ARM)
+// On x86, requires AVX2 when vectorizing with a vector length of 8, and
+// requires SSE2 when vectorizing with a vector length of 4
+fn @make_cpu_int_min_max() -> MinMax {
     let fminf = @ |x, y| {
         let (x_, y_) = (bitcast[i32](x), bitcast[i32](y));
         bitcast[f32](select(x_ < y_, x_, y_))
@@ -196,236 +127,146 @@ fn make_cpu_int_min_max() -> MinMax {
         let (x_, y_) = (bitcast[i32](x), bitcast[i32](y));
         bitcast[f32](select(x_ > y_, x_, y_))
     };
-    make_min_max(fminf, fmaxf)
+    make_min_max(fminf, fmaxf, true)
 }
 
-// Ray layouts  --------------------------------------------------------------------
-
-fn @make_cpu_ray1_layout(rays: &mut [Ray1AoS], hits: &mut [Hit1AoS]) -> RayLayout {
-    RayLayout {
-        packet_size: 1,
-        read_ray: @ |i, j| {
-            let ray_ptr = &rays(i + j);
-            make_ray(make_vec3(ray_ptr.org(0), ray_ptr.org(1), ray_ptr.org(2)),
-                     make_vec3(ray_ptr.dir(0), ray_ptr.dir(1), ray_ptr.dir(2)),
-                     ray_ptr.tmin, ray_ptr.tmax)
-        },
-        read_hit: @ |i, j| {
-            let hit_ptr = &hits(i + j);
-            make_hit(-1, hit_ptr.tri_id, hit_ptr.t, make_vec2(hit_ptr.u, hit_ptr.v))
-        },
-        write_ray: @ |i, j, ray| {
-            let ray_ptr = &mut rays(i + j);
-            ray_ptr.org = [ray.org.x, ray.org.y, ray.org.z];
-            ray_ptr.dir = [ray.dir.x, ray.dir.y, ray.dir.z];
-            ray_ptr.tmin = ray.tmin;
-            ray_ptr.tmax = ray.tmax;
-        },
-        write_hit: @ |i, j, hit| {
-            let hit_ptr = &mut hits(i + j);
-            hit_ptr.tri_id = hit.prim_id;
-            hit_ptr.t = hit.distance;
-            hit_ptr.u = hit.uv_coords.x;
-            hit_ptr.v = hit.uv_coords.y;
-        }
-    }
+// Floating point min/max, works on every ISA, but might not be optimal
+fn @make_cpu_default_min_max() -> MinMax {
+    let fminf = @ |x, y| select(x < y, x, y);
+    let fmaxf = @ |x, y| select(x > y, x, y);
+    make_min_max(fminf, fmaxf, false)
 }
 
-fn @make_cpu_ray4_layout(rays: &mut [Ray4SoA], hits: &mut [Hit4SoA]) -> RayLayout {
-    RayLayout {
-        packet_size: 4,
-        read_ray: @ |i, j| {
-            let ray_ptr = &rays(i);
-            make_ray(make_vec3(ray_ptr.org(0)(j), ray_ptr.org(1)(j), ray_ptr.org(2)(j)),
-                     make_vec3(ray_ptr.dir(0)(j), ray_ptr.dir(1)(j), ray_ptr.dir(2)(j)),
-                     ray_ptr.tmin(j), ray_ptr.tmax(j))
-        },
-        read_hit: @ |i, j| {
-            let hit_ptr = &hits(i);
-            make_hit(-1, hit_ptr.tri_id(j), hit_ptr.t(j), make_vec2(hit_ptr.u(j), hit_ptr.v(j)))
-        },
-        write_ray: @ |i, j, ray| {
-            let ray_ptr = &mut rays(i);
-            ray_ptr.org(0)(j) = ray.org.x;
-            ray_ptr.org(1)(j) = ray.org.y;
-            ray_ptr.org(2)(j) = ray.org.z;
-            ray_ptr.dir(0)(j) = ray.dir.x;
-            ray_ptr.dir(1)(j) = ray.dir.y;
-            ray_ptr.dir(2)(j) = ray.dir.z;
-            ray_ptr.tmin(j) = ray.tmin;
-            ray_ptr.tmax(j) = ray.tmax;
-        },
-        write_hit: @ |i, j, hit| {
-            let hit_ptr = &mut hits(i);
-            hit_ptr.tri_id(j) = hit.prim_id;
-            hit_ptr.t(j) = hit.distance;
-            hit_ptr.u(j) = hit.uv_coords.x;
-            hit_ptr.v(j) = hit.uv_coords.y;
-        }
-    }
-}
+// Traversal kernels ---------------------------------------------------------------
 
-fn @make_cpu_ray8_layout(rays: &mut [Ray8SoA], hits: &mut [Hit8SoA]) -> RayLayout {
-    RayLayout {
-        packet_size: 8,
-        read_ray: @ |i, j| {
-            let ray_ptr = &rays(i);
-            make_ray(make_vec3(ray_ptr.org(0)(j), ray_ptr.org(1)(j), ray_ptr.org(2)(j)),
-                     make_vec3(ray_ptr.dir(0)(j), ray_ptr.dir(1)(j), ray_ptr.dir(2)(j)),
-                     ray_ptr.tmin(j), ray_ptr.tmax(j))
-        },
-        read_hit: @ |i, j| {
-            let hit_ptr = &hits(i);
-            make_hit(-1, hit_ptr.tri_id(j), hit_ptr.t(j), make_vec2(hit_ptr.u(j), hit_ptr.v(j)))
-        },
-        write_ray: @ |i, j, ray| {
-            let ray_ptr = &mut rays(i);
-            ray_ptr.org(0)(j) = ray.org.x;
-            ray_ptr.org(1)(j) = ray.org.y;
-            ray_ptr.org(2)(j) = ray.org.z;
-            ray_ptr.dir(0)(j) = ray.dir.x;
-            ray_ptr.dir(1)(j) = ray.dir.y;
-            ray_ptr.dir(2)(j) = ray.dir.z;
-            ray_ptr.tmin(j) = ray.tmin;
-            ray_ptr.tmax(j) = ray.tmax;
-        },
-        write_hit: @ |i, j, hit| {
-            let hit_ptr = &mut hits(i);
-            hit_ptr.tri_id(j) = hit.prim_id;
-            hit_ptr.t(j) = hit.distance;
-            hit_ptr.u(j) = hit.uv_coords.x;
-            hit_ptr.v(j) = hit.uv_coords.y;
-        }
-    }
-}
-
-// Variants  -----------------------------------------------------------------------
-
-fn @cpu_traverse_single_helper( min_max: MinMax
-                              , mut ray: Ray
+// Traverses a BVH with a single ray.
+fn @cpu_traverse_single_helper( mut ray: Ray
+                              , octant: RayOctant
+                              , min_max: MinMax
                               , bvh: Bvh
-                              , order: [i32 * 6]
                               , any_hit: bool
                               , root: i32
                               ) -> Hit {
-    // Parameters that define how nodes are sorted on the stack
-    let vector_width = bvh.arity;
-    let sorting_network =
-        match vector_width {
-            8 => batcher_sort,
-            _ => bose_nelson_sort
-        };
-    let branchless = vector_width > 4;
-    let stack = allocate_stack();
+    let sorting_network = match bvh.arity {
+        8 => batcher_sort,
+        _ => bose_nelson_sort
+    };
+    let branchless = bvh.arity > 4;
+
     let mut hit = empty_hit(ray.tmax);
+    let stack = alloc_stack();
+
     stack.push(root, ray.tmin);
 
-    for j in vectorize(vector_width, vector_width * sizeof[f32](), 0, vector_width) {
-        while likely(!stack.is_empty()) {
-            let exit = break;
+    let extract_hit = @ |hit, lane| Hit {
+        geom_id:    bitcast[i32](rv_extract(bitcast[f32](hit.geom_id), lane)),
+        prim_id:    bitcast[i32](rv_extract(bitcast[f32](hit.prim_id), lane)),
+        distance:   rv_extract(hit.distance, lane),
+        uv_coords:  make_vec2(rv_extract(hit.uv_coords.x, lane), rv_extract(hit.uv_coords.y, lane))
+    };
 
-            // Process inner nodes
-            while likely(is_inner(stack.top())) {
-                let node_ref = stack.top();
+    // Traversal loop
+    for i in vectorize(bvh.arity) {
+        while true {
+            let restart = continue;
+            let exit    = break;
+
+            if unlikely(stack.is_empty()) { exit() }
+            // Cull nodes that cannot be intersected by the ray
+            if !any_hit && unlikely(stack.top().tmin > ray.tmax) {
                 stack.pop();
-                if unlikely(node_ref.tmin >= ray.tmax) { continue() }
+                restart()
+            }
 
-                let node = bvh.node(node_ref.node - 1);
-                let (tentry, texit) = intersect_ray_box(min_max, true, ray, node.ordered_bbox(j, order));
-                let hit = tentry <= texit;
+            // Intersect inner nodes
+            while likely(is_inner(stack.top())) {
+                let node = bvh.node(stack.pop().node - 1);
 
-                let mask = !rv_ballot(!hit) & ((1 << bvh.arity) - 1);
-                if likely(mask == 0) { continue() }
+                // Intersect children
+                let (tentry, texit) = intersect_ray_box(min_max, true /*ordered*/, ray, node.ordered_bbox(i, octant));
+                let mask = if min_max.is_integer {
+                    // Special case when integer comparisons are faster than floating point comparisons
+                    !rv_ballot(bitcast[i32](texit) < bitcast[i32](tentry)) & ((1 << bvh.arity) - 1)
+                } else {
+                    rv_ballot(tentry <= texit)
+                };
+                // Restart the loop when no intersection is found to trigger culling
+                if likely(mask == 0) {
+                    if any_hit { continue() } else { restart() }
+                }
 
-                // Push intersected nodes on the stack
-                let mut n = 0;
-                for bit in cpu_one_bits(mask) {
-                    let child_id = node.child(bit);
-                    if unlikely(child_id == 0) { break() }
+                // Push intersected nodes on the stack, prefetch those
+                // that are closer than the node currently on top of the stack
+                let mut num_intrs = 0;
+                for lane in cpu_one_bits(mask) {
+                    let child_id = node.child(lane);
 
-                    n++;
-                    bvh.prefetch(child_id);
+                    num_intrs++;
 
-                    let t = rv_extract(tentry, bit);
+                    let t = rv_extract(tentry, lane);
                     if any_hit || t < stack.top().tmin {
+                        if !any_hit { bvh.prefetch(child_id); }
                         stack.push(child_id, t);
                     } else {
                         stack.push_after(child_id, t);
                     }
                 }
 
-                // Sort them
-                if !any_hit && unlikely(n >= 2) {
-                    // Generate a specialized sorting network for lengths [2..bvh.arity] (included)
-                    for size in unroll(2, bvh.arity + 1) {
-                        if size == bvh.arity || likely(n == size) {
-                            stack.sort_n(size, @ |a, b| a < b, sorting_network, branchless);
+                if !any_hit && num_intrs >= 3 {
+                    // Sort them by distance along the ray
+                    for i in unroll(3, bvh.arity + 1) {
+                        if i == bvh.arity || num_intrs == i {
+                            stack.sort_n(i, @ |a, b| a < b, sorting_network, branchless);
                             break()
                         }
                     }
                 }
-                if unlikely(n == 0) { break() }
             }
 
-            // Process leaves
-            if unlikely(is_leaf(stack.top())) {
-                let leaf_ref = stack.top();
-                stack.pop();
-                if unlikely(leaf_ref.tmin >= ray.tmax) { continue() }
+            if any_hit && unlikely(stack.is_empty()) { exit() }
 
-                let mut terminated = false;
-                for k in vectorize(bvh.tri_size, bvh.tri_size * sizeof[f32](), 0, bvh.tri_size) {
-                    let mut tri_id = !leaf_ref.node;
-                    while true {
-                        let tri = bvh.tri(tri_id++);
+            // Intersect leaves here
+            let mut prim_id = !stack.pop().node;
+            let mut terminated = false;
+            while true {
+                let prim = bvh.prim(prim_id++);
 
-                        // Compute the intersection for each lane
-                        let (found, t, u, v) = intersect_ray_tri(cpu_intrinsics, false, true, ray, tri.load(k));
-
-                        // Find the closest intersection
-                        if any_hit {
-                            let mask = rv_ballot(found);
-                            if mask != 0 {
-                                let lane = cpu_ctz32(mask, true);
-                                hit = make_hit(
-                                    undef[i32](),
-                                    tri.id(lane) & 0x7FFFFFFF,
-                                    rv_extract(t, lane),
-                                    make_vec2(rv_extract(u, lane), rv_extract(v, lane))
-                                );
-                                terminated = true;
-                                break()
-                            }
-                        } else if rv_any(found) {
-                            let found_t = select(found, t, flt_max);
-                            let min_t = cpu_reduce(found_t, bvh.tri_size, min_max.fminf);
-                            let lane = cpu_index_of(found_t, min_t);
-
-                            hit = make_hit(
-                                undef[i32](),
-                                tri.id(lane) & 0x7FFFFFFF,
-                                rv_extract(t, lane),
-                                make_vec2(rv_extract(u, lane), rv_extract(v, lane))
-                            );
-                            ray.tmax = hit.distance;
+                // Intersect primitives
+                for j in vectorize(prim.size) {
+                    let (was_hit, prim_hit) = prim.intersect(j, cpu_intrinsics, true /*mask*/, ray);
+                    if any_hit {
+                        // Early exit mode
+                        let mask = rv_ballot(was_hit);
+                        if mask != 0 {
+                            let lane = cpu_ctz32(mask, true);
+                            hit = extract_hit(prim_hit, lane);
+                            terminated = true;
                         }
-
-                        if unlikely((tri.id(bvh.tri_size - 1) & bitcast[i32](0x80000000u)) != 0) { break() }
+                    } else if rv_any(was_hit) {
+                         let found_t = select(was_hit, hit.distance, flt_max);
+                         let min_t = cpu_reduce(found_t, prim.size, min_max.fminf);
+                         let lane = cpu_index_of(found_t, min_t);
+                         hit = extract_hit(prim_hit, lane);
+                         ray.tmax = hit.distance;
                     }
                 }
-                if any_hit && unlikely(terminated) { exit() }
+
+                // Sentinel test
+                if prim.is_last { break() }
             }
+
+            // Early exit test delayed until exit primitive intersection loop
+            if any_hit && terminated { exit() }
         }
     }
-
     hit
 }
 
-fn @cpu_traverse_hybrid_helper( min_max: MinMax
+// Traverses a BVH with a packet of rays, assuming execution inside a vectorized region.
+fn @cpu_traverse_hybrid_helper( mut ray: Ray
                               , vector_width: i32
-                              , mut ray: Ray
+                              , min_max: MinMax
                               , bvh: Bvh
-                              , order: &[i32 * 6]
                               , single: bool
                               , any_hit: bool
                               , root: i32
@@ -434,111 +275,105 @@ fn @cpu_traverse_hybrid_helper( min_max: MinMax
         4  => 3,
         8  => if bvh.arity == 4 { 4 } else { 6 },
         16 => 7,
-        _  => 0 // Be conservative with unknown SIMD widths
+        _  => vector_width / 2
     };
+
     let mut hit = empty_hit(ray.tmax);
-    let mut valid = (1 << vector_width) - 1;
-    let stack = allocate_stack();
-
+    let mut terminated = false;
+    let stack = alloc_stack();
     stack.push(root, ray.tmin);
-    while likely(!stack.is_empty()) {
-        let exit = break;
 
-        // Cull nodes and test SIMD utilization
+    let octant = ray_octant(ray);
+
+    let load_ray = @ |ray_ptr, lane| Ray {
+        org: make_vec3(rv_load(&ray_ptr.org.x, lane), rv_load(&ray_ptr.org.y, lane), rv_load(&ray_ptr.org.z, lane)),
+        dir: make_vec3(rv_load(&ray_ptr.dir.x, lane), rv_load(&ray_ptr.dir.y, lane), rv_load(&ray_ptr.dir.z, lane)),
+        inv_org: make_vec3(rv_load(&ray_ptr.inv_org.x, lane), rv_load(&ray_ptr.inv_org.y, lane), rv_load(&ray_ptr.inv_org.z, lane)),
+        inv_dir: make_vec3(rv_load(&ray_ptr.inv_dir.x, lane), rv_load(&ray_ptr.inv_dir.y, lane), rv_load(&ray_ptr.inv_dir.z, lane)),
+        tmin: rv_load(&ray_ptr.tmin, lane),
+        tmax: rv_load(&ray_ptr.tmax, lane)
+    };
+
+    let store_hit = @ |hit_ptr, lane, hit| {
+        rv_store(&mut hit_ptr.distance, lane, hit.distance);
+        rv_store(&mut hit_ptr.uv_coords.x, lane, hit.uv_coords.x);
+        rv_store(&mut hit_ptr.uv_coords.y, lane, hit.uv_coords.y);
+        rv_store(bitcast[&mut f32](&mut hit_ptr.prim_id), lane, bitcast[f32](hit.prim_id));
+        rv_store(bitcast[&mut f32](&mut hit_ptr.geom_id), lane, bitcast[f32](hit.geom_id));
+    };
+
+    while true {
+        // Cull nodes and switch to single ray tracing when SIMD utilization is too low
         while true {
-            let mask = rv_ballot(stack.top().tmin < ray.tmax);
+            if unlikely(stack.is_empty()) { return(hit) }
+            let active = (stack.top().tmin <= ray.tmax) & !terminated;
+            let mask = rv_ballot(active);
             if likely(mask != 0) {
-                if single && unlikely(cpu_popcount32(mask) <= switch_threshold) {
-                    // Switch to single ray tracing when SIMD utilization is too low
+                if single && cpu_popcount32(mask) <= switch_threshold {
                     for lane in cpu_one_bits(mask) {
-                        let lane_ray = load_ray(&mut ray, lane);
-                        let mut lane_order : [i32 * 6];
-                        for i in unroll(0, 6) {
-                            lane_order(i) = bitcast[i32](rv_load(bitcast[&f32](&order(i)), lane));
-                        }
-                        let lane_hit = cpu_traverse_single_helper(min_max, lane_ray, bvh, lane_order, any_hit, stack.top().node);
+                        let lane_ray = load_ray(&ray, lane);
+                        let lane_octant = bitcast[RayOctant](rv_extract(bitcast[f32](octant), lane));
+                        let lane_hit = cpu_traverse_single_helper(lane_ray, lane_octant, min_max, bvh, any_hit, stack.top().node);
                         if lane_hit.prim_id >= 0 {
                             store_hit(&mut hit, lane, lane_hit);
-                            ray.tmax = rv_insert(ray.tmax, lane, select(any_hit, -flt_max, lane_hit.distance));
-
-                            if any_hit { valid &= !(1 << lane) }
+                            rv_store(&mut ray.tmax, lane, lane_hit.distance);
                         }
                     }
-                    if any_hit && unlikely(valid == 0) { exit() }
+                    if any_hit { terminated = hit.prim_id >= 0; }
                 } else {
                     break()
                 }
             }
             stack.pop();
-            if unlikely(stack.is_empty()) { exit() }
         }
 
+        // Intersect inner nodes
         while likely(is_inner(stack.top())) {
-            // Intersect the node with the packet of rays
-            let node_ref = stack.top();
-            stack.pop();
+            let node = bvh.node(stack.pop().node - 1);
 
-            let node = bvh.node(node_ref.node - 1);
-            let mut n = 0;
-            for k in range(0, bvh.arity) {
-                let child_id = node.child(k);
+            // Intersect children
+            for i in unroll(0, bvh.arity) {
+                let child_id = node.child(i);
                 if unlikely(child_id == 0) { break() }
 
-                let (tentry, texit) = intersect_ray_box(min_max, false, ray, node.bbox(k));
-                let hit = tentry <= texit;
-
-                // Equivalent to rv_any(hit) but use MOVMASK instead of PTEST
-                if !rv_ballot(!hit) & ((1 << vector_width) - 1) != 0 {
-                    n++;
-
-                    // Important: cull nodes that are too far away
+                let (tentry, texit) = intersect_ray_box(min_max, false /*ordered*/, ray, node.bbox(i));
+                let was_hit = tentry <= texit;
+                if rv_any(was_hit) {
+                    // Important: prevent nodes that are not intersected
                     // from being traversed with the single ray kernel
-                    let thit = select(hit, tentry, flt_max);
+                    let thit = select(was_hit, tentry, flt_max);
                     if any_hit || rv_any(stack.top().tmin > thit) {
-                        stack.push(child_id, thit);
-
-                        // Prefetch only when the child is closer than what is on the stack
                         bvh.prefetch(child_id);
+                        stack.push(child_id, thit);
                     } else {
                         stack.push_after(child_id, thit);
                     }
                 }
             }
-
-            // Trigger culling again
-            if unlikely(n == 0) { break() }
         }
 
         if unlikely(is_leaf(stack.top())) {
-            // Intersect the leaf with the packet of rays
-            let leaf_ref = stack.top();
-            stack.pop();
-
-            let mut tri_id = !leaf_ref.node;
+            let mut active = (stack.top().tmin <= ray.tmax) & !terminated;
+            let mut prim_id = !stack.pop().node;
             while true {
-                let tri = bvh.tri(tri_id++);
+                let prim = bvh.prim(prim_id++);
+                for i in range(0, prim.size) {
+                    if unlikely(!prim.is_valid(i)) { break() }
 
-                for k in range(0, bvh.tri_size) {
-                    let tri_id = tri.id(k);
-                    if unlikely(tri_id == bitcast[i32](0xFFFFFFFFu)) { break() }
-
-                    let (mask, t, u, v) = intersect_ray_tri(cpu_intrinsics, any_hit, select(any_hit, leaf_ref.tmin < ray.tmax, true), ray, tri.load(k));
-                    if mask {
-                        hit = make_hit(
-                            undef[i32](),
-                            tri_id & 0x7FFFFFFF,
-                            t,
-                            make_vec2(u, v)
-                        );
-                        ray.tmax = select(any_hit, -flt_max, t);
+                    let (was_hit, prim_hit) = prim.intersect(i, cpu_intrinsics, active /*mask*/, ray);
+                    if was_hit {
+                        hit = prim_hit;
+                        ray.tmax = prim_hit.distance;
                     }
                     if any_hit {
-                        valid &= !rv_ballot(mask);
-                        if unlikely(valid == 0) { exit() }
+                        terminated |= was_hit;
+                        if unlikely(rv_all(terminated)) { return(hit) }
+                        active &= !was_hit;
                     }
                 }
 
-                if unlikely((tri.id(bvh.tri_size - 1) & bitcast[i32](0x80000000u)) != 0) { break() }
+                // Sentinel test
+                if prim.is_last { break() }
             }
         }
     }
@@ -546,37 +381,36 @@ fn @cpu_traverse_hybrid_helper( min_max: MinMax
     hit
 }
 
-fn @cpu_traverse_single( min_max: MinMax
-                       , ray_layout: RayLayout
+// Wrappers ------------------------------------------------------------------------
+
+fn @cpu_traverse_hybrid( min_max: MinMax
                        , bvh: Bvh
+                       , rays: fn (i32, i32) -> Ray
+                       , hits: fn (i32, i32, Hit) -> ()
+                       , packet_size: i32
+                       , num_packets: i32
+                       , single: bool
                        , any_hit: bool
-                       , ray_count: i32
-                       , root: i32
                        ) -> () {
-    for i in unroll(0, ray_count) {
-        let (packet_id, ray_id) = (i / ray_layout.packet_size, i % ray_layout.packet_size);
-        let ray = ray_layout.read_ray(packet_id, ray_id);
-        let order = bvh.order(ray_octant(ray));
-        let hit = cpu_traverse_single_helper(min_max, ray, bvh, order, any_hit, root);
-        ray_layout.write_hit(packet_id, ray_id, hit)
+    for i in range(0, num_packets) {
+        for j in vectorize(packet_size) {
+            hits(i, j, cpu_traverse_hybrid_helper(rays(i, j), packet_size, min_max, bvh, single, any_hit, 1 /*root*/))
+        }
     }
 }
 
-fn @cpu_traverse_hybrid( min_max: MinMax
-                       , ray_layout: RayLayout
+fn @cpu_traverse_single( min_max: MinMax
                        , bvh: Bvh
-                       , single: bool
+                       , rays: fn (i32, i32) -> Ray
+                       , hits: fn (i32, i32, Hit) -> ()
+                       , packet_size: i32
+                       , num_packets: i32
                        , any_hit: bool
-                       , ray_count: i32
-                       , root: i32
                        ) -> () {
-    let vector_width = ray_layout.packet_size;
-    for i in unroll(0, ray_count / vector_width) {
-        for j in vectorize(vector_width, vector_width * sizeof[f32](), 0, vector_width) {
-            let ray = ray_layout.read_ray(i, j);
-            let order = bvh.order(ray_octant(ray));
-            let hit = cpu_traverse_hybrid_helper(min_max, vector_width, ray, bvh, &order, single, any_hit, root);
-            ray_layout.write_hit(i, j, hit);
-        }
+    for i in range(0, num_packets * packet_size) {
+        let (j, k) = (i / packet_size, i % packet_size);
+        let ray = rays(j, k);
+        let octant = ray_octant(ray);
+        hits(j, k, cpu_traverse_single_helper(ray, octant, min_max, bvh, any_hit, 1 /*root*/))
     }
 }

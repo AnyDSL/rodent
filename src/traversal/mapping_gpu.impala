@@ -1,11 +1,16 @@
-// BVH2 ----------------------------------------------------------------------------
+// BVH layout ----------------------------------------------------------------------
 
-struct Bvh2 {
-    nodes: &[Bvh2Node],
-    tris:  &[Bvh2Tri]
+struct Node2 {
+    min1:  [f32 * 3],
+    max1:  [f32 * 3],
+    min2:  [f32 * 3],
+    max2:  [f32 * 3],
+    left:  i32,
+    right: i32,
+    pad:   [i32 * 2]
 }
 
-struct Bvh2Tri {
+struct Tri1 {
     v0: [f32 * 3],
     nx: f32,
     e1: [f32 * 3],
@@ -14,70 +19,52 @@ struct Bvh2Tri {
     id: i32
 }
 
-struct Bvh2BBox {
-    lo_x: f32, hi_x: f32,
-    lo_y: f32, hi_y: f32,
-    lo_z: f32, hi_z: f32
-}
-
-struct Bvh2Node {
-    left_bb:  Bvh2BBox,
-    right_bb: Bvh2BBox,
-    left:  i32,
-    right: i32,
-    pad1:  i32,
-    pad2:  i32
-}
-
-fn @make_nvvm_bvh2_tri(tri_ptr: &Bvh2Tri) -> BvhTri {
-    let simd_ptr = tri_ptr as &[1][simd[f32 * 4]];
-    let tri0 = nvvm_ldg4_f32(&simd_ptr(0));
-    let tri1 = nvvm_ldg4_f32(&simd_ptr(1));
-    let tri2 = nvvm_ldg4_f32(&simd_ptr(2));
-    BvhTri {
-        load: @ |i| {
-            let v0 = make_vec3(tri0(0), tri0(1), tri0(2));
-            let e1 = make_vec3(tri1(0), tri1(1), tri1(2));
-            let e2 = make_vec3(tri2(0), tri2(1), tri2(2));
-            let n  = make_vec3(tri0(3), tri1(3), vec3_cross(e1, e2).z);
-            make_tri(v0, e1, e2, n)
-        },
-        id: @ |i| bitcast[i32](tri2(3))
-    }
-}
-
-fn @make_nvvm_bvh2_node(node_ptr: &Bvh2Node) -> BvhNode {
-    let simd_ptr = node_ptr as &[1][simd[f32 * 4]];
-    let bb0 = nvvm_ldg4_f32(&simd_ptr(0));
-    let bb1 = nvvm_ldg4_f32(&simd_ptr(1));
-    let bb2 = nvvm_ldg4_f32(&simd_ptr(2));
-    let children = nvvm_ldg4_i32(&simd_ptr(3) as &[1]simd[i32 * 4]);
-
-    fn bbox(i: i32) -> BBox {
-        if i == 0 {
-            make_bbox(make_vec3(bb0(0), bb0(2), bb1(0)),
-                      make_vec3(bb0(1), bb0(3), bb1(1)))
-        } else {
-            make_bbox(make_vec3(bb1(2), bb2(0), bb2(2)),
-                      make_vec3(bb1(3), bb2(1), bb2(3)))
-        }
-    }
-
-    BvhNode {
-        bbox: @ |i| bbox(i),
-        ordered_bbox: @ |i, _| undef[BBox](), // Not implemented
-        child: @ |i| children(i)
-    }
-}
-
-fn @make_nvvm_bvh2(bvh2: Bvh2) -> Bvh {
+fn @make_nvvm_bvh2_tri1(nodes: &[Node2], tris: &[Tri1]) -> Bvh {
     Bvh {
-        node: @ |j| make_nvvm_bvh2_node(&bvh2.nodes(j)),
-        tri:  @ |j| make_nvvm_bvh2_tri(&bvh2.tris(j)),
-        order: @ |_| undef[[i32 * 6]](), // Not implemented
+        node: @ |j| {
+            let simd_ptr = &nodes(j) as &[1][simd[f32 * 4]];
+            let bb0 = nvvm_ldg4_f32(&simd_ptr(0));
+            let bb1 = nvvm_ldg4_f32(&simd_ptr(1));
+            let bb2 = nvvm_ldg4_f32(&simd_ptr(2));
+            let children = nvvm_ldg4_i32(&simd_ptr(3) as &[1]simd[i32 * 4]);
+
+            Node {
+                bbox: @ |i| {
+                    if i == 0 {
+                        make_bbox(make_vec3(bb0(0), bb0(2), bb1(0)),
+                                  make_vec3(bb0(1), bb0(3), bb1(1)))
+                    } else {
+                        make_bbox(make_vec3(bb1(2), bb2(0), bb2(2)),
+                                  make_vec3(bb1(3), bb2(1), bb2(3)))
+                    }
+                },
+                ordered_bbox: @ |i, _| undef[BBox](), // Not implemented
+                child: @ |i| children(i)
+            }
+        },
+        prim: @ |j| {
+            let simd_ptr = &tris(j) as &[1][simd[f32 * 4]];
+            let tri0 = nvvm_ldg4_f32(&simd_ptr(0));
+            let tri1 = nvvm_ldg4_f32(&simd_ptr(1));
+            let tri2 = nvvm_ldg4_f32(&simd_ptr(2));
+            let id  = bitcast[i32](tri2(3));
+            Prim {
+                intersect: @ |_, math, mask, ray| {
+                    let v0  = make_vec3(tri0(0), tri0(1), tri0(2));
+                    let e1  = make_vec3(tri1(0), tri1(1), tri1(2));
+                    let e2  = make_vec3(tri2(0), tri2(1), tri2(2));
+                    let n   = make_vec3(tri0(3), tri1(3), vec3_cross(e1, e2).z);
+                    let tri = make_tri(v0, e1, e2, n);
+                    let (mask, t, u, v) = intersect_ray_tri(math, false /*backface_culling*/, mask, ray, tri);
+                    (mask, make_hit(0, id & 0x7FFFFFFF, t, make_vec2(u, v)))
+                },
+                is_valid: @ |_| true,
+                is_last: id < 0,
+                size: 1
+            }
+        },
         prefetch: @ |_| (), // Not implemented
-        arity: 2,
-        tri_size: 1
+        arity: 2
     }
 }
 
@@ -92,41 +79,13 @@ fn @make_nvvm_min_max() -> MinMax {
         fmaxmaxf: @ |a, b, c| bitcast[f32](nvvm_maxmax(bitcast[i32](a), bitcast[i32](b), bitcast[i32](c))),
         fminmaxf: @ |a, b, c| bitcast[f32](nvvm_minmax(bitcast[i32](a), bitcast[i32](b), bitcast[i32](c))),
         fmaxminf: @ |a, b, c| bitcast[f32](nvvm_maxmin(bitcast[i32](a), bitcast[i32](b), bitcast[i32](c))),
+        is_integer: true
     }
 }
 
-// Ray layouts  --------------------------------------------------------------------
+// Traversal kernel  ---------------------------------------------------------------
 
-fn @make_gpu_ray1_layout(rays: &mut [Ray1AoS], hits: &mut[Hit1AoS]) -> RayLayout {
-    RayLayout {
-        packet_size: 1,
-        read_ray: @ |i, j| {
-            let ray_ptr = &rays(i + j) as &[simd[f32 * 4]];
-            let ray0 = ray_ptr(0);
-            let ray1 = ray_ptr(1);
-            make_ray(make_vec3(ray0(0), ray0(1), ray0(2)),
-                     make_vec3(ray1(0), ray1(1), ray1(2)),
-                     ray0(3), ray1(3))
-        },
-        read_hit: @ |i, j| {
-            let hit_ptr = &hits(i + j) as &simd[f32 * 4];
-            let hit = *hit_ptr;
-            make_hit(-1, bitcast[i32](hit(0)), hit(1), make_vec2(hit(2), hit(3)))
-        },
-        write_ray: @ |i, j, ray| {
-            let ray_ptr = &rays(i + j) as &mut [simd[f32 * 4]];
-            ray_ptr(0) = simd[ray.org.x, ray.org.y, ray.org.z, ray.tmin];
-            ray_ptr(1) = simd[ray.dir.x, ray.dir.y, ray.dir.z, ray.tmax];
-        },
-        write_hit: @ |i, j, hit| {
-            let hit_ptr = &hits(i + j) as &mut simd[f32 * 4];
-            *hit_ptr = simd[bitcast[f32](hit.prim_id), hit.distance, hit.uv_coords.x, hit.uv_coords.y];
-        }
-    }
-}
-
-// Mappings  -----------------------------------------------------------------------
-
+// Traverses a single ray at a time. 
 fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
                               , min_max: MinMax
                               , mut ray: Ray
@@ -136,7 +95,7 @@ fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
                               ) -> Hit {
     let mut hit = empty_hit(ray.tmax);
     let early_exit = || -> ! return(hit);
-    let stack = allocate_stack();
+    let stack = alloc_stack();
     stack.push(1, undef());
 
     while !stack.is_empty() {
@@ -152,7 +111,7 @@ fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
             tmp.write(k, (node.child(k), t0));
         }
 
-        if mask == 0 { stack.pop() }
+        if mask == 0 { stack.pop(); }
         else if bvh.arity == 2 {
             // Special case for N=2
             let (child1, t1) = tmp.read(0);
@@ -181,56 +140,51 @@ fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
                     } else {
                         stack.push_after(child, undef());
                     }
-                    tmin = gpu_intrinsics.fminf(tmin, t);
+                    tmin = min_max.fminf(tmin, t);
                 }
             }
         }
 
         while is_leaf(stack.top()) {
-            let leaf_ref = stack.top();
-            let mut tri_id = !leaf_ref.node;
+            let leaf_ref = stack.pop();
+            let mut prim_id = !leaf_ref.node;
             while true {
-                let tri = bvh.tri(tri_id++);
+                let prim = bvh.prim(prim_id++);
 
-                for k in unroll(0, bvh.tri_size) @{
-                    let (mask, t, u, v) = intersect_ray_tri(gpu_intrinsics, false, true, ray, tri.load(k));
-                    if mask {
-                        hit = make_hit(
-                            undef[i32](),
-                            tri_id & 0x7FFFFFFF,
-                            t,
-                            make_vec2(u, v)
-                        );
-                        ray.tmax = t;
+                for k in unroll(0, prim.size) @{
+                    let (was_hit, prim_hit) = prim.intersect(k, gpu_intrinsics, true /*mask*/, ray);
+                    if was_hit {
+                        hit = prim_hit;
+                        ray.tmax = prim_hit.distance;
                     }
 
                     if any_hit && hit.prim_id >= 0 { early_exit() }
                 }
 
-                if (bitcast[uint](tri.id(bvh.tri_size - 1)) & 0x80000000u) != 0u { break() }
+                if prim.is_last { break() }
             }
-
-            stack.pop()
         }
     }
 
     hit
 }
 
-// Variants  -----------------------------------------------------------------------
+// Wrapper  ------------------------------------------------------------------------
 
 fn @gpu_traverse_single( acc: Accelerator
                        , gpu_intrinsics: Intrinsics
                        , min_max: MinMax
-                       , ray_layout: RayLayout
                        , bvh: Bvh
+                       , rays: fn (i32, i32) -> Ray
+                       , hits: fn (i32, i32, Hit) -> ()
+                       , packet_size: i32
+                       , num_packets: i32
                        , any_hit: bool
-                       , ray_count: i32
-                       , root: i32
                        ) -> () {
     let block_size = 64;
-    let grid  = ((ray_count / block_size) * block_size, ray_layout.packet_size, 1);
-    let block = (block_size, ray_layout.packet_size, 1);
+    let ray_count  = num_packets * packet_size;
+    let grid  = ((ray_count / block_size) * block_size, packet_size, 1);
+    let block = (block_size, packet_size, 1);
 
     for tid, bid, bdim, gdim, gid in acc.exec(grid, block) {
         let (tidx, tidy, _) = tid;
@@ -238,8 +192,6 @@ fn @gpu_traverse_single( acc: Accelerator
         let (i, j) = (tidx() + bidx() * block_size, tidy());
         if (i + j) >= ray_count { continue() }
 
-        let ray = ray_layout.read_ray(i, j);
-        let hit = gpu_traverse_single_helper(gpu_intrinsics, min_max, ray, bvh, any_hit, root);
-        ray_layout.write_hit(i, j, hit)
+        hits(i, j, gpu_traverse_single_helper(gpu_intrinsics, min_max, rays(i, j), bvh, any_hit, 1 /*root*/));
     }
 }

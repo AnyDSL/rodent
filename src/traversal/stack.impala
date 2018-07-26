@@ -8,7 +8,7 @@ struct Stack {
     push_after: fn (i32, f32) -> (),
     set_top:    fn (i32, f32) -> (),
     sort_n:     fn (i32, fn (f32, f32) -> bool, SortingNetwork, bool) -> (),
-    pop:        fn () -> (),
+    pop:        fn () -> NodeRef,
     top:        fn () -> NodeRef,
     is_empty:   fn () -> bool,
     size:       fn () -> i32
@@ -49,7 +49,7 @@ fn @make_small_stack(n: i32) -> SmallStack {
     make_small_stack_helper(0, n)
 }
 
-fn @allocate_stack() -> Stack {
+fn @alloc_stack() -> Stack {
     let mut nodes : [i32   * 64];
     let mut tmins : [f32 * 64];
     let mut node = 0;
@@ -110,9 +110,11 @@ fn @allocate_stack() -> Stack {
             }
         },
         pop: @ || {
+            let old = NodeRef { node: node, tmin: tmin };
             node = nodes(ptr);
             tmin = tmins(ptr);
             ptr--;
+            old
         },
         top: @ || NodeRef { node: node, tmin: tmin },
         is_empty: @ || node == 0,

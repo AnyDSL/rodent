@@ -34,9 +34,12 @@ def main():
             for rays in distribs:
                 (tmin, ao_max) = offsets[scene]
                 tmax = 1.0e9
+                args = ["-ray", "scenes/" + scene + "/" + rays + ".rays", "-bench", iters, "-warmup", warmups]
                 if rays == "ao":
                     tmax = ao_max
-                args = ["-ray", "scenes/" + scene + "/" + rays + ".rays", "-tmin", str(tmin), "-tmax", str(tmax), "-bench", iters, "-warmup", warmups] + variant.split()
+                    args += ["-any"]
+                args += ["-tmin", str(tmin), "-tmax", str(tmax)]
+                args += variant.split()
                 #print(scene, ": ", " ".join(args))
                 mrays_embree = bench_mrays([bench_embree, "-obj", "scenes/" + scene + "/" + scene + ".obj"] + args) if not "-p" in variant else None
                 mrays_rodent = bench_mrays([bench_rodent, "-bvh", "scenes/" + scene + "/" + scene + ".bvh"] + args)

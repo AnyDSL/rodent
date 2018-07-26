@@ -6,8 +6,8 @@
 #include "traversal.h"
 
 enum class BvhType : uint32_t {
-    BVH2 = 1,
-    BVH4 = 2,
+    BVH2_TRI1 = 1,
+    BVH4_TRI4 = 2,
     BVH8_TRI4 = 3
 };
 

@@ -32,7 +32,6 @@ set(RODENT_SRCS
     render/scene.impala
     render/mapping_cpu.impala
     traversal/intersection.impala
-    traversal/ray_layout.impala
     traversal/stack.impala
     traversal/mapping_cpu.impala
     traversal/mapping_gpu.impala)

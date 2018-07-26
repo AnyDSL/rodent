@@ -29,50 +29,52 @@ struct BBox {
 }
 
 struct Bvh {
-    node:  fn (i32) -> BvhNode,     // Access to one node of the BVH
-    tri:   fn (i32) -> BvhTri,      // Access to one (possibly packed) triangle
-    order: fn (i32) -> [i32 * 6],   // Orders the bounding box corners for a given octant
-    prefetch: fn (i32) -> (),       // Prefetches a leaf or inner node
-
-    arity: i32,                     // Arity of the BVH (number of children per node)
-    tri_size: i32,                  // Number of triangles per packet
+    node:     fn (i32) -> Node, // Access to one node of the BVH
+    prim:     fn (i32) -> Prim, // Access to one (possibly packed) primitive
+    prefetch: fn (i32) -> (),   // Prefetches a leaf or inner node
+    arity:    i32,              // Arity of the BVH (number of children per node)
 }
 
-struct BvhNode {
+struct Node {
     bbox:         fn (i32) -> BBox,             // Loads the bounding box of one child node
-    ordered_bbox: fn (i32, [i32 * 6]) -> BBox,  // Loads the bounding box of one child with the given octant order (mapping specific)
-    child:        fn (i32) -> i32,              // Gets the index of one child node
+    ordered_bbox: fn (i32, RayOctant) -> BBox,  // Loads the bounding box of one child with the given octant order (mapping specific)
+    child:        fn (i32) -> i32               // Gets the index of one child node
 }
 
-struct BvhTri {
-    load: fn (i32) -> Tri,          // Loads the given triangle in the packet
-    id:   fn (i32) -> i32,          // Identifier of the given triangle in the packet
+struct Prim {
+    intersect: fn (i32, Intrinsics, bool, Ray) -> (bool, Hit),  // Intersects a primitive in the packet
+    is_valid:  fn (i32) -> bool,                                // Returns true if the primitive in the packet is valid
+    is_last:   bool,                                            // True if this is the last primitive packet in the leaf
+    size:      i32                                              // Number of primitives in the packet (must be a constant)
 }
 
 // Min/max functions required to perform the ray-box test
 struct MinMax {
-    fmaxmaxf: fn (f32, f32, f32) -> f32,
-    fminminf: fn (f32, f32, f32) -> f32,
-    fminmaxf: fn (f32, f32, f32) -> f32,
-    fmaxminf: fn (f32, f32, f32) -> f32,
-    fmaxf:    fn (f32, f32) -> f32,
-    fminf:    fn (f32, f32) -> f32
+    fmaxmaxf:   fn (f32, f32, f32) -> f32,
+    fminminf:   fn (f32, f32, f32) -> f32,
+    fminmaxf:   fn (f32, f32, f32) -> f32,
+    fmaxminf:   fn (f32, f32, f32) -> f32,
+    fmaxf:      fn (f32, f32) -> f32,
+    fminf:      fn (f32, f32) -> f32,
+    is_integer: bool
 }
 
-type Intersector = fn (Ray, fn (Hit) -> ()) -> ();
+type RayOctant = i32;
 
 // Constructs a set of comparators from min and max functions.
 // May not be the optimal intrinsics if the hardware provides a combined min/max instruction.
 fn @make_min_max( fminf: fn (f32, f32) -> f32
                 , fmaxf: fn (f32, f32) -> f32
+                , is_integer: bool
                 ) -> MinMax {
     MinMax {
-        fminf: fminf,
-        fmaxf: fmaxf,
-        fminminf: @ |a, b, c| fminf(fminf(a, b), c),
-        fmaxmaxf: @ |a, b, c| fmaxf(fmaxf(a, b), c),
-        fminmaxf: @ |a, b, c| fmaxf(fminf(a, b), c),
-        fmaxminf: @ |a, b, c| fminf(fmaxf(a, b), c),
+        fminminf:   @ |a, b, c| fminf(fminf(a, b), c),
+        fmaxmaxf:   @ |a, b, c| fmaxf(fmaxf(a, b), c),
+        fminmaxf:   @ |a, b, c| fmaxf(fminf(a, b), c),
+        fmaxminf:   @ |a, b, c| fminf(fmaxf(a, b), c),
+        fminf:      fminf,
+        fmaxf:      fmaxf,
+        is_integer: is_integer
     }
 }
 
@@ -127,7 +129,7 @@ fn @clip_ray(ray: Ray, tmin: f32, tmax: f32) -> Ray {
     }
 }
 
-fn @ray_octant(ray: Ray) -> i32 {
+fn @ray_octant(ray: Ray) -> RayOctant {
     select(ray.dir.x > 0.0f, 1, 0) |
     select(ray.dir.y > 0.0f, 2, 0) |
     select(ray.dir.z > 0.0f, 4, 0)
@@ -137,12 +139,8 @@ fn @empty_hit(tmax: f32) -> Hit {
     make_hit(-1, -1, tmax, undef())
 }
 
-fn @intersect_ray_tri(math: Intrinsics, early_exit: bool, mut mask: bool, ray: Ray, tri: Tri) -> (bool, f32, f32, f32) {
-    let no_hit = || -> ! return (false, undef[f32](), undef[f32](), undef[f32]());
-    let expect = |cond: bool, _| -> ! {
-        mask &= cond;
-        if early_exit && likely(rv_all(!mask)) { no_hit() }
-    };
+fn @intersect_ray_tri(math: Intrinsics, backface_culling: bool, mut mask: bool, ray: Ray, tri: Tri) -> (bool, f32, f32, f32) {
+    let no_hit = @ || -> ! return(false, undef[f32](), undef[f32](), undef[f32]());
 
     let c = vec3_sub(tri.v0, ray.org);
     let r = vec3_cross(ray.dir, c);
@@ -150,20 +148,22 @@ fn @intersect_ray_tri(math: Intrinsics, early_exit: bool, mut mask: bool, ray: R
     let abs_det = math.fabsf(det);
 
     let u = prodsign(vec3_dot(r, tri.e2), det);
-    expect(u >= 0.0f);
+    mask &= u >= 0.0f;
 
     let v = prodsign(vec3_dot(r, tri.e1), det);
-    expect(v >= 0.0f);
-    expect(u + v <= abs_det);
+    mask &= v >= 0.0f;
+    mask &= u + v <= abs_det;
 
-    if !early_exit && likely(rv_all(!mask)) { no_hit() }
+    if likely(rv_all(!mask)) { no_hit() }
 
     let t = prodsign(vec3_dot(c, tri.n), det);
-    expect((abs_det != 0.0f) & (t >= abs_det * ray.tmin) & (t <= abs_det * ray.tmax));
+    mask &= if backface_culling { det < 0.0f } else { abs_det != 0.0f };
+    mask &= t >= abs_det * ray.tmin;
+    mask &= t <= abs_det * ray.tmax;
 
-    if !early_exit && likely(rv_all(!mask)) { no_hit() }
+    if likely(rv_all(!mask)) { no_hit() }
+
     let inv_det = 1.0f / abs_det;
-
     (mask, t * inv_det, u * inv_det, v * inv_det)
 }
 

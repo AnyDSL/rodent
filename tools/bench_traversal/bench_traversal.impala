@@ -1,146 +1,359 @@
+// Benchmark configuration ---------------------------------------------------------
+
+static enable_cpu_packet      = true;
+static enable_cpu_hybrid      = true;
+static enable_cpu_single      = true;
+static enable_cpu_bvh4_tri4   = true;
+static enable_cpu_bvh8_tri4   = true;
+static enable_gpu_bvh2_tri1   = true;
+static enable_cpu_ray4        = true; // Currently not used
+static enable_cpu_ray8        = true;
+static enable_cpu_int_min_max = true; // Faster, but requires AVX2 or higher for the ray8/bvh8 variants on x86
+
+// Ray layouts ---------------------------------------------------------------------
+
+struct Ray1 {
+    org: [f32 * 3],
+    tmin: f32,
+    dir: [f32 * 3],
+    tmax: f32
+}
+
+struct Ray4 {
+    org: [[f32 * 4] * 3],
+    dir: [[f32 * 4] * 3],
+    tmin: [f32 * 4],
+    tmax: [f32 * 4]
+}
+
+struct Ray8 {
+    org: [[f32 * 8] * 3],
+    dir: [[f32 * 8] * 3],
+    tmin: [f32 * 8],
+    tmax: [f32 * 8]
+}
+
+struct Hit1 {
+    tri_id: i32,
+    t: f32,
+    u: f32,
+    v: f32
+}
+
+struct Hit4 {
+    tri_id: [i32 * 4],
+    t: [f32 * 4],
+    u: [f32 * 4],
+    v: [f32 * 4]
+}
+
+struct Hit8 {
+    tri_id: [i32 * 8],
+    t: [f32 * 8],
+    u: [f32 * 8],
+    v: [f32 * 8]
+}
+
+fn @make_gpu_ray1(rays: &[Ray1]) -> fn (i32, i32) -> Ray {
+    @ |i, j| {
+        let ray_ptr = &rays(i + j) as &[simd[f32 * 4]];
+        let ray0 = ray_ptr(0);
+        let ray1 = ray_ptr(1);
+        make_ray(make_vec3(ray0(0), ray0(1), ray0(2)),
+                 make_vec3(ray1(0), ray1(1), ray1(2)),
+                 ray0(3), ray1(3))
+    }
+}
+
+fn @make_gpu_hit1(hits: &mut [Hit1]) -> fn (i32, i32, Hit) -> () {
+    @ |i, j, hit| {
+        let hit_ptr = &hits(i + j) as &mut simd[f32 * 4];
+        *hit_ptr = simd[bitcast[f32](hit.prim_id), hit.distance, hit.uv_coords.x, hit.uv_coords.y];
+    }
+}
+
+fn @make_cpu_ray1(rays: &[Ray1]) -> fn (i32, i32) -> Ray {
+    @ |i, j| {
+        let ray_ptr = &rays(i + j);
+        make_ray(
+            make_vec3(ray_ptr.org(0), ray_ptr.org(1), ray_ptr.org(2)),
+            make_vec3(ray_ptr.dir(0), ray_ptr.dir(1), ray_ptr.dir(2)),
+            ray_ptr.tmin,
+            ray_ptr.tmax
+        )
+    }
+}
+
+fn @make_cpu_ray4(rays: &[Ray4]) -> fn (i32, i32) -> Ray {
+    @ |i, j| {
+        let ray_ptr = rv_align(&rays(i) as &i8, 16) as &Ray4;
+        make_ray(
+            make_vec3(ray_ptr.org(0)(j), ray_ptr.org(1)(j), ray_ptr.org(2)(j)),
+            make_vec3(ray_ptr.dir(0)(j), ray_ptr.dir(1)(j), ray_ptr.dir(2)(j)),
+            ray_ptr.tmin(j),
+            ray_ptr.tmax(j)
+        )
+    }
+}
+
+fn @make_cpu_ray8(rays: &[Ray8]) -> fn (i32, i32) -> Ray {
+    @ |i, j| {
+        let ray_ptr = rv_align(&rays(i) as &i8, 32) as &Ray8;
+        make_ray(
+            make_vec3(ray_ptr.org(0)(j), ray_ptr.org(1)(j), ray_ptr.org(2)(j)),
+            make_vec3(ray_ptr.dir(0)(j), ray_ptr.dir(1)(j), ray_ptr.dir(2)(j)),
+            ray_ptr.tmin(j),
+            ray_ptr.tmax(j)
+        )
+    }
+}
+
+fn @make_cpu_hit1(hits: &mut [Hit1], any_hit: bool) -> fn (i32, i32, Hit) -> () {
+    @ |i, j, hit| {
+        let hit_ptr = &mut hits(i + j);
+        hit_ptr.tri_id = hit.prim_id;
+        if !any_hit {
+            hit_ptr.t = hit.distance;
+            hit_ptr.u = hit.uv_coords.x;
+            hit_ptr.v = hit.uv_coords.y;
+        }
+    }
+}
+
+fn @make_cpu_hit4(hits: &mut [Hit4], any_hit: bool) -> fn (i32, i32, Hit) -> () {
+    @ |i, j, hit| {
+        let hit_ptr = rv_align(&hits(i) as &i8, 16) as &mut Hit4;
+        hit_ptr.tri_id(j) = hit.prim_id;
+        if !any_hit {
+            hit_ptr.t(j) = hit.distance;
+            hit_ptr.u(j) = hit.uv_coords.x;
+            hit_ptr.v(j) = hit.uv_coords.y;
+        }
+    }
+}
+
+fn @make_cpu_hit8(hits: &mut [Hit8], any_hit: bool) -> fn (i32, i32, Hit) -> () {
+    @ |i, j, hit| {
+        let hit_ptr = rv_align(&hits(i) as &i8, 32) as &mut Hit8;
+        hit_ptr.tri_id(j) = hit.prim_id;
+        if !any_hit {
+            hit_ptr.t(j) = hit.distance;
+            hit_ptr.u(j) = hit.uv_coords.x;
+            hit_ptr.v(j) = hit.uv_coords.y;
+        }
+    }
+}
+
 // CPU BVH4 variants ---------------------------------------------------------------
 
-extern fn cpu_intersect_bvh4_packet8_avx2(bvh: &Bvh4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () {
-    cpu_traverse_hybrid(
-        make_cpu_int_min_max(),
-        make_cpu_ray8_layout(rays as &mut [Ray8SoA], hits),
-        make_cpu_bvh4(*bvh),
-        false,
-        false,
-        ray_count,
-        1);
+extern fn cpu_intersect_hybrid_ray8_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], rays: &[Ray8], hits: &mut [Hit8], num_packets: i32) -> () {
+    if enable_cpu_bvh4_tri4 && enable_cpu_hybrid {
+        cpu_traverse_hybrid(
+            if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
+            make_cpu_bvh4_tri4(nodes, tris),
+            make_cpu_ray8(rays),
+            make_cpu_hit8(hits, false /*any_hit*/),
+            8 /*packet_size*/,
+            num_packets,
+            true /*single*/,
+            false /*any_hit*/
+        );
+    }
 }
-extern fn cpu_occluded_bvh4_packet8_avx2(bvh: &Bvh4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () {
-    cpu_traverse_hybrid(
-        make_cpu_int_min_max(),
-        make_cpu_ray8_layout(rays as &mut [Ray8SoA], hits),
-        make_cpu_bvh4(*bvh),
-        false,
-        true,
-        ray_count,
-        1);
+
+extern fn cpu_occluded_hybrid_ray8_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], rays: &[Ray8], hits: &mut [Hit8], num_packets: i32) -> () {
+    if enable_cpu_bvh4_tri4 && enable_cpu_hybrid {
+        cpu_traverse_hybrid(
+            if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
+            make_cpu_bvh4_tri4(nodes, tris),
+            make_cpu_ray8(rays),
+            make_cpu_hit8(hits, true /*any_hit*/),
+            8 /*packet_size*/,
+            num_packets,
+            true /*single*/,
+            true /*any_hit*/
+        );
+    }
 }
-extern fn cpu_intersect_bvh4_single_avx2(bvh: &Bvh4, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () {
-    cpu_traverse_single(
-        make_cpu_int_min_max(),
-        make_cpu_ray1_layout(rays as &mut [Ray1AoS], hits),
-        make_cpu_bvh4(*bvh),
-        false,
-        ray_count,
-        1);
+
+extern fn cpu_intersect_packet_ray8_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], rays: &[Ray8], hits: &mut [Hit8], num_packets: i32) -> () {
+    if enable_cpu_bvh4_tri4 && enable_cpu_packet {
+        cpu_traverse_hybrid(
+            if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
+            make_cpu_bvh4_tri4(nodes, tris),
+            make_cpu_ray8(rays),
+            make_cpu_hit8(hits, false /*any_hit*/),
+            8 /*packet_size*/,
+            num_packets,
+            false /*single*/,
+            false /*any_hit*/
+        );
+    }
 }
-extern fn cpu_occluded_bvh4_single_avx2(bvh: &Bvh4, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () {
-    cpu_traverse_single(
-        make_cpu_int_min_max(),
-        make_cpu_ray1_layout(rays as &mut [Ray1AoS], hits),
-        make_cpu_bvh4(*bvh),
-        true,
-        ray_count,
-        1);
+
+extern fn cpu_occluded_packet_ray8_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], rays: &[Ray8], hits: &mut [Hit8], num_packets: i32) -> () {
+    if enable_cpu_bvh4_tri4 && enable_cpu_packet {
+        cpu_traverse_hybrid(
+            if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
+            make_cpu_bvh4_tri4(nodes, tris),
+            make_cpu_ray8(rays),
+            make_cpu_hit8(hits, true /*any_hit*/),
+            8 /*packet_size*/,
+            num_packets,
+            false /*single*/,
+            true /*any_hit*/
+        );
+    }
 }
-extern fn cpu_intersect_bvh4_hybrid8_avx2(bvh: &Bvh4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () {
-    cpu_traverse_hybrid(
-        make_cpu_int_min_max(),
-        make_cpu_ray8_layout(rays as &mut [Ray8SoA], hits),
-        make_cpu_bvh4(*bvh),
-        true,
-        false,
-        ray_count,
-        1);
+
+extern fn cpu_intersect_single_ray1_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], rays: &[Ray1], hits: &mut [Hit1], num_packets: i32) -> () {
+    if enable_cpu_bvh4_tri4 && enable_cpu_single {
+        cpu_traverse_single(
+            if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
+            make_cpu_bvh4_tri4(nodes, tris),
+            make_cpu_ray1(rays),
+            make_cpu_hit1(hits, false /*any_hit*/),
+            1 /*packet_size*/,
+            num_packets,
+            false /*any_hit*/
+        );
+    }
 }
-extern fn cpu_occluded_bvh4_hybrid8_avx2(bvh: &Bvh4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () {
-    cpu_traverse_hybrid(
-        make_cpu_int_min_max(),
-        make_cpu_ray8_layout(rays as &mut [Ray8SoA], hits),
-        make_cpu_bvh4(*bvh),
-        true,
-        true,
-        ray_count,
-        1);
+
+extern fn cpu_occluded_single_ray1_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], rays: &[Ray1], hits: &mut [Hit1], num_packets: i32) -> () {
+    if enable_cpu_bvh4_tri4 && enable_cpu_single {
+        cpu_traverse_single(
+            if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
+            make_cpu_bvh4_tri4(nodes, tris),
+            make_cpu_ray1(rays),
+            make_cpu_hit1(hits, true /*any_hit*/),
+            1 /*packet_size*/,
+            num_packets,
+            true /*any_hit*/
+        );
+    }
 }
 
 // CPU BVH8 variants ---------------------------------------------------------------
 
-extern fn cpu_intersect_bvh8_tri4_packet8_avx2(bvh: &Bvh8Tri4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () {
-    cpu_traverse_hybrid(
-        make_cpu_int_min_max(),
-        make_cpu_ray8_layout(rays as &mut [Ray8SoA], hits),
-        make_cpu_bvh8_tri4(*bvh),
-        false,
-        false,
-        ray_count,
-        1);
-}
-extern fn cpu_occluded_bvh8_tri4_packet8_avx2(bvh: &Bvh8Tri4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () {
-    cpu_traverse_hybrid(
-        make_cpu_int_min_max(),
-        make_cpu_ray8_layout(rays as &mut [Ray8SoA], hits),
-        make_cpu_bvh8_tri4(*bvh),
-        false,
-        true,
-        ray_count,
-        1);
-}
-extern fn cpu_intersect_bvh8_tri4_single_avx2(bvh: &Bvh8Tri4, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () {
-    cpu_traverse_single(
-        make_cpu_int_min_max(),
-        make_cpu_ray1_layout(rays as &mut [Ray1AoS], hits),
-        make_cpu_bvh8_tri4(*bvh),
-        false,
-        ray_count,
-        1);
-}
-extern fn cpu_occluded_bvh8_tri4_single_avx2(bvh: &Bvh8Tri4, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () {
-    cpu_traverse_single(
-        make_cpu_int_min_max(),
-        make_cpu_ray1_layout(rays as &mut [Ray1AoS], hits),
-        make_cpu_bvh8_tri4(*bvh),
-        true,
-        ray_count,
-        1);
-}
-extern fn cpu_intersect_bvh8_tri4_hybrid8_avx2(bvh: &Bvh8Tri4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () {
-    cpu_traverse_hybrid(
-        make_cpu_int_min_max(),
-        make_cpu_ray8_layout(rays as &mut [Ray8SoA], hits),
-        make_cpu_bvh8_tri4(*bvh),
-        true,
-        false,
-        ray_count,
-        1);
-}
-extern fn cpu_occluded_bvh8_tri4_hybrid8_avx2(bvh: &Bvh8Tri4, rays: &[Ray8SoA], hits: &mut [Hit8SoA], ray_count: int) -> () {
-    cpu_traverse_hybrid(
-        make_cpu_int_min_max(),
-        make_cpu_ray8_layout(rays as &mut [Ray8SoA], hits),
-        make_cpu_bvh8_tri4(*bvh),
-        true,
-        true,
-        ray_count,
-        1);
+extern fn cpu_intersect_hybrid_ray8_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], rays: &[Ray8], hits: &mut [Hit8], num_packets: i32) -> () {
+    if enable_cpu_bvh8_tri4 && enable_cpu_hybrid {
+        cpu_traverse_hybrid(
+            if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
+            make_cpu_bvh8_tri4(nodes, tris),
+            make_cpu_ray8(rays),
+            make_cpu_hit8(hits, false /*any_hit*/),
+            8 /*packet_size*/,
+            num_packets,
+            true /*single*/,
+            false /*any_hit*/
+        );
+    }
 }
 
-// GPU variants --------------------------------------------------------------------
-
-extern fn gpu_intersect_nvvm(bvh: &Bvh2, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () {
-    gpu_traverse_single(
-        nvvm_accelerator(0),
-        nvvm_intrinsics,
-        make_nvvm_min_max(),
-        make_gpu_ray1_layout(rays as &mut [Ray1AoS], hits),
-        make_nvvm_bvh2(*bvh),
-        false,
-        ray_count,
-        1);
+extern fn cpu_occluded_hybrid_ray8_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], rays: &[Ray8], hits: &mut [Hit8], num_packets: i32) -> () {
+    if enable_cpu_bvh8_tri4 && enable_cpu_hybrid {
+        cpu_traverse_hybrid(
+            if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
+            make_cpu_bvh8_tri4(nodes, tris),
+            make_cpu_ray8(rays),
+            make_cpu_hit8(hits, true /*any_hit*/),
+            8 /*packet_size*/,
+            num_packets,
+            true /*single*/,
+            true /*any_hit*/
+        );
+    }
 }
-extern fn gpu_occluded_nvvm(bvh: &Bvh2, rays: &[Ray1AoS], hits: &mut [Hit1AoS], ray_count: int) -> () {
-    gpu_traverse_single(
-        nvvm_accelerator(0),
-        nvvm_intrinsics,
-        make_nvvm_min_max(),
-        make_gpu_ray1_layout(rays as &mut [Ray1AoS], hits),
-        make_nvvm_bvh2(*bvh),
-        true,
-        ray_count,
-        1);
+
+extern fn cpu_intersect_packet_ray8_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], rays: &[Ray8], hits: &mut [Hit8], num_packets: i32) -> () {
+    if enable_cpu_bvh8_tri4 && enable_cpu_packet {
+        cpu_traverse_hybrid(
+            if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
+            make_cpu_bvh8_tri4(nodes, tris),
+            make_cpu_ray8(rays),
+            make_cpu_hit8(hits, false /*any_hit*/),
+            8 /*packet_size*/,
+            num_packets,
+            false /*single*/,
+            false /*any_hit*/
+        );
+    }
+}
+
+extern fn cpu_occluded_packet_ray8_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], rays: &[Ray8], hits: &mut [Hit8], num_packets: i32) -> () {
+    if enable_cpu_bvh8_tri4 && enable_cpu_packet {
+        cpu_traverse_hybrid(
+            if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
+            make_cpu_bvh8_tri4(nodes, tris),
+            make_cpu_ray8(rays),
+            make_cpu_hit8(hits, true /*any_hit*/),
+            8 /*packet_size*/,
+            num_packets,
+            false /*single*/,
+            true /*any_hit*/
+        );
+    }
+}
+
+extern fn cpu_intersect_single_ray1_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], rays: &[Ray1], hits: &mut [Hit1], num_packets: i32) -> () {
+    if enable_cpu_bvh8_tri4 && enable_cpu_single {
+        cpu_traverse_single(
+            if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
+            make_cpu_bvh8_tri4(nodes, tris),
+            make_cpu_ray1(rays),
+            make_cpu_hit1(hits, false /*any_hit*/),
+            1 /*packet_size*/,
+            num_packets,
+            false /*any_hit*/
+        );
+    }
+}
+
+extern fn cpu_occluded_single_ray1_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], rays: &[Ray1], hits: &mut [Hit1], num_packets: i32) -> () {
+    if enable_cpu_bvh8_tri4 && enable_cpu_single {
+        cpu_traverse_single(
+            if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
+            make_cpu_bvh8_tri4(nodes, tris),
+            make_cpu_ray1(rays),
+            make_cpu_hit1(hits, true /*any_hit*/),
+            1 /*packet_size*/,
+            num_packets,
+            true /*any_hit*/
+        );
+    }
+}
+
+// GPU BVH2 variants ---------------------------------------------------------------
+
+extern fn nvvm_intersect_single_ray1_bvh2_tri1(nodes: &[Node2], tris: &[Tri1], rays: &[Ray1], hits: &mut [Hit1], num_rays: i32) -> () {
+    if enable_gpu_bvh2_tri1 {
+        gpu_traverse_single(
+            nvvm_accelerator(0),
+            nvvm_intrinsics,
+            make_nvvm_min_max(),
+            make_nvvm_bvh2_tri1(nodes, tris),
+            make_gpu_ray1(rays),
+            make_gpu_hit1(hits),
+            1 /*packet_size*/,
+            num_rays,
+            false /*any_hit*/,
+        );
+    }
+}
+
+extern fn nvvm_occluded_single_ray1_bvh2_tri1(nodes: &[Node2], tris: &[Tri1], rays: &[Ray1], hits: &mut [Hit1], num_rays: i32) -> () {
+    if enable_gpu_bvh2_tri1 {
+        gpu_traverse_single(
+            nvvm_accelerator(0),
+            nvvm_intrinsics,
+            make_nvvm_min_max(),
+            make_nvvm_bvh2_tri1(nodes, tris),
+            make_gpu_ray1(rays),
+            make_gpu_hit1(hits),
+            1 /*packet_size*/,
+            num_rays,
+            true /*any_hit*/,
+        );
+    }
 }
