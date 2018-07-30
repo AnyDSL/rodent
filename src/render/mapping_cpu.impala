@@ -1,7 +1,7 @@
 // Driver functions ----------------------------------------------------------------
 
 extern "C" {
-    fn rodent_cpu_get_bvh8_tri4(&mut Bvh8Tri4) -> ();
+    fn rodent_cpu_get_bvh8_tri4(&mut &[Node8], &mut &[Tri4]) -> ();
     fn rodent_cpu_get_film_data(&mut FilmData) -> ();
     fn rodent_cpu_load_tri_mesh(&[u8], &mut TriMesh) -> ();
     fn rodent_cpu_load_image_rgba8(&[u8], &mut &[u8], &mut i32, &mut i32) -> ();
@@ -49,26 +49,10 @@ struct SecondaryStream {
     color_b: &mut [f32]
 }
 
-fn @cpu_get_primary_state(primary: PrimaryStream, i: i32) -> RayState {
-    RayState {
-        rnd:     primary.rnd(i),
-        contrib: make_color(primary.contrib_r(i), primary.contrib_g(i), primary.contrib_b(i)),
-        mis:     primary.mis(i),
-        depth:   primary.depth(i)
-    }
-}
+// Accessors -----------------------------------------------------------------------
 
-fn @cpu_set_primary_state(primary: PrimaryStream, i: i32, state: RayState) -> () {
-    primary.rnd(i)       = state.rnd;
-    primary.contrib_r(i) = state.contrib.r;
-    primary.contrib_g(i) = state.contrib.g;
-    primary.contrib_b(i) = state.contrib.b;
-    primary.mis(i)       = state.mis;
-    primary.depth(i)     = state.depth;
-}
-
-fn @make_cpu_ray_accessors(rays: RayStream, vector_width: i32) -> (fn (i32, i32) -> Ray, fn (i32, i32, Ray) -> ()) {
-    let read_ray = @ |i, j| {
+fn @make_ray_stream_reader(rays: RayStream, vector_width: i32) -> fn (i32, i32) -> Ray {
+    @ |i, j| {
         let k = i * vector_width + j;
         make_ray(
             make_vec3(rays.org_x(k),
@@ -80,8 +64,11 @@ fn @make_cpu_ray_accessors(rays: RayStream, vector_width: i32) -> (fn (i32, i32)
             rays.tmin(k),
             rays.tmax(k)
         )
-    };
-    let write_ray = @ |i, j, ray| {
+    }
+}
+
+fn @make_ray_stream_writer(rays: RayStream, vector_width: i32) -> fn (i32, i32, Ray) -> () {
+    @ |i, j, ray| {
         let k = i * vector_width + j;
         rays.org_x(k) = ray.org.x;
         rays.org_y(k) = ray.org.y;
@@ -91,51 +78,61 @@ fn @make_cpu_ray_accessors(rays: RayStream, vector_width: i32) -> (fn (i32, i32)
         rays.dir_z(k) = ray.dir.z;
         rays.tmin(k)  = ray.tmin;
         rays.tmax(k)  = ray.tmax;
-    };
-    (read_ray, write_ray)
+    }
 }
 
-fn @make_cpu_primary_ray_layout(primary: PrimaryStream, vector_width: i32) -> RayLayout {
-    let (read_ray, write_ray) = make_cpu_ray_accessors(primary.rays, vector_width);
-    RayLayout {
-        packet_size: vector_width,
-        read_ray: read_ray,
-        write_ray: write_ray,
-        read_hit: @ |i, j| {
-            let k = i * vector_width + j;
-            make_hit(
-                primary.geom_id(k),
-                primary.prim_id(k),
-                primary.t(k),
-                make_vec2(primary.u(k),
-                          primary.v(k))
-            )
-        },
-        write_hit: @ |i, j, hit| {
-            let k = i * vector_width + j;
-            primary.geom_id(k) = hit.geom_id;
-            primary.prim_id(k) = hit.prim_id;
-            primary.t(k)       = hit.distance;
-            primary.u(k)       = hit.uv_coords.x;
-            primary.v(k)       = hit.uv_coords.y;
+fn @make_primary_stream_hit_reader(primary: PrimaryStream, vector_width: i32) -> fn (i32, i32) -> Hit {
+    @ |i, j| {
+        let k = i * vector_width + j;
+        make_hit(
+            primary.geom_id(k),
+            primary.prim_id(k),
+            primary.t(k),
+            make_vec2(primary.u(k),
+                      primary.v(k))
+        )
+    }
+}
+
+fn @make_primary_stream_hit_writer(primary: PrimaryStream, vector_width: i32) -> fn (i32, i32, Hit) -> () {
+    @ |i, j, hit| {
+        let k = i * vector_width + j;
+        primary.geom_id(k) = hit.geom_id;
+        primary.prim_id(k) = hit.prim_id;
+        primary.t(k)       = hit.distance;
+        primary.u(k)       = hit.uv_coords.x;
+        primary.v(k)       = hit.uv_coords.y;
+    }
+}
+
+fn @make_secondary_stream_hit_writer(secondary: SecondaryStream, vector_width: i32) -> fn (i32, i32, Hit) -> () {
+    @ |i, j, hit| {
+        let k = i * vector_width + j;
+        secondary.prim_id(k) = hit.prim_id;
+    }
+}
+
+fn @make_primary_stream_state_reader(primary: PrimaryStream, vector_width: i32) -> fn (i32, i32) -> RayState {
+    @ |i, j| {
+        let k = i * vector_width + j;
+        RayState {
+            rnd:     primary.rnd(k),
+            contrib: make_color(primary.contrib_r(k), primary.contrib_g(k), primary.contrib_b(k)),
+            mis:     primary.mis(k),
+            depth:   primary.depth(k)
         }
     }
 }
 
-fn @make_cpu_secondary_ray_layout(secondary: SecondaryStream, vector_width: i32) -> RayLayout {
-    let (read_ray, write_ray) = make_cpu_ray_accessors(secondary.rays, vector_width);
-    RayLayout {
-        packet_size: vector_width,
-        read_ray: read_ray,
-        write_ray: write_ray,
-        read_hit: @ |i, j| {
-            let k = i * vector_width + j;
-            make_hit(-1, secondary.prim_id(k), 0.0f, make_vec2(0.0f, 0.0f))
-        },
-        write_hit: @ |i, j, hit| {
-            let k = i * vector_width + j;
-            secondary.prim_id(k) = hit.prim_id;
-        }
+fn @make_primary_stream_state_writer(primary: PrimaryStream, vector_width: i32) -> fn (i32, i32, RayState) -> () {
+    @ |i, j, state| {
+        let k = i * vector_width + j;
+        primary.rnd(k)       = state.rnd;
+        primary.contrib_r(k) = state.contrib.r;
+        primary.contrib_g(k) = state.contrib.g;
+        primary.contrib_b(k) = state.contrib.b;
+        primary.mis(k)       = state.mis;
+        primary.depth(k)     = state.depth;
     }
 }
 
@@ -164,14 +161,14 @@ fn @cpu_parallel_tiles( width: i32
 }
 
 fn @cpu_sort_primary(scene: Scene, primary: PrimaryStream, ray_begins: &mut [i32], ray_ends: &mut[i32], vector_width: i32) -> i32 {
-    let primary_layout_as_ray1 = make_cpu_primary_ray_layout(primary, 1);
+    let read_primary_hit = make_primary_stream_hit_reader(primary, 1);
 
     // Compute shader ids
     for i in vectorized_range(vector_width, 0, primary.size) {
         let mut shader_id = scene.num_shaders;
-        let hit = primary_layout_as_ray1.read_hit(i, 0);
-        if hit.prim_id/*hit.geom_id*/ >= 0 {
-            shader_id = scene.geometries(0/*hit.geom_id*/).shader_id(hit);
+        let hit = read_primary_hit(i, 0);
+        if hit.geom_id >= 0 {
+            shader_id = scene.geometries(hit.geom_id).shader_id(hit);
         }
         primary.shader_id(i) = shader_id;
     }
@@ -254,7 +251,7 @@ fn @cpu_compact_primary(primary: PrimaryStream) -> i32 {
     for i in range_step(0, primary.size, 8) {
         let d = primary.size - i;
         let valid_mask = if d < 8 { (1 << d) - 1 } else { -1 };
-        for j in vectorize(8, sizeof[float](), 0, 8) {
+        for j in vectorize(8) {
             let id = primary.rays.id(i + j);
             let mask = rv_ballot(id >= 0) & valid_mask;
             let perm = lut(mask);
@@ -288,7 +285,7 @@ fn @cpu_compact_secondary(secondary: SecondaryStream) -> i32 {
     for i in range_step(0, secondary.size, 8) {
         let d = secondary.size - i;
         let valid_mask = if d < 8 { (1 << d) - 1 } else { -1 };
-        for j in vectorize(8, sizeof[float](), 0, 8) {
+        for j in vectorize(8) {
             let id = secondary.rays.id(i + j);
             let mask = rv_ballot(id >= 0) & valid_mask;
             let perm = lut(mask);
@@ -319,7 +316,8 @@ fn @cpu_generate_rays( primary: PrimaryStream
                      , film_height: i32
                      , vector_width: i32
                      ) -> i32 {
-    let primary_layout_as_ray1 = make_cpu_primary_ray_layout(primary, 1);
+    let write_ray = make_ray_stream_writer(primary.rays, 1);
+    let write_state = make_primary_stream_state_writer(primary, 1);
     let first_id = *id;
     let num_rays = cpu_intrinsics.min(tile_size * tile_size - first_id, capacity - primary.size);
     let tile_div = make_fast_div(tile_size as u32);
@@ -333,8 +331,8 @@ fn @cpu_generate_rays( primary: PrimaryStream
         let y = ymin + in_tile_y;
         let (ray, state) = @@(path_tracer.on_emit)(x, y, film_width, film_height);
         let cur_ray = primary.size + i;
-        primary_layout_as_ray1.write_ray(cur_ray, 0, ray);
-        cpu_set_primary_state(primary, cur_ray, state);
+        write_ray(cur_ray, 0, ray);
+        write_state(cur_ray, 0, state);
         primary.rays.id(cur_ray) = y * film_width + x;
     }
     *id = first_id + num_rays;
@@ -350,11 +348,13 @@ fn @cpu_trace( scene: Scene
              , vector_width: i32
              ) -> () {
     let mut film_data : FilmData;
-    let mut bvh8tri4  : Bvh8Tri4;
     rodent_cpu_get_film_data(&mut film_data);
-    rodent_cpu_get_bvh8_tri4(&mut bvh8tri4);
 
-    let bvh = make_cpu_bvh8_tri4(bvh8tri4);
+    let mut nodes;
+    let mut tris;
+    rodent_cpu_get_bvh8_tri4(&mut nodes, &mut tris);
+    let bvh = make_cpu_bvh8_tri4(nodes, tris);
+
     for xmin, ymin, xmax, ymax in cpu_parallel_tiles(film_data.width, film_data.height, tile_size, tile_size, num_cores) {
         // Get ray streams/states from the CPU driver
         let mut primary   : PrimaryStream;
@@ -374,12 +374,14 @@ fn @cpu_trace( scene: Scene
             // Trace primary rays
             cpu_traverse_hybrid(
                 min_max,
-                make_cpu_primary_ray_layout(primary, vector_width),
                 bvh,
+                make_ray_stream_reader(primary.rays, vector_width),
+                make_primary_stream_hit_writer(primary, vector_width),
+                vector_width /*packet_size*/,
+                primary.size / vector_width + select(primary.size % vector_width != 0, 1, 0),
                 single,
-                false,
-                round_up(primary.size, vector_width),
-                1);
+                false /*any_hit*/
+            );
 
             // Sort hits by shader id, and filter invalid hits
             let mut ray_begins : [i32 * 1024];
@@ -389,16 +391,21 @@ fn @cpu_trace( scene: Scene
             // Perform (vectorized) shading
             let mut begin = 0;
             for shader_id in unroll(0, scene.num_shaders) {
+                let read_primary_ray    = make_ray_stream_reader(primary.rays, 1);
+                let read_primary_hit    = make_primary_stream_hit_reader(primary, 1);
+                let read_primary_state  = make_primary_stream_state_reader(primary, 1);
+                let write_primary_ray   = make_ray_stream_writer(primary.rays, 1);
+                let write_primary_state = make_primary_stream_state_writer(primary, 1);
+                let write_secondary_ray = make_ray_stream_writer(secondary.rays, 1);
+
                 let end = ray_ends(shader_id);
                 for i in vectorized_range(vector_width, begin, end) {
-                    let primary_layout_as_ray1   = make_cpu_primary_ray_layout(primary,     1);
-                    let secondary_layout_as_ray1 = make_cpu_secondary_ray_layout(secondary, 1);
-                    let ray = primary_layout_as_ray1.read_ray(i, 0);
-                    let hit = primary_layout_as_ray1.read_hit(i, 0);
-                    let mut state = cpu_get_primary_state(primary, i);
-                    let ray_id = primary.rays.id(i);
+                    let ray       = read_primary_ray(i, 0);
+                    let hit       = read_primary_hit(i, 0);
+                    let mut state = read_primary_state(i, 0);
+                    let ray_id    = primary.rays.id(i);
 
-                    let geom   = scene.geometries(0/*hit.geom_id*/);
+                    let geom   = scene.geometries(hit.geom_id);
                     let surf   = geom.surface_element(cpu_intrinsics, ray, hit);
                     let shader = scene.shaders(shader_id);
                     let mat    = shader(cpu_intrinsics, scene, surf);
@@ -423,7 +430,7 @@ fn @cpu_trace( scene: Scene
                     // Compute shadow rays
                     for once() {
                         @@(path_tracer.on_shadow)(ray, hit, &mut state, surf, mat, @ |ray, color| -> ! {
-                            secondary_layout_as_ray1.write_ray(i, 0, ray);
+                            write_secondary_ray(i, 0, ray);
                             secondary.color_r(i) = color.r;
                             secondary.color_g(i) = color.g;
                             secondary.color_b(i) = color.b;
@@ -438,8 +445,8 @@ fn @cpu_trace( scene: Scene
                     // Sample new rays
                     for once() {
                         @@(path_tracer.on_bounce)(ray, hit, &mut state, surf, mat, @ |new_ray, new_state| -> ! {
-                            primary_layout_as_ray1.write_ray(i, 0, new_ray);
-                            cpu_set_primary_state(primary, i, new_state);
+                            write_primary_ray(i, 0, new_ray);
+                            write_primary_state(i, 0, new_state);
                             break()
                         }, @ || -> ! {
                             primary.rays.id(i) = -1;
@@ -459,12 +466,14 @@ fn @cpu_trace( scene: Scene
             if likely(secondary.size > 0) {
                 cpu_traverse_hybrid(
                     min_max,
-                    make_cpu_secondary_ray_layout(secondary, vector_width),
                     bvh,
+                    make_ray_stream_reader(secondary.rays, vector_width),
+                    make_secondary_stream_hit_writer(secondary, vector_width),
+                    vector_width /*packet_size*/,
+                    secondary.size / vector_width + select(secondary.size % vector_width != 0, 1, 0),
                     single,
-                    true,
-                    round_up(secondary.size, vector_width),
-                    1);
+                    false /*any_hit*/
+                );
             }
 
             // Add the contribution for secondary rays to the frame buffer
@@ -515,10 +524,10 @@ fn @make_cpu_device() -> Device {
                 scene,
                 path_tracer,
                 make_cpu_int_min_max(),
-                /* single */    true,
-                /* tile_size */   64,
-                /* num_cores */    0,
-                /* vector_width */ 8
+                true /*single*/,
+                64 /*tile_size*/,
+                0 /*num_cores*/,
+                8 /*vector_width*/
             )
         },
         load_mesh:  make_cpu_mesh_loader(),
