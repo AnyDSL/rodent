@@ -310,6 +310,94 @@ static void release_image(int32_t dev, Image& img) {
 
 // BVH -----------------------------------------------------------------------------
 
+template <typename BvhType>
+struct BvhTraits {};
+
+template <typename BvhType>
+BvhType build_bvh(int32_t dev, const std::vector<Tri>& in_tris) {
+    using Traits  = BvhTraits<BvhType>;
+    using Adapter = typename Traits::Adapter;
+    using Node = typename Traits::Node;
+    using Tri  = typename Traits::Tri;
+
+    std::vector<Node> nodes;
+    std::vector<Tri>  tris;
+    Adapter adapter(nodes, tris);
+    adapter.build(in_tris);
+    info("BVH built with ", nodes.size(), " node(s), ", tris.size(), " triangle(s)");
+
+    auto nodes_ptr = reinterpret_cast<Node*>(anydsl_alloc(dev, sizeof(Node) * nodes.size()));
+    auto tris_ptr  = reinterpret_cast<Tri*> (anydsl_alloc(dev, sizeof(Tri)  * tris.size()));
+    anydsl_copy(0, nodes.data(), 0, dev, nodes_ptr, 0, sizeof(Node) * nodes.size());
+    anydsl_copy(0, tris.data(),  0, dev, tris_ptr,  0, sizeof(Tri)  * tris.size());
+
+    return BvhType { nodes_ptr, tris_ptr };
+}
+
+// Interface -----------------------------------------------------------------------
+
+template <typename BvhType>
+class Interface {
+public:
+    Interface(int32_t dev, size_t width, size_t height)
+        : dev_(dev), width_(width), height_(height)
+    {}
+
+    ~Interface() {
+        if (film_data_)
+            anydsl_release(dev_, film_data_->pixels);
+        for (auto& tri_mesh : tri_meshes_)
+            release_tri_mesh(dev_, tri_mesh.second);
+        for (auto& image : images_)
+            release_image(dev_, image.second);
+    }
+
+    Image image(const char* file, size_t channels) {
+        auto it = images_.find(file);
+        if (it != images_.end())
+            return it->second;
+        return images_[file] = load_image(dev_, file, channels);
+    }
+
+    TriMesh tri_mesh(const char* file) {
+        auto it = tri_meshes_.find(file);
+        if (it != tri_meshes_.end())
+            return it->second;
+        return tri_meshes_[file] = load_tri_mesh(dev_, file, tris_);
+    }
+
+    FilmData film_data() {
+        if (film_data_)
+            return *film_data_;
+        auto pixels = anydsl_alloc(dev_, sizeof(Color) * width_ * height_);
+        film_data_.reset(new FilmData {
+            reinterpret_cast<Color*>(pixels),
+            static_cast<int>(width_),
+            static_cast<int>(height_)
+        });
+        return *film_data_;
+    }
+
+    BvhType bvh() {
+        if (bvh_)
+            return *bvh_;
+        bvh_.reset(new BvhType(build_bvh<BvhType>(dev_, tris_)));
+        std::vector<Tri>().swap(tris_);
+        return *bvh_;
+    }
+
+private:
+    std::unordered_map<std::string, Image>   images_;
+    std::unordered_map<std::string, TriMesh> tri_meshes_;
+    std::unique_ptr<FilmData> film_data_;
+    std::unique_ptr<BvhType> bvh_;
+    std::vector<Tri> tris_;
+    size_t width_, height_;
+    int32_t dev_;
+};
+
+// CPU Interface -------------------------------------------------------------------
+
 class Bvh8Tri4Adapter {
     struct CostFn {
         static float leaf_cost(int count, float area) {
@@ -329,15 +417,15 @@ class Bvh8Tri4Adapter {
     using BvhBuilder = SplitBvhBuilder<8, CostFn>;
     using Adapter    = Bvh8Tri4Adapter;
 
-    std::vector<Bvh8Node>& nodes_;
-    std::vector<Bvh4Tri>&  tris_;
+    std::vector<Node8>& nodes_;
+    std::vector<Tri4>&  tris_;
     Stack<StackElem>       stack_;
     BvhBuilder             builder_;
 
     const Tri* in_tris;
 
 public:
-    Bvh8Tri4Adapter(std::vector<Bvh8Node>& nodes, std::vector<Bvh4Tri>& tris)
+    Bvh8Tri4Adapter(std::vector<Node8>& nodes, std::vector<Tri4>& tris)
         : nodes_(nodes), tris_(tris)
     {}
 
@@ -407,7 +495,7 @@ private:
             : adapter(adapter)
         {}
 
-        static void fill_dummy_parent(Bvh8Node& node, const BBox& leaf_bb, int index) {
+        static void fill_dummy_parent(Node8& node, const BBox& leaf_bb, int index) {
             node.child[0] = index;
 
             node.bounds[0][0] = leaf_bb.min.x;
@@ -449,37 +537,37 @@ private:
             // Group triangles by packets of 4
             for (int i = 0; i < ref_count; i += 4) {
                 const int c = i + 4 <= ref_count ? 4 : ref_count - i;
-                Bvh4Tri bvh4tri;
-                memset(&bvh4tri, 0, sizeof(Bvh4Tri));
+                Tri4 tri4;
+                memset(&tri4, 0, sizeof(Tri4));
                 for (int j = 0; j < c; j++) {
                     const int id = refs(i + j);
                     const Tri& tri = in_tris[id];
                     const float3 e1 = tri.v0 - tri.v1;
                     const float3 e2 = tri.v2 - tri.v0;
                     const float3 n = cross(e1, e2);
-                    bvh4tri.v0[0][j] = tri.v0.x;
-                    bvh4tri.v0[1][j] = tri.v0.y;
-                    bvh4tri.v0[2][j] = tri.v0.z;
+                    tri4.v0[0][j] = tri.v0.x;
+                    tri4.v0[1][j] = tri.v0.y;
+                    tri4.v0[2][j] = tri.v0.z;
 
-                    bvh4tri.e1[0][j] = e1.x;
-                    bvh4tri.e1[1][j] = e1.y;
-                    bvh4tri.e1[2][j] = e1.z;
+                    tri4.e1[0][j] = e1.x;
+                    tri4.e1[1][j] = e1.y;
+                    tri4.e1[2][j] = e1.z;
 
-                    bvh4tri.e2[0][j] = e2.x;
-                    bvh4tri.e2[1][j] = e2.y;
-                    bvh4tri.e2[2][j] = e2.z;
+                    tri4.e2[0][j] = e2.x;
+                    tri4.e2[1][j] = e2.y;
+                    tri4.e2[2][j] = e2.z;
 
-                    bvh4tri.n[0][j] = n.x;
-                    bvh4tri.n[1][j] = n.y;
-                    bvh4tri.n[2][j] = n.z;
+                    tri4.n[0][j] = n.x;
+                    tri4.n[1][j] = n.y;
+                    tri4.n[2][j] = n.z;
 
-                    bvh4tri.id[j] = id;
+                    tri4.id[j] = id;
                 }
 
                 for (int j = c; j < 4; j++)
-                    bvh4tri.id[j] = 0xFFFFFFFF;
+                    tri4.id[j] = 0xFFFFFFFF;
 
-                tris.emplace_back(bvh4tri);
+                tris.emplace_back(tri4);
             }
             assert(!tris.empty());
             tris.back().id[3] |= 0x80000000;
@@ -487,103 +575,17 @@ private:
     };
 };
 
-template <typename BvhType>
-struct BvhTraits {};
+struct Bvh8Tri4 {
+    Node8* nodes;
+    Tri4*  tris;
+};
 
 template <>
 struct BvhTraits<Bvh8Tri4> {
-    using Node = Bvh8Node;
-    using Tri  = Bvh4Tri;
+    using Node = Node8;
+    using Tri  = Tri4;
     using Adapter = Bvh8Tri4Adapter;
 };
-
-template <typename BvhType>
-BvhType build_bvh(int32_t dev, const std::vector<Tri>& in_tris) {
-    using Traits  = BvhTraits<BvhType>;
-    using Adapter = typename Traits::Adapter;
-    using Node = typename Traits::Node;
-    using Tri  = typename Traits::Tri;
-
-    std::vector<Node> nodes;
-    std::vector<Tri>  tris;
-    Adapter adapter(nodes, tris);
-    adapter.build(in_tris);
-    info("BVH built with ", nodes.size(), " node(s), ", tris.size(), " triangle(s)");
-
-    auto nodes_ptr = reinterpret_cast<Node*>(anydsl_alloc(dev, sizeof(Node) * nodes.size()));
-    auto tris_ptr  = reinterpret_cast<Tri*> (anydsl_alloc(dev, sizeof(Tri)  * tris.size()));
-    anydsl_copy(0, nodes.data(), 0, dev, nodes_ptr, 0, sizeof(Node) * nodes.size());
-    anydsl_copy(0, tris.data(),  0, dev, tris_ptr,  0, sizeof(Tri)  * tris.size());
-
-    return BvhType {
-        nodes_ptr,
-        tris_ptr
-    };
-}
-
-// Interface -----------------------------------------------------------------------
-
-template <typename BvhType>
-class Interface {
-public:
-    Interface(int32_t dev, size_t width, size_t height)
-        : dev_(dev), width_(width), height_(height)
-    {}
-
-    ~Interface() {
-        if (film_data_)
-            anydsl_release(dev_, film_data_->pixels);
-        for (auto& tri_mesh : tri_meshes_)
-            release_tri_mesh(dev_, tri_mesh.second);
-        for (auto& image : images_)
-            release_image(dev_, image.second);
-    }
-
-    Image image(const char* file, size_t channels) {
-        auto it = images_.find(file);
-        if (it != images_.end())
-            return it->second;
-        return images_[file] = load_image(dev_, file, channels);
-    }
-
-    TriMesh tri_mesh(const char* file) {
-        auto it = tri_meshes_.find(file);
-        if (it != tri_meshes_.end())
-            return it->second;
-        return tri_meshes_[file] = load_tri_mesh(dev_, file, tris_);
-    }
-
-    FilmData film_data() {
-        if (film_data_)
-            return *film_data_;
-        auto pixels = anydsl_alloc(dev_, sizeof(Color) * width_ * height_);
-        film_data_.reset(new FilmData {
-            reinterpret_cast<Color*>(pixels),
-            static_cast<int>(width_),
-            static_cast<int>(height_)
-        });
-        return *film_data_;
-    }
-
-    BvhType bvh() {
-        if (bvh_)
-            return *bvh_;
-        bvh_.reset(new BvhType(build_bvh<BvhType>(dev_, tris_)));
-        std::vector<Tri>().swap(tris_);
-        return *bvh_;
-    }
-
-private:
-    std::unordered_map<std::string, Image>   images_;
-    std::unordered_map<std::string, TriMesh> tri_meshes_;
-    std::unique_ptr<FilmData> film_data_;
-    std::unique_ptr<BvhType> bvh_;
-    std::vector<Tri> tris_;
-    size_t width_, height_;
-    int32_t dev_;
-};
-
-// CPU Interface -------------------------------------------------------------------
 
 static std::unique_ptr<Interface<Bvh8Tri4>> cpu_interface;
 
@@ -599,8 +601,10 @@ void cleanup_cpu_interface() {
     cpu_interface.reset();
 }
 
-extern "C" void rodent_cpu_get_bvh8_tri4(Bvh8Tri4* bvh) {
-    *bvh = cpu_interface->bvh();
+extern "C" void rodent_cpu_get_bvh8_tri4(Node8** nodes, Tri4** tris) {
+    auto bvh = cpu_interface->bvh();
+    *nodes = bvh.nodes;
+    *tris  = bvh.tris;
 }
 
 extern "C" void rodent_cpu_get_film_data(FilmData* film_data) {
