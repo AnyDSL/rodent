@@ -42,6 +42,10 @@ void extract_bvh_leaf(NodeRef leaf, std::vector<BvhTri>& new_tris) {
     size_t cur = 0;
     for (size_t i = 0; i < num; i++) {
         for (size_t j = 0; j < tris[i].size(); j++) {
+            if (cur >= M) {
+                new_tris.push_back(new_tri);
+                cur = 0;
+            }
             new_tri.v0[0][cur] = tris[i].v0.x[j];
             new_tri.v0[1][cur] = tris[i].v0.y[j];
             new_tri.v0[2][cur] = tris[i].v0.z[j];
@@ -56,11 +60,6 @@ void extract_bvh_leaf(NodeRef leaf, std::vector<BvhTri>& new_tris) {
             new_tri. n[2][cur] = new_tri.e1[0][cur] * new_tri.e2[1][cur] - new_tri.e1[1][cur] * new_tri.e2[0][cur];
             new_tri.id[cur] = tris[i].primID(j);
             cur++;
-
-            if (cur >= M) {
-                new_tris.push_back(new_tri);
-                cur = 0;
-            }
         }
     }
     if (cur > 0) {

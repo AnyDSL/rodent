@@ -3,6 +3,7 @@
 #include <string>
 #include <fstream>
 #include <cstring>
+#include <limits>
 
 #include <anydsl_runtime.hpp>
 #include <png.h>
@@ -461,7 +462,7 @@ private:
 
             assert(count >= 2 && count <= 8);
 
-            for (int j = count - 1; j >= 0; j--) {
+            for (int j = 0; j < count; j++) {
                 const BBox& bbox = bboxes(j);
                 nodes[i].bounds[0][j] = bbox.min.x;
                 nodes[i].bounds[2][j] = bbox.min.y;
@@ -470,21 +471,22 @@ private:
                 nodes[i].bounds[1][j] = bbox.max.x;
                 nodes[i].bounds[3][j] = bbox.max.y;
                 nodes[i].bounds[5][j] = bbox.max.z;
-
-                stack.push(i, j);
             }
 
-            for (int j = 3; j >= count; j--) {
-                nodes[i].bounds[0][j] = 0.0f;
-                nodes[i].bounds[2][j] = 0.0f;
-                nodes[i].bounds[4][j] = 0.0f;
+            for (int j = count; j < 8; ++j) {
+                nodes[i].bounds[0][j] = std::numeric_limits<float>::infinity();
+                nodes[i].bounds[2][j] = std::numeric_limits<float>::infinity();
+                nodes[i].bounds[4][j] = std::numeric_limits<float>::infinity();
 
-                nodes[i].bounds[1][j] = -0.0f;
-                nodes[i].bounds[3][j] = -0.0f;
-                nodes[i].bounds[5][j] = -0.0f;
+                nodes[i].bounds[1][j] = -std::numeric_limits<float>::infinity();
+                nodes[i].bounds[3][j] = -std::numeric_limits<float>::infinity();
+                nodes[i].bounds[5][j] = -std::numeric_limits<float>::infinity();
 
                 nodes[i].child[j] = 0;
             }
+
+            for (int j = count - 1; j >= 0; --j)
+                stack.push(i, j);
         }
     };
 
@@ -507,15 +509,15 @@ private:
             node.bounds[5][0] = leaf_bb.max.z;
 
             for (int i = 1; i < 8; ++i) {
+                node.bounds[0][i] = std::numeric_limits<float>::infinity();
+                node.bounds[2][i] = std::numeric_limits<float>::infinity();
+                node.bounds[4][i] = std::numeric_limits<float>::infinity();
+
+                node.bounds[1][i] = -std::numeric_limits<float>::infinity();
+                node.bounds[3][i] = -std::numeric_limits<float>::infinity();
+                node.bounds[5][i] = -std::numeric_limits<float>::infinity();
+
                 node.child[i] = 0;
-
-                node.bounds[0][0] = 0.0f;
-                node.bounds[2][0] = 0.0f;
-                node.bounds[4][0] = 0.0f;
-
-                node.bounds[1][0] = -0.0f;
-                node.bounds[3][0] = -0.0f;
-                node.bounds[5][0] = -0.0f;
             }
         }
 
@@ -569,7 +571,7 @@ private:
 
                 tris.emplace_back(tri4);
             }
-            assert(!tris.empty());
+            assert(ref_count > 0);
             tris.back().id[3] |= 0x80000000;
         }
     };

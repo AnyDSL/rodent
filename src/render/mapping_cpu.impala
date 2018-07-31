@@ -226,12 +226,7 @@ fn @cpu_sort_primary(scene: Scene, primary: PrimaryStream, ray_begins: &mut [i32
     }
 
     // Kill rays that have not intersected anything
-    let last = ray_ends(scene.num_shaders - 1);
-    for i in range(last, primary.size) {
-        primary.rays.id(i) = -1;
-    }
-
-    last
+    ray_ends(scene.num_shaders - 1)
 }
 
 fn @cpu_permute_ray_stream(rays: RayStream, i: i32, j: i32, perm: Perm) -> () {
@@ -420,11 +415,14 @@ fn @cpu_trace( scene: Scene
                             break()
                         });
                     }
-                    for lane in cpu_one_bits(rv_ballot(add_color)) {
-                        let j = bitcast[i32](rv_extract(bitcast[f32](ray_id), lane));
-                        film_data.pixels(j).r += rv_extract(hit_color.r, lane);
-                        film_data.pixels(j).g += rv_extract(hit_color.g, lane);
-                        film_data.pixels(j).b += rv_extract(hit_color.b, lane);
+                    let add_color_mask = rv_ballot(add_color);
+                    if add_color_mask != 0 {
+                        for lane in cpu_one_bits(add_color_mask) {
+                            let j = bitcast[i32](rv_extract(bitcast[f32](ray_id), lane));
+                            film_data.pixels(j).r += rv_extract(hit_color.r, lane);
+                            film_data.pixels(j).g += rv_extract(hit_color.g, lane);
+                            film_data.pixels(j).b += rv_extract(hit_color.b, lane);
+                        }
                     }
 
                     // Compute shadow rays
@@ -472,7 +470,7 @@ fn @cpu_trace( scene: Scene
                     vector_width /*packet_size*/,
                     secondary.size / vector_width + select(secondary.size % vector_width != 0, 1, 0),
                     single,
-                    false /*any_hit*/
+                    true /*any_hit*/
                 );
             }
 
