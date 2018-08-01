@@ -1,14 +1,14 @@
 // Benchmark configuration ---------------------------------------------------------
 
-static enable_cpu_packet      = false;
-static enable_cpu_hybrid      = false;
+static enable_cpu_packet      = true;
+static enable_cpu_hybrid      = true;
 static enable_cpu_single      = true;
-static enable_cpu_bvh4_tri4   = false;
+static enable_cpu_bvh4_tri4   = true;
 static enable_cpu_bvh8_tri4   = true;
-static enable_gpu_bvh2_tri1   = false;
-static enable_cpu_ray4        = false;
-static enable_cpu_ray8        = false;
-static enable_cpu_int_min_max = false; // Faster, but requires AVX2 or higher for the ray8/bvh8 variants on x86
+static enable_gpu_bvh2_tri1   = true;
+static enable_cpu_ray4        = true;
+static enable_cpu_ray8        = true;
+static enable_cpu_int_min_max = true; // Faster, but requires AVX2 or higher for the ray8/bvh8 variants on x86
 
 // Misc. ---------------------------------------------------------------------------
 

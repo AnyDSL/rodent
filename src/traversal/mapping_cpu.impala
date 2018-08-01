@@ -243,7 +243,7 @@ fn @cpu_traverse_single_helper( mut ray: Ray
                             terminated = true;
                         }
                     } else if rv_any(was_hit) {
-                        let found_t = select(was_hit, prim_hit.distance, flt_inf);
+                        let found_t = select(was_hit, prim_hit.distance, flt_max);
                         let min_t = cpu_reduce(found_t, prim.size, min_max.fminf);
                         let lane = cpu_index_of(found_t, min_t);
                         hit = extract_hit(prim_hit, lane);
