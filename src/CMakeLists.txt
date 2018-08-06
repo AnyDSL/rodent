@@ -31,6 +31,7 @@ set(RODENT_SRCS
     render/renderer.impala
     render/scene.impala
     render/mapping_cpu.impala
+    traversal/bvh.impala
     traversal/intersection.impala
     traversal/stack.impala
     traversal/mapping_cpu.impala

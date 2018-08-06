@@ -7,11 +7,12 @@ struct Material {
 
 // Opaque description of a point on a surface
 struct SurfaceElement {
-    is_entering: bool,    // True if the path enters the surface
-    point:       Vec3,    // Point on the surface
-    face_normal: Vec3,    // Geometric normal at the surface point
-    uv_coords:   Vec2,    // UV coordinates on the surface
-    local:       Mat3x3   // Local coordinate system at the surface point
+    is_entering: bool,              // True if the path enters the surface
+    point:       Vec3,              // Point on the surface
+    face_normal: Vec3,              // Geometric normal at the surface point
+    uv_coords:   Vec2,              // UV coordinates on the surface
+    attr:        fn (i32) -> Vec4,  // Vertex attributes (interpolated)
+    local:       Mat3x3             // Local coordinate system at the surface point
 }
 
 // Result of sampling a BSDF

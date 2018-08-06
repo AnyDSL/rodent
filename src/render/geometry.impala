@@ -3,38 +3,55 @@ struct Geometry {
     // Computes the surface element after an intersection on this geometry
     surface_element: fn (Intrinsics, Ray, Hit) -> SurfaceElement,
     // Returns the shader index at the given hit point
-    shader_id: fn (Hit) -> i32
+    shader_id: fn (Hit) -> i32,
+    // Builds a BVH for the geometry
+    //build_bvh: fn (Device) -> Bvh
 }
 
-// Triangle mesh with one UV layer
+// Triangle mesh with per-vertex/per-face attributes
 struct TriMesh {
-    normals:      &[Vec3],
-    face_normals: &[Vec3],
-    uvs:          &[Vec2],
-    ids:          &[i32],
+    vertices:     fn (i32) -> Vec3,
+    normals:      fn (i32) -> Vec3,
+    face_normals: fn (i32) -> Vec3,
+    triangles:    fn (i32) -> (i32, i32, i32),
+    materials:    fn (i32) -> i32,
+    attrs:        fn (i32) -> (bool, fn (i32) -> Vec4),
+    num_attrs:    i32,
     num_tris:     i32
 }
 
+// Creates a geometry object from a triangle mesh definition
 fn @make_tri_mesh_geometry(tri_mesh: TriMesh) -> Geometry {
     Geometry {
         surface_element: @ |math, ray, hit| {
-            let i0 = tri_mesh.ids(hit.prim_id * 4 + 0);
-            let i1 = tri_mesh.ids(hit.prim_id * 4 + 1);
-            let i2 = tri_mesh.ids(hit.prim_id * 4 + 2);
+            let (i0, i1, i2) = tri_mesh.triangles(hit.prim_id);
 
             let face_normal = tri_mesh.face_normals(hit.prim_id);
             let normal = vec3_normalize(math, vec3_lerp2(tri_mesh.normals(i0), tri_mesh.normals(i1), tri_mesh.normals(i2), hit.uv_coords.x, hit.uv_coords.y));
-            let texcoord = vec2_lerp2(tri_mesh.uvs(i0), tri_mesh.uvs(i1), tri_mesh.uvs(i2), hit.uv_coords.x, hit.uv_coords.y);
             let is_entering = vec3_dot(ray.dir, face_normal) <= 0.0f;
+
+            fn @attr(i: i32) -> Vec4 {
+                if i >= tri_mesh.num_attrs {
+                    make_vec4(0.0f, 0.0f, 0.0f, 0.0f)
+                } else {
+                    let (per_face, attr_value) = tri_mesh.attrs(i);
+                    if per_face {
+                        attr_value(hit.prim_id)
+                    } else {
+                        vec4_lerp2(attr_value(i0), attr_value(i1), attr_value(i2), hit.uv_coords.x, hit.uv_coords.y)
+                    }
+                }
+            }
 
             SurfaceElement {
                 is_entering: is_entering,
-                point: vec3_add(ray.org, vec3_mulf(ray.dir, hit.distance)),
+                point:       vec3_add(ray.org, vec3_mulf(ray.dir, hit.distance)),
                 face_normal: if is_entering { face_normal } else { vec3_neg(face_normal) },
-                uv_coords: texcoord,
-                local: make_orthonormal_mat3x3(if vec3_dot(ray.dir, normal) <= 0.0f { normal } else { vec3_neg(normal) })
+                uv_coords:   hit.uv_coords,
+                local:       make_orthonormal_mat3x3(if vec3_dot(ray.dir, normal) <= 0.0f { normal } else { vec3_neg(normal) }),
+                attr:        attr
             }
         },
-        shader_id: @ |hit| tri_mesh.ids(hit.prim_id * 4 + 3)
+        shader_id: @ |hit| tri_mesh.materials(hit.prim_id)
     }
 }

@@ -1,0 +1,269 @@
+struct Bvh {
+    node:     fn (i32) -> Node, // Access to one node of the BVH
+    prim:     fn (i32) -> Prim, // Access to one (possibly packed) primitive
+    prefetch: fn (i32) -> (),   // Prefetches a leaf or inner node
+    arity:    i32,              // Arity of the BVH (number of children per node)
+}
+
+struct Node {
+    bbox:         fn (i32) -> BBox,             // Loads the bounding box of one child node
+    ordered_bbox: fn (i32, RayOctant) -> BBox,  // Loads the bounding box of one child with the given octant order (mapping specific)
+    child:        fn (i32) -> i32               // Gets the index of one child node
+}
+
+struct Prim {
+    intersect: fn (i32, Intrinsics, bool, Ray) -> (bool, Hit),  // Intersects a primitive in the packet
+    is_valid:  fn (i32) -> bool,                                // Returns true if the primitive in the packet is valid
+    is_last:   bool,                                            // True if this is the last primitive packet in the leaf
+    size:      i32                                              // Number of primitives in the packet (must be a constant)
+}
+
+struct MultiNode {
+    has_available:  fn () -> bool,                      // Returns true if there is a node available for splitting
+    get_available:  fn () -> i32,                       // Returns the index of the first available node
+    split:          fn (i32, i32, BBox, BBox) -> (),    // Splits a node at the given position and with the given bounding boxes
+    insert:         fn (i32, i32, BBox) -> (),          // Inserts a node with the given reference range and bounding box
+    set_tested:     fn (i32) -> (),                     // Marks a node as tested so that it does not get processed again
+    sort_by_cost:   fn () -> (),                        // Sorts the nodes by SAH cost
+    is_full:        fn () -> bool,                      // Returns true if the multi node is full
+    ref_range:      fn (i32) -> (i32, i32),             // Returns the reference range for a given node
+    bbox:           fn (i32) -> BBox,                   // Returns the bounding box for a given node
+    cost:           fn (i32) -> f32,                    // Returns the SAH cost of a node
+    size:           fn () -> i32                        // Returns the number of nodes
+}
+
+fn @mark_split_refs(refs: &[i32], flags: &mut [i8], begin: i32, split: i32, end: i32) -> () {
+    for i in range(begin, split) { flags(refs(i)) = 0i8 }
+    for i in range(split, end)   { flags(refs(i)) = 1i8 }
+}
+
+fn @split_refs(tmp: &mut [i32], refs: &mut [i32], flags: &[i8], n: i32, m: i32) -> () {
+    let mut i = 0;
+    let mut j = m;
+    for k in range(0, n) {
+        let r = refs(i);
+        if flags(r) != 0i8 {
+            tmp(j++) = r;
+        } else {
+            tmp(i++) = r;
+        }
+    }
+    for i in range(0, n) { refs(i) = tmp(i) }
+}
+
+fn @partition_refs(refs: &mut [i32], n: i32, pred: fn (i32) -> bool) -> i32 {
+    let mut i = 0;
+    let mut j = n;
+    while i < j {
+        if pred(refs(i)) {
+            swap_i32(&mut refs(i), &mut refs(--j));
+        } else {
+            i++;
+        }
+    }
+    j
+}
+
+fn @sort_refs_linear(refs: &mut [i32], n: i32, cmp: fn (i32, i32) -> bool) -> () {
+    // Shell sort
+    let gaps = [701, 301, 132, 57, 23, 10, 4, 1];
+    let num_gaps = 8;
+    for i in range(0, num_gaps) {
+        let gap = gaps(i);
+        for j in range(gap, n) {
+            let tmp = refs(j);
+            let mut k = j;
+            while k >= gap && cmp(tmp, refs(k - gap)) {
+                refs(k) = refs(k - gap);
+                k -= gap
+            }
+            refs(k) = tmp
+        }
+    }
+}
+
+fn sort_refs(refs: &mut [i32], begin: i32, end: i32, cmp: fn (i32, i32) -> bool) -> () {
+    let n = end - begin;
+    let linear_threshold = 1000;
+    if n <= 1 {
+        return()
+    } else if n < linear_threshold {
+        sort_refs_linear(&refs(begin) as &mut [i32], n, cmp);
+    } else {
+        let pivot = refs(begin);
+        let m = begin + partition_refs(&refs(begin + 1) as &mut [i32], n - 1, @ |i| cmp(pivot, i));
+        swap_i32(&mut refs(m), &mut refs(begin));
+        sort_refs(refs, begin, m, cmp);
+        sort_refs(refs, m + 1, end, cmp);
+    }
+}
+
+fn @expected_bvh_size(arity: i32, leaf_threshold: i32, num_refs: i32) -> (i32, i32) {
+    (num_refs / arity + 1, num_refs / leaf_threshold)
+}
+
+fn @build_bvh( write_node: fn (i32, i32, i32, fn (i32) -> BBox) -> ()
+             , write_leaf: fn (i32, i32, fn (i32) -> i32) -> ()
+             , make_multi_node: fn (i32) -> MultiNode
+             , bboxes: fn (i32) -> BBox
+             , centers: fn (i32) -> Vec3
+             , arity: i32
+             , leaf_threshold: i32
+             , num_refs: i32
+             ) -> () {
+    let refs = [
+        runtime_alloc(0, (sizeof[i32]() * num_refs) as i64) as &mut [i32],
+        runtime_alloc(0, (sizeof[i32]() * num_refs) as i64)as &mut [i32],
+        runtime_alloc(0, (sizeof[i32]() * num_refs) as i64)as &mut [i32]
+    ];
+    let tmp_refs = runtime_alloc(0, (sizeof[i32]() * num_refs) as i64) as &mut [i32];
+    let flags    = runtime_alloc(0, (sizeof[i8 ]() * num_refs) as i64) as &mut [i8];
+    let costs    = runtime_alloc(0, (sizeof[f32]() * num_refs) as i64) as &mut [f32];
+
+    // Sort references according to their center
+    for i in parallel(3, 0, 3) {
+        let ref_ptr = refs(i);
+        for j in range(0, num_refs) { ref_ptr(j) = j; }
+        match i {
+            0 => sort_refs(ref_ptr, 0, num_refs, @ |i, j| { centers(i).x < centers(j).x }),
+            1 => sort_refs(ref_ptr, 0, num_refs, @ |i, j| { centers(i).y < centers(j).y }),
+            _ => sort_refs(ref_ptr, 0, num_refs, @ |i, j| { centers(i).z < centers(j).z }),
+        }
+    }
+
+    let mut global_bbox = empty_bbox();
+    for i in range(0, num_refs) {
+        global_bbox = bbox_extend(global_bbox, bboxes(i));
+    }
+
+    let mut node_count = 0;
+
+    fn find_split(refs: &[i32], begin: i32, end: i32) -> (i32, f32, BBox) {
+        let mut cur_bbox = empty_bbox();
+
+        // Sweep from the left and compute costs
+        for i in range(begin, end - 1) {
+            cur_bbox = bbox_extend(cur_bbox, bboxes(refs(i)));
+            costs(i) = ((i - begin + 1) as f32) * bbox_half_area(cur_bbox);
+        }
+
+        let mut min_cost = flt_max;
+        let mut min_split = -1;
+        let mut min_bbox = empty_bbox();
+
+        cur_bbox = empty_bbox();
+
+        // Sweep from the right and find the minimum cost
+        for i in range_rev(end - 1, begin) {
+            cur_bbox = bbox_extend(cur_bbox, bboxes(refs(i)));
+
+            let cost = costs(i - 1) + ((end - i) as f32) * bbox_half_area(cur_bbox);
+            if cost < min_cost {
+                min_bbox  = cur_bbox;
+                min_cost  = cost;
+                min_split = i;
+            }
+        }
+
+        (min_split, min_cost, min_bbox)
+    }
+
+    fn build_node(parent: i32, begin: i32, end: i32, bbox: BBox) -> () {
+        let multi_node = make_multi_node(arity);
+        multi_node.insert(begin, end, bbox);
+
+        while !multi_node.is_full() && multi_node.has_available() {
+            let index = multi_node.get_available();
+            let (begin, end) = multi_node.ref_range(index);
+            let ref_count = end - begin;
+
+            if ref_count <= leaf_threshold {
+                multi_node.set_tested(index);
+                continue()
+            }
+
+            // Try to split the node
+            let mut min_axis  = -1;
+            let mut min_cost  = flt_max;
+            let mut min_split = -1;
+            let mut right_bbox;
+            for axis in range(0, 3) {
+                let (split, cost, bbox) = find_split(refs(axis), begin, end);
+                if min_cost > cost {
+                    min_cost   = cost;
+                    min_split  = split;
+                    min_axis   = axis;
+                    right_bbox = bbox;
+                }
+            }
+
+            if min_cost > multi_node.cost(index) {
+                multi_node.set_tested(index);
+                continue()
+            }
+
+            let axis1 = (min_axis + 1) % 3;
+            let axis2 = (min_axis + 2) % 3;
+            let num_left = min_split - begin;
+            mark_split_refs(refs(min_axis), flags, begin, min_split, end);
+            split_refs(tmp_refs, &refs(axis1)(begin) as &mut [i32], flags, ref_count, num_left);
+            split_refs(tmp_refs, &refs(axis2)(begin) as &mut [i32], flags, ref_count, num_left);
+
+            // Compute bounding box for left side
+            let mut left_bbox = empty_bbox();
+            for i in range(begin, min_split) {
+                left_bbox = bbox_extend(left_bbox, bboxes(refs(min_axis)(i)));
+            }
+
+            multi_node.split(index, min_split, left_bbox, right_bbox);
+            multi_node.sort_by_cost();
+        }
+
+        if multi_node.size() == 1 {
+            // If there is no parent inner node, then generate one
+            let parent_node = if parent == -1 {
+                write_node(-1, 0, 1, @ |i| multi_node.bbox(0));
+                0
+            } else {
+                parent
+            };
+            let (begin, end) = multi_node.ref_range(0);
+            write_leaf(parent_node, end - begin, @ |i| refs(0)(begin + i));
+        } else {
+            let node_id = node_count++;
+            write_node(parent, node_id, multi_node.size(), @ |i| multi_node.bbox(i));
+            for i in range(0, multi_node.size()) {
+                let (begin, end) = multi_node.ref_range(i);
+                build_node(node_id * arity + i, begin, end, multi_node.bbox(i));
+            }
+        }
+    }
+
+    build_node(-1, 0, num_refs, global_bbox);
+
+    runtime_release(0, flags);
+    for i in unroll(0, 3) {
+        runtime_release(0, refs(i) as &mut [i8]);
+    }
+    runtime_release(0, tmp_refs as &mut [i8]);
+    runtime_release(0, costs as &mut [i8]);
+}
+
+fn @store_bounds( bboxes: fn (i32) -> BBox
+                , centers: fn (i32) -> Vec3
+                , num_refs: i32
+                , user: fn (fn (i32) -> BBox, fn (i32) -> Vec3) -> ()
+                ) -> () {
+    let stored_bboxes  = runtime_alloc(0, (sizeof[BBox]() * num_refs) as i64) as &mut [BBox];
+    let stored_centers = runtime_alloc(0, (sizeof[Vec3]() * num_refs) as i64) as &mut [Vec3];
+
+    for i in parallel(0, 0, num_refs) {
+        stored_centers(i) = centers(i);
+        stored_bboxes(i)  = bboxes(i);
+    }
+
+    user(@ |i| stored_bboxes(i), @ |i| stored_centers(i));
+
+    runtime_release(0, stored_bboxes  as &mut [i8]);
+    runtime_release(0, stored_centers as &mut [i8]);
+}

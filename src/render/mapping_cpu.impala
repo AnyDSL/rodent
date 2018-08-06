@@ -3,7 +3,7 @@
 extern "C" {
     fn rodent_cpu_get_bvh8_tri4(&mut &[Node8], &mut &[Tri4]) -> ();
     fn rodent_cpu_get_film_data(&mut FilmData) -> ();
-    fn rodent_cpu_load_tri_mesh(&[u8], &mut TriMesh) -> ();
+    fn rodent_cpu_load_tri_mesh(&[u8], &mut i32, &mut &[f32], &mut &[u32], &mut &[f32], &mut &[f32], &mut &[f32]) -> ();
     fn rodent_cpu_load_image_rgba8(&[u8], &mut &[u8], &mut i32, &mut i32) -> ();
     fn rodent_cpu_get_primary_stream(&mut PrimaryStream, i32) -> ();
     fn rodent_cpu_get_secondary_stream(&mut SecondaryStream, i32) -> ();
@@ -484,8 +484,23 @@ fn @cpu_trace( scene: Scene
 
 fn @make_cpu_mesh_loader() -> fn (&[u8]) -> Geometry {
     @ |file_name| {
-        let mut tri_mesh;
-        rodent_cpu_load_tri_mesh(file_name, &mut tri_mesh);
+        let mut num_tris     : i32;
+        let mut vertices     : &[f32];
+        let mut indices      : &[u32];
+        let mut normals      : &[f32];
+        let mut face_normals : &[f32];
+        let mut texcoords    : &[f32];
+        rodent_cpu_load_tri_mesh(file_name, &mut num_tris, &mut vertices, &mut indices, &mut normals, &mut face_normals, &mut texcoords);
+        let tri_mesh = TriMesh {
+            vertices:     @ |i| make_vec3(vertices(i * 3 + 0), vertices(i * 3 + 1), vertices(i * 3 + 2)),
+            normals:      @ |i| make_vec3(normals(i * 3 + 0), normals(i * 3 + 1), normals(i * 3 + 2)),
+            face_normals: @ |i| make_vec3(face_normals(i * 3 + 0), face_normals(i * 3 + 1), face_normals(i * 3 + 2)),
+            triangles:    @ |i| (indices(i * 4 + 0) as i32, indices(i * 4 + 1) as i32, indices(i * 4 + 2) as i32),
+            materials:    @ |i| indices(i * 4 + 3) as i32,
+            attrs:        @ |_| (false, @ |j| make_vec4(texcoords(j * 2 + 0), texcoords(j * 2 + 1), 0.0f, 0.0f)),
+            num_attrs:    1,
+            num_tris:     num_tris
+        };
         make_tri_mesh_geometry(tri_mesh)
     }
 }
@@ -512,7 +527,7 @@ fn @make_cpu_image_loader() -> fn (&[u8]) -> Image {
 fn @make_cpu_device() -> Device {
     Device {
         intrinsics: cpu_intrinsics,
-        trace:      @ |scene, path_tracer| {
+        trace: @ |scene, path_tracer| {
             cpu_trace(
                 scene,
                 path_tracer,

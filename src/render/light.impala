@@ -3,25 +3,25 @@ struct EmissionSample {
     pos: Vec3,          // Position on the light source
     dir: Vec3,          // Direction of the light going outwards
     intensity: Color,   // Intensity along the direction
-    pdf_area: f32,    // Probability to sample the point on the light
-    pdf_dir: f32,     // Probability to sample the direction on the light, conditioned on the point on the light source
-    cos: f32          // Cosine between the direction and the light source geometry
+    pdf_area: f32,      // Probability to sample the point on the light
+    pdf_dir: f32,       // Probability to sample the direction on the light, conditioned on the point on the light source
+    cos: f32            // Cosine between the direction and the light source geometry
 }
 
 // Result from sampling direct lighting from a light source
 struct DirectLightSample {
     pos: Vec3,          // Position on the light source
     intensity: Color,   // Intensity along the direction
-    pdf_area: f32,    // Probability to sample the point on the light
-    pdf_dir: f32,     // Probability to sample the direction using emission sampling
-    cos: f32          // Cosine between the direction and the light source geometry
+    pdf_area: f32,      // Probability to sample the point on the light
+    pdf_dir: f32,       // Probability to sample the direction using emission sampling
+    cos: f32            // Cosine between the direction and the light source geometry
 }
 
 // Emission properties of a light source
 struct EmissionValue {
     intensity: Color,   // Intensity along the direction
-    pdf_area: f32,    // Probability to sample the direction using emission sampling
-    pdf_dir: f32      // Probability to sample the point on the light
+    pdf_area: f32,      // Probability to sample the direction using emission sampling
+    pdf_dir: f32        // Probability to sample the point on the light
 }
 
 // Opaque light structure

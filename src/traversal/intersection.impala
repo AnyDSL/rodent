@@ -28,26 +28,6 @@ struct BBox {
     max: Vec3          // Maximum corner
 }
 
-struct Bvh {
-    node:     fn (i32) -> Node, // Access to one node of the BVH
-    prim:     fn (i32) -> Prim, // Access to one (possibly packed) primitive
-    prefetch: fn (i32) -> (),   // Prefetches a leaf or inner node
-    arity:    i32,              // Arity of the BVH (number of children per node)
-}
-
-struct Node {
-    bbox:         fn (i32) -> BBox,             // Loads the bounding box of one child node
-    ordered_bbox: fn (i32, RayOctant) -> BBox,  // Loads the bounding box of one child with the given octant order (mapping specific)
-    child:        fn (i32) -> i32               // Gets the index of one child node
-}
-
-struct Prim {
-    intersect: fn (i32, Intrinsics, bool, Ray) -> (bool, Hit),  // Intersects a primitive in the packet
-    is_valid:  fn (i32) -> bool,                                // Returns true if the primitive in the packet is valid
-    is_last:   bool,                                            // True if this is the last primitive packet in the leaf
-    size:      i32                                              // Number of primitives in the packet (must be a constant)
-}
-
 // Min/max functions required to perform the ray-box test
 struct MinMax {
     fmaxmaxf:   fn (f32, f32, f32) -> f32,
@@ -137,6 +117,32 @@ fn @ray_octant(ray: Ray) -> RayOctant {
 
 fn @empty_hit(tmax: f32) -> Hit {
     make_hit(-1, -1, tmax, undef())
+}
+
+fn @empty_bbox() -> BBox {
+    make_bbox(
+        make_vec3( flt_max,  flt_max,  flt_max),
+        make_vec3(-flt_max, -flt_max, -flt_max)
+    )
+}
+
+fn @bbox_extend(a: BBox, b: BBox) -> BBox {
+    make_bbox(
+        vec3_min(a.min, b.min),
+        vec3_max(a.max, b.max)
+    )
+}
+
+fn @bbox_append(a: BBox, b: Vec3) -> BBox {
+    make_bbox(
+        vec3_min(a.min, b),
+        vec3_max(a.max, b)
+    )
+}
+
+fn @bbox_half_area(a: BBox) -> f32 {
+    let ext = vec3_sub(a.max, a.min);
+    ext.x * (ext.y + ext.z) + ext.y * ext.z
 }
 
 fn @intersect_ray_tri(math: Intrinsics, backface_culling: bool, mut mask: bool, ray: Ray, tri: Tri) -> (bool, f32, f32, f32) {

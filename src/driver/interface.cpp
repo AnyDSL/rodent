@@ -14,6 +14,15 @@
 
 // Triangle Meshes -----------------------------------------------------------------
 
+struct TriMesh {
+    size_t num_tris;
+    float* vertices;
+    uint32_t* indices;
+    float* normals;
+    float* face_normals;
+    float* texcoords;
+};
+
 struct TriIdx {
     int32_t v0, v1, v2, m;
     TriIdx(int32_t v0, int32_t v1, int32_t v2, int32_t m)
@@ -185,31 +194,35 @@ static TriMesh load_tri_mesh(int32_t dev, std::string file_name, std::vector<Tri
     for (auto& n : normals)
         n = normalize(n);
 
-    auto normals_ptr      = reinterpret_cast<Vec3*>(anydsl_alloc(dev, sizeof(Vec3) * normals.size()));
-    auto face_normals_ptr = reinterpret_cast<Vec3*>(anydsl_alloc(dev, sizeof(Vec3) * face_normals.size()));
-    auto uvs_ptr          = reinterpret_cast<Vec2*>(anydsl_alloc(dev, sizeof(Vec2) * texcoords.size()));
-    auto ids_ptr          = reinterpret_cast<int32_t*>(anydsl_alloc(dev, sizeof(int32_t) * indices.size()));
+    auto verts_ptr        = reinterpret_cast<float*>(anydsl_alloc(dev, sizeof(float) * 3 * vertices.size()));
+    auto normals_ptr      = reinterpret_cast<float*>(anydsl_alloc(dev, sizeof(float) * 3 * normals.size()));
+    auto face_normals_ptr = reinterpret_cast<float*>(anydsl_alloc(dev, sizeof(float) * 3 * face_normals.size()));
+    auto uvs_ptr          = reinterpret_cast<float*>(anydsl_alloc(dev, sizeof(float) * 2 * texcoords.size()));
+    auto ids_ptr          = reinterpret_cast<uint32_t*>(anydsl_alloc(dev, sizeof(uint32_t) * indices.size()));
 
-    anydsl_copy(0, normals.data(),      0, dev, normals_ptr,      0, sizeof(Vec3)    * normals.size());
-    anydsl_copy(0, face_normals.data(), 0, dev, face_normals_ptr, 0, sizeof(Vec3)    * face_normals.size());
-    anydsl_copy(0, texcoords.data(),    0, dev, uvs_ptr,          0, sizeof(Vec2)    * texcoords.size());
+    anydsl_copy(0, vertices.data(),     0, dev, verts_ptr,        0, sizeof(float) * 3 * vertices.size());
+    anydsl_copy(0, normals.data(),      0, dev, normals_ptr,      0, sizeof(float) * 3 * normals.size());
+    anydsl_copy(0, face_normals.data(), 0, dev, face_normals_ptr, 0, sizeof(float) * 3 * face_normals.size());
+    anydsl_copy(0, texcoords.data(),    0, dev, uvs_ptr,          0, sizeof(float) * 2 * texcoords.size());
     anydsl_copy(0, indices.data(),      0, dev, ids_ptr,          0, sizeof(int32_t) * indices.size());
 
-    int32_t num_tris = indices.size() / 4;
+    size_t num_tris = indices.size() / 4;
     return TriMesh {
+        indices.size() / 4,
+        verts_ptr,
+        ids_ptr,
         normals_ptr,
         face_normals_ptr,
-        uvs_ptr,
-        ids_ptr,
-        num_tris
+        uvs_ptr
     };
 }
 
 static void release_tri_mesh(int32_t dev, TriMesh tri_mesh) {
-    anydsl_release(dev, const_cast<Vec3*>(tri_mesh.normals));
-    anydsl_release(dev, const_cast<Vec3*>(tri_mesh.face_normals));
-    anydsl_release(dev, const_cast<Vec2*>(tri_mesh.uvs));
-    anydsl_release(dev, const_cast<int32_t*>(tri_mesh.ids));
+    anydsl_release(dev, tri_mesh.vertices);
+    anydsl_release(dev, tri_mesh.normals);
+    anydsl_release(dev, tri_mesh.face_normals);
+    anydsl_release(dev, tri_mesh.texcoords);
+    anydsl_release(dev, tri_mesh.indices);
 }
 
 // Images --------------------------------------------------------------------------
@@ -613,8 +626,14 @@ extern "C" void rodent_cpu_get_film_data(FilmData* film_data) {
     *film_data = cpu_interface->film_data();
 }
 
-extern "C" void rodent_cpu_load_tri_mesh(const char* file, TriMesh* tri_mesh) {
-    *tri_mesh = cpu_interface->tri_mesh(file);
+extern "C" void rodent_cpu_load_tri_mesh(const char* file, int* num_tris, const float** vertices, const uint32_t** indices, const float** normals, const float** face_normals, const float** texcoords) {
+    auto tri_mesh = cpu_interface->tri_mesh(file);
+    *num_tris     = tri_mesh.num_tris;
+    *vertices     = tri_mesh.vertices;
+    *indices      = tri_mesh.indices;
+    *normals      = tri_mesh.normals;
+    *face_normals = tri_mesh.face_normals;
+    *texcoords    = tri_mesh.texcoords;
 }
 
 extern "C" void rodent_cpu_load_image_rgba8(const char* file, uint8_t** pixels, int32_t* width, int32_t* height) {

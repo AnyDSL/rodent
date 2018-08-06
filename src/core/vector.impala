@@ -21,9 +21,11 @@ fn @make_vec3(x: f32, y: f32, z: f32) -> Vec3 { Vec3 { x: x, y: y, z: z } }
 fn @make_vec4(x: f32, y: f32, z: f32, w: f32) -> Vec4 { Vec4 { x: x, y: y, z: z, w: w } }
 
 fn @vec2_to_3(v: Vec2, z: f32) -> Vec3 { make_vec3(v.x, v.y, z) }
+fn @vec2_to_4(v: Vec2, z: f32, w: f32) -> Vec4 { make_vec4(v.x, v.y, z, w) }
 fn @vec3_to_2(v: Vec3) -> Vec2 { make_vec2(v.x, v.y) }
 fn @vec3_to_4(v: Vec3, w: f32) -> Vec4 { make_vec4(v.x, v.y, v.z, w) }
 fn @vec4_to_3(v: Vec4) -> Vec3 { make_vec3(v.x, v.y, v.z) }
+fn @vec4_to_2(v: Vec4) -> Vec2 { make_vec2(v.x, v.y) }
 
 fn @vec2_map(v: Vec2, f: fn (f32) -> f32) -> Vec2 { make_vec2(@@f(v.x), @@f(v.y)) }
 fn @vec3_map(v: Vec3, f: fn (f32) -> f32) -> Vec3 { make_vec3(@@f(v.x), @@f(v.y), @@f(v.z)) }
@@ -105,3 +107,11 @@ fn @vec4_lerp2(a: Vec4, b: Vec4, c: Vec4, u: f32, v: f32) -> Vec4 {
         w: lerp2(a.w, b.w, c.w, u, v)
     }
 }
+
+fn @vec2_min(a: Vec2, b: Vec2) -> Vec2 { vec2_zip(a, b, |x, y| select(x < y, x, y)) }
+fn @vec3_min(a: Vec3, b: Vec3) -> Vec3 { vec3_zip(a, b, |x, y| select(x < y, x, y)) }
+fn @vec4_min(a: Vec4, b: Vec4) -> Vec4 { vec4_zip(a, b, |x, y| select(x < y, x, y)) }
+
+fn @vec2_max(a: Vec2, b: Vec2) -> Vec2 { vec2_zip(a, b, |x, y| select(x > y, x, y)) }
+fn @vec3_max(a: Vec3, b: Vec3) -> Vec3 { vec3_zip(a, b, |x, y| select(x > y, x, y)) }
+fn @vec4_max(a: Vec4, b: Vec4) -> Vec4 { vec4_zip(a, b, |x, y| select(x > y, x, y)) }

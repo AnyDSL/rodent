@@ -3,7 +3,7 @@ fn @diffuse_shader(math: Intrinsics, scene: Scene, surf: SurfaceElement) -> Mate
         make_repeat_border(),
         make_bilinear_filter(),
         scene.images(0));
-    let bsdf = make_diffuse_bsdf(surf, texture(surf.uv_coords));
+    let bsdf = make_diffuse_bsdf(surf, texture(vec4_to_2(surf.attr(0))));
     make_material(bsdf)
 }
 

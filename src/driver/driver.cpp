@@ -185,7 +185,8 @@ int main(int argc, char** argv) {
         frames++;
         if (frames > 10 || tick_counter >= 5000) {
             std::ostringstream os;
-            os << "Rodent [" << double(frames) * 1000.0 / double(tick_counter) << " FPS, " << iter << " samples]";
+            os << "Rodent [" << double(frames) * 1000.0 / double(tick_counter) << " FPS, "
+               << iter << " " << "sample" << (iter > 1 ? "s" : "") << "]";
             SDL_SetWindowTitle(window, os.str().c_str());
             frames = 0;
             tick_counter = 0;
