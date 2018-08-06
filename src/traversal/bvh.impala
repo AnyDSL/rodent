@@ -25,12 +25,15 @@ struct MultiNode {
     insert:         fn (i32, i32, BBox) -> (),          // Inserts a node with the given reference range and bounding box
     set_tested:     fn (i32) -> (),                     // Marks a node as tested so that it does not get processed again
     sort_by_cost:   fn () -> (),                        // Sorts the nodes by SAH cost
-    is_full:        fn () -> bool,                      // Returns true if the multi node is full
     ref_range:      fn (i32) -> (i32, i32),             // Returns the reference range for a given node
     bbox:           fn (i32) -> BBox,                   // Returns the bounding box for a given node
     cost:           fn (i32) -> f32,                    // Returns the SAH cost of a node
     size:           fn () -> i32                        // Returns the number of nodes
 }
+
+type NodeWriter = fn (i32, i32, fn (i32) -> BBox) -> ();
+type LeafWriter = fn (i32, i32, fn (i32) -> i32) -> ();
+type NodeLinker = fn (bool, i32, i32, i32) -> ();
 
 fn @mark_split_refs(refs: &[i32], flags: &mut [i8], begin: i32, split: i32, end: i32) -> () {
     for i in range(begin, split) { flags(refs(i)) = 0i8 }
@@ -98,16 +101,115 @@ fn sort_refs(refs: &mut [i32], begin: i32, end: i32, cmp: fn (i32, i32) -> bool)
     }
 }
 
-fn @expected_bvh_size(arity: i32, leaf_threshold: i32, num_refs: i32) -> (i32, i32) {
+fn @estimate_bvh_size(arity: i32, leaf_threshold: i32, num_refs: i32) -> (i32, i32) {
     (num_refs / arity + 1, num_refs / leaf_threshold)
 }
 
-fn @build_bvh( write_node: fn (i32, i32, i32, fn (i32) -> BBox) -> ()
-             , write_leaf: fn (i32, i32, fn (i32) -> i32) -> ()
-             , make_multi_node: fn (i32) -> MultiNode
+fn @make_multi_node(arity: i32) -> MultiNode {
+    // Only supports arities 2, 4, and 8
+    let mut bboxes2    : [BBox * 2];
+    let mut ref_begin2 : [i32 * 2];
+    let mut ref_end2   : [i32 * 2];
+    let mut cost2      : [f32 * 2];
+    let mut tested2    : [bool * 2];
+
+    let mut bboxes4    : [BBox * 4];
+    let mut ref_begin4 : [i32 * 4];
+    let mut ref_end4   : [i32 * 4];
+    let mut cost4      : [f32 * 4];
+    let mut tested4    : [bool * 4];
+
+    let mut bboxes8    : [BBox * 8];
+    let mut ref_begin8 : [i32 * 8];
+    let mut ref_end8   : [i32 * 8];
+    let mut cost8      : [f32 * 8];
+    let mut tested8    : [bool * 8];
+
+    let (bboxes, ref_begin, ref_end, cost, tested) = match arity {
+        2 => (&mut bboxes2 as &mut [BBox], &mut ref_begin2 as &mut [i32], &mut ref_end2 as &mut [i32], &mut cost2 as &mut [f32], &mut tested2 as &mut [bool]),
+        4 => (&mut bboxes4 as &mut [BBox], &mut ref_begin4 as &mut [i32], &mut ref_end4 as &mut [i32], &mut cost4 as &mut [f32], &mut tested4 as &mut [bool]),
+        _ => (&mut bboxes8 as &mut [BBox], &mut ref_begin8 as &mut [i32], &mut ref_end8 as &mut [i32], &mut cost8 as &mut [f32], &mut tested8 as &mut [bool]),
+    };
+
+    let compute_cost = @ |i| { cost(i) = bbox_half_area(bboxes(i)) * ((ref_end(i) - ref_begin(i)) as f32) };
+    let mut size = 0;
+
+    MultiNode {
+        has_available: @ || {
+            if size == 0 || size == arity {
+                return(false)
+            }
+            for i in range(0, arity) {
+                if !tested(i) {
+                    return(true)
+                }
+            }
+            false
+        },
+        get_available: @ || {
+            for i in range(0, arity) {
+                if !tested(i) {
+                    return(i)
+                }
+            }
+            -1
+        },
+        split: @ |i, split, left, right| {
+            ref_begin(size) = split;
+            ref_end(size)   = ref_end(i);
+            ref_end(i)      = split;
+            bboxes(i)       = left;
+            bboxes(size)    = right;
+            tested(i)       = false;
+            tested(size)    = false;
+            compute_cost(size);
+            compute_cost(i);
+            size++;
+        },
+        insert: @ |begin, end, bbox| {
+            ref_begin(size) = begin;
+            ref_end(size)   = end;
+            bboxes(size)    = bbox;
+            tested(size)    = false;
+            compute_cost(size);
+            size++;
+        },
+        set_tested: @ |i| tested(i) = true,
+        sort_by_cost: @ || {
+            for i in unroll(0, arity + 1) {
+                if i == arity || size == i {
+                    bose_nelson_sort(i, @ |a, b| {
+                        // TODO: Check order of comparison
+                        if cost(a) > cost(b) {
+                            let tmp_tested = tested(a);
+                            tested(a) = tested(b);
+                            tested(b) = tmp_tested;
+                            let tmp_bbox = bboxes(a);
+                            bboxes(a) = bboxes(b);
+                            bboxes(b) = tmp_bbox;
+                            swap_i32(&mut ref_begin(a), &mut ref_begin(b));
+                            swap_i32(&mut ref_end(a), &mut ref_end(b));
+                            swap_f32(&mut cost(a), &mut cost(b));
+                        }
+                    });
+                    break()
+                }
+            }
+        },
+        ref_range: @ |i| (ref_begin(i), ref_end(i)),
+        bbox: @ |i| bboxes(i),
+        cost: @ |i| cost(i),
+        size: @ || size
+    }
+}
+
+fn @build_bvh( write_node: NodeWriter
+             , write_leaf: LeafWriter
+             , link_nodes: NodeLinker
              , bboxes: fn (i32) -> BBox
              , centers: fn (i32) -> Vec3
              , arity: i32
+             , leaf_size: i32
              , leaf_threshold: i32
              , num_refs: i32
              ) -> () {
@@ -137,6 +239,7 @@ fn @build_bvh( write_node: fn (i32, i32, i32, fn (i32) -> BBox) -> ()
     }
 
     let mut node_count = 0;
+    let mut leaf_count = 0;
 
     fn find_split(refs: &[i32], begin: i32, end: i32) -> (i32, f32, BBox) {
         let mut cur_bbox = empty_bbox();
@@ -168,11 +271,11 @@ fn @build_bvh( write_node: fn (i32, i32, i32, fn (i32) -> BBox) -> ()
         (min_split, min_cost, min_bbox)
     }
 
-    fn build_node(parent: i32, begin: i32, end: i32, bbox: BBox) -> () {
+    fn build_node(mut parent: i32, begin: i32, end: i32, bbox: BBox) -> () {
         let multi_node = make_multi_node(arity);
         multi_node.insert(begin, end, bbox);
 
-        while !multi_node.is_full() && multi_node.has_available() {
+        while multi_node.has_available() {
             let index = multi_node.get_available();
             let (begin, end) = multi_node.ref_range(index);
             let ref_count = end - begin;
@@ -221,17 +324,19 @@ fn @build_bvh( write_node: fn (i32, i32, i32, fn (i32) -> BBox) -> ()
 
         if multi_node.size() == 1 {
             // If there is no parent inner node, then generate one
-            let parent_node = if parent == -1 {
-                write_node(-1, 0, 1, @ |i| multi_node.bbox(0));
-                0
-            } else {
-                parent
-            };
+            if parent == -1 {
+                write_node(0, 1, @ |i| multi_node.bbox(0));
+                parent = 0;
+            }
             let (begin, end) = multi_node.ref_range(0);
-            write_leaf(parent_node, end - begin, @ |i| refs(0)(begin + i));
+            let leaf_id = leaf_count;
+            leaf_count += (end - begin) / leaf_size;
+            write_leaf(leaf_id, end - begin, @ |i| refs(0)(begin + i));
+            link_nodes(true, parent / arity, parent % arity, leaf_id);
         } else {
             let node_id = node_count++;
-            write_node(parent, node_id, multi_node.size(), @ |i| multi_node.bbox(i));
+            write_node(node_id, multi_node.size(), @ |i| multi_node.bbox(i));
+            if parent != -1 { link_nodes(false, parent / arity, parent % arity, node_id); }
             for i in range(0, multi_node.size()) {
                 let (begin, end) = multi_node.ref_range(i);
                 build_node(node_id * arity + i, begin, end, multi_node.bbox(i));
@@ -249,21 +354,25 @@ fn @build_bvh( write_node: fn (i32, i32, i32, fn (i32) -> BBox) -> ()
     runtime_release(0, costs as &mut [i8]);
 }
 
-fn @store_bounds( bboxes: fn (i32) -> BBox
-                , centers: fn (i32) -> Vec3
-                , num_refs: i32
-                , user: fn (fn (i32) -> BBox, fn (i32) -> Vec3) -> ()
-                ) -> () {
-    let stored_bboxes  = runtime_alloc(0, (sizeof[BBox]() * num_refs) as i64) as &mut [BBox];
-    let stored_centers = runtime_alloc(0, (sizeof[Vec3]() * num_refs) as i64) as &mut [Vec3];
+fn @build_tri_mesh_bvh( tri_mesh: TriMesh
+                      , write_node: NodeWriter
+                      , write_leaf: LeafWriter
+                      , link_nodes: NodeLinker
+                      , arity: i32
+                      , tri_size: i32) -> () {
+    let bboxes  = runtime_alloc(0, (sizeof[BBox]() * tri_mesh.num_tris) as i64) as &mut [BBox];
+    let centers = runtime_alloc(0, (sizeof[Vec3]() * tri_mesh.num_tris) as i64) as &mut [Vec3];
 
-    for i in parallel(0, 0, num_refs) {
-        stored_centers(i) = centers(i);
-        stored_bboxes(i)  = bboxes(i);
+    // Compute the bounding boxes of each triangle once and store them
+    for i in parallel(0, 0, tri_mesh.num_tris) {
+        let (i0, i1, i2) = tri_mesh.triangles(i);
+        let (v0, v1, v2) = (tri_mesh.vertices(i0), tri_mesh.vertices(i1), tri_mesh.vertices(i2));
+        centers(i) = vec3_mulf(vec3_add(vec3_add(v0, v1), v2), 1.0f / 3.0f);
+        bboxes(i)  = bbox_append(bbox_append(make_bbox(v0, v0), v1), v2);
     }
 
-    user(@ |i| stored_bboxes(i), @ |i| stored_centers(i));
+    build_bvh(write_node, write_leaf, link_nodes, @ |i| bboxes(i), @ |i| centers(i), arity, tri_size, tri_size, tri_mesh.num_tris);
 
-    runtime_release(0, stored_bboxes  as &mut [i8]);
-    runtime_release(0, stored_centers as &mut [i8]);
+    runtime_release(0, bboxes  as &mut [i8]);
+    runtime_release(0, centers as &mut [i8]);
 }

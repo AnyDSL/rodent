@@ -19,7 +19,7 @@ struct Tri1 {
     id: i32
 }
 
-fn @make_nvvm_bvh2_tri1(nodes: &[Node2], tris: &[Tri1]) -> Bvh {
+fn @make_nvvm_bvh2_tri1(nodes: &[Node2], tris: &[Tri1], geom_id: i32) -> Bvh {
     Bvh {
         node: @ |j| {
             let simd_ptr = &nodes(j) as &[1][simd[f32 * 4]];
@@ -56,7 +56,7 @@ fn @make_nvvm_bvh2_tri1(nodes: &[Node2], tris: &[Tri1]) -> Bvh {
                     let n   = make_vec3(tri0(3), tri1(3), vec3_cross(e1, e2).z);
                     let tri = make_tri(v0, e1, e2, n);
                     let (mask, t, u, v) = intersect_ray_tri(math, false /*backface_culling*/, mask, ray, tri);
-                    (mask, make_hit(0, id & 0x7FFFFFFF, t, make_vec2(u, v)))
+                    (mask, make_hit(geom_id, id & 0x7FFFFFFF, t, make_vec2(u, v)))
                 },
                 is_valid: @ |_| true,
                 is_last: id < 0,

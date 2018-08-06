@@ -20,7 +20,7 @@ struct Node8 {
     pad:     [i32 * 8]
 }
 
-fn @make_cpu_tri4(tris: &[Tri4]) -> fn (i32) -> Prim {
+fn @make_cpu_tri4(tris: &[Tri4], geom_id: i32) -> fn (i32) -> Prim {
     @ |j| Prim {
         intersect: @ |i, math, mask, ray| {
             let tri_ptr = rv_align(&tris(j) as &i8, 32) as &Tri4;
@@ -31,7 +31,7 @@ fn @make_cpu_tri4(tris: &[Tri4]) -> fn (i32) -> Prim {
             let tri = make_tri(v0, e1, e2, n);
             let (mask, t, u, v) = intersect_ray_tri(math, false /*backface_culling*/, mask, ray, tri);
             let id = tri_ptr.id(i) & 0x7FFFFFFF;
-            (mask, make_hit(0, id, t, make_vec2(u, v)))
+            (mask, make_hit(geom_id, id, t, make_vec2(u, v)))
         },
         is_valid: @ |i| tris(j).id(i) != -1,
         is_last: tris(j).id(3) < 0,
@@ -39,7 +39,7 @@ fn @make_cpu_tri4(tris: &[Tri4]) -> fn (i32) -> Prim {
     }
 }
 
-fn @make_cpu_bvh4_tri4(nodes: &[Node4], tris: &[Tri4]) -> Bvh {
+fn @make_cpu_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], geom_id: i32) -> Bvh {
     Bvh {
         node: @ |j| Node {
             bbox: @ |i| {
@@ -67,7 +67,7 @@ fn @make_cpu_bvh4_tri4(nodes: &[Node4], tris: &[Tri4]) -> Bvh {
             },
             child: @ |i| nodes(j).child(i)
         },
-        prim: make_cpu_tri4(tris),
+        prim: make_cpu_tri4(tris, geom_id),
         prefetch: @ |id| {
             let ptr = select(id < 0, &tris(!id) as &[u8], &nodes(id - 1) as &[u8]);
             cpu_prefetch_bytes(ptr, 128)
@@ -76,7 +76,7 @@ fn @make_cpu_bvh4_tri4(nodes: &[Node4], tris: &[Tri4]) -> Bvh {
     }
 }
 
-fn @make_cpu_bvh8_tri4(nodes: &[Node8], tris: &[Tri4]) -> Bvh {
+fn @make_cpu_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], geom_id: i32) -> Bvh {
     Bvh {
         node: @ |j| Node {
             bbox: @ |i| {
@@ -104,7 +104,7 @@ fn @make_cpu_bvh8_tri4(nodes: &[Node8], tris: &[Tri4]) -> Bvh {
             },
             child: @ |i| nodes(j).child(i)
         },
-        prim: make_cpu_tri4(tris),
+        prim: make_cpu_tri4(tris, geom_id),
         prefetch: @ |id| {
             let ptr = select(id < 0, &tris(!id) as &[u8], &nodes(id - 1) as &[u8]);
             cpu_prefetch_bytes(ptr, 256)

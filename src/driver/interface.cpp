@@ -350,6 +350,12 @@ BvhType build_bvh(int32_t dev, const std::vector<Tri>& in_tris) {
 
 // Interface -----------------------------------------------------------------------
 
+struct FilmData {
+    float* pixels;
+    size_t width;
+    size_t height;
+};
+
 template <typename BvhType>
 class Interface {
 public:
@@ -383,11 +389,11 @@ public:
     FilmData film_data() {
         if (film_data_)
             return *film_data_;
-        auto pixels = anydsl_alloc(dev_, sizeof(Color) * width_ * height_);
+        auto pixels = anydsl_alloc(dev_, sizeof(float) * 3 * width_ * height_);
         film_data_.reset(new FilmData {
-            reinterpret_cast<Color*>(pixels),
-            static_cast<int>(width_),
-            static_cast<int>(height_)
+            reinterpret_cast<float*>(pixels),
+            width_,
+            height_
         });
         return *film_data_;
     }
@@ -608,7 +614,7 @@ void setup_cpu_interface(size_t width, size_t height) {
     cpu_interface.reset(new Interface<Bvh8Tri4>(0, width, height));
 }
 
-Color* get_cpu_pixels() {
+float* get_cpu_pixels() {
     return cpu_interface->film_data().pixels;
 }
 
@@ -622,11 +628,14 @@ extern "C" void rodent_cpu_get_bvh8_tri4(Node8** nodes, Tri4** tris) {
     *tris  = bvh.tris;
 }
 
-extern "C" void rodent_cpu_get_film_data(FilmData* film_data) {
-    *film_data = cpu_interface->film_data();
+extern "C" void rodent_cpu_get_film_data(float** pixels, int* width, int* height) {
+    auto film_data = cpu_interface->film_data();
+    *pixels = film_data.pixels;
+    *width  = film_data.width;
+    *height = film_data.height;
 }
 
-extern "C" void rodent_cpu_load_tri_mesh(const char* file, int* num_tris, const float** vertices, const uint32_t** indices, const float** normals, const float** face_normals, const float** texcoords) {
+extern "C" void rodent_cpu_load_obj(const char* file, int* num_tris, const float** vertices, const uint32_t** indices, const float** normals, const float** face_normals, const float** texcoords) {
     auto tri_mesh = cpu_interface->tri_mesh(file);
     *num_tris     = tri_mesh.num_tris;
     *vertices     = tri_mesh.vertices;
@@ -636,7 +645,7 @@ extern "C" void rodent_cpu_load_tri_mesh(const char* file, int* num_tris, const 
     *texcoords    = tri_mesh.texcoords;
 }
 
-extern "C" void rodent_cpu_load_image_rgba8(const char* file, uint8_t** pixels, int32_t* width, int32_t* height) {
+extern "C" void rodent_cpu_load_png(const char* file, uint8_t** pixels, int32_t* width, int32_t* height) {
     auto img = cpu_interface->image(file, 4);
     *pixels = img.pixels;
     *width  = img.width;

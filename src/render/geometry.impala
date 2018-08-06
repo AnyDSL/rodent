@@ -1,11 +1,11 @@
-// Abstract geometry object
+// Abstract geometry object (tied to one device)
 struct Geometry {
     // Computes the surface element after an intersection on this geometry
-    surface_element: fn (Intrinsics, Ray, Hit) -> SurfaceElement,
+    surface_element: fn (Ray, Hit) -> SurfaceElement,
     // Returns the shader index at the given hit point
     shader_id: fn (Hit) -> i32,
     // Builds a BVH for the geometry
-    //build_bvh: fn (Device) -> Bvh
+    build_bvh: fn () -> Bvh
 }
 
 // Triangle mesh with per-vertex/per-face attributes
@@ -21,9 +21,9 @@ struct TriMesh {
 }
 
 // Creates a geometry object from a triangle mesh definition
-fn @make_tri_mesh_geometry(tri_mesh: TriMesh) -> Geometry {
+fn @make_tri_mesh_geometry(math: Intrinsics, tri_mesh: TriMesh, build_bvh: fn () -> Bvh) -> Geometry {
     Geometry {
-        surface_element: @ |math, ray, hit| {
+        surface_element: @ |ray, hit| {
             let (i0, i1, i2) = tri_mesh.triangles(hit.prim_id);
 
             let face_normal = tri_mesh.face_normals(hit.prim_id);
@@ -52,6 +52,7 @@ fn @make_tri_mesh_geometry(tri_mesh: TriMesh) -> Geometry {
                 attr:        attr
             }
         },
-        shader_id: @ |hit| tri_mesh.materials(hit.prim_id)
+        shader_id: @ |hit| tri_mesh.materials(hit.prim_id),
+        build_bvh: build_bvh
     }
 }

@@ -39,7 +39,7 @@ struct Camera {
 };
 
 void setup_cpu_interface(size_t, size_t);
-Color* get_cpu_pixels();
+float* get_cpu_pixels();
 void cleanup_cpu_interface();
 
 static bool handle_events(uint32_t& iter, Camera& cam) {
@@ -106,19 +106,21 @@ static void update_texture(uint32_t* buf, SDL_Texture* texture, size_t width, si
     auto gamma = 0.5f;
     for (size_t y = 0; y < height; ++y) {
         for (size_t x = 0; x < width; ++x) {
-            auto pixel = film[y * width + x];
+            auto r = film[(y * width + x) * 3 + 0];
+            auto g = film[(y * width + x) * 3 + 1];
+            auto b = film[(y * width + x) * 3 + 2];
 
             buf[y * width + x] =
-                (uint32_t(clamp(pow(pixel.r * inv_iter, gamma), 0.0f, 1.0f) * 255.0f) << 16) |
-                (uint32_t(clamp(pow(pixel.g * inv_iter, gamma), 0.0f, 1.0f) * 255.0f) << 8)  |
-                 uint32_t(clamp(pow(pixel.b * inv_iter, gamma), 0.0f, 1.0f) * 255.0f);
+                (uint32_t(clamp(pow(r * inv_iter, gamma), 0.0f, 1.0f) * 255.0f) << 16) |
+                (uint32_t(clamp(pow(g * inv_iter, gamma), 0.0f, 1.0f) * 255.0f) << 8)  |
+                 uint32_t(clamp(pow(b * inv_iter, gamma), 0.0f, 1.0f) * 255.0f);
         }
     }
     SDL_UpdateTexture(texture, nullptr, buf, width * sizeof(uint32_t));
 }
 
 static void clear_film(size_t width, size_t height) {
-    memset(get_cpu_pixels(), 0, sizeof(Color) * width * height);
+    memset(get_cpu_pixels(), 0, sizeof(float) * 3 * width * height);
 }
 
 int main(int argc, char** argv) {

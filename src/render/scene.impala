@@ -16,15 +16,10 @@ struct Scene {
 struct Device {
     intrinsics: Intrinsics,
 
-    trace:      fn (Scene, PathTracer) -> (),
-    load_mesh:  fn (&[u8]) -> Geometry,
-    load_image: fn (&[u8]) -> Image
-}
-
-struct FilmData {
-    pixels: &mut [Color],
-    width: i32,
-    height: i32
+    trace: fn (Scene, PathTracer) -> (),
+    load_obj: fn (&[u8]) -> Geometry,
+    load_png: fn (&[u8]) -> Image,
+    // TODO: Add other formats
 }
 
 type Renderer = fn (Scene, Device, i32) -> ();

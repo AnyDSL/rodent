@@ -17,10 +17,15 @@ struct Settings {
 };
 
 extern fn render(settings: &Settings, iter: i32) -> () {
-    let device   = make_cpu_device();
-    let renderer = make_path_tracing_renderer(32);
-    let image    = device.load_image("data/textures/wall.png");
-    let tri_mesh = device.load_mesh("data/cube.obj");
+    let device = make_cpu_device(
+        8 /*vector_width*/,
+        0 /*num_cores (0=autodetect)*/,
+        64 /*tile_size*/
+    );
+
+    let renderer = make_path_tracing_renderer(32 /*max_path_len*/);
+    let image    = device.load_png("data/textures/wall.png");
+    let mesh     = device.load_obj("data/cube.obj");
 
     let camera = make_perspective_camera(
         settings.eye,
@@ -41,7 +46,7 @@ extern fn render(settings: &Settings, iter: i32) -> () {
         num_lights:     1,
 
         shaders:    @ |i| diffuse_shader,
-        geometries: @ |i| tri_mesh,
+        geometries: @ |i| mesh,
         images:     @ |i| image,
         lights:     @ |i| light,
         camera:     camera
