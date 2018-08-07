@@ -6,6 +6,7 @@
 #include <cassert>
 #include <chrono>
 #include <iostream>
+#include <limits>
 
 #include "common.h"
 #include "float4.h"
@@ -222,7 +223,7 @@ public:
                 const int node_id = multi_node.next_node();
                 Node node = multi_node.nodes[node_id];
                 Ref* refs = node.refs;
-                int ref_count = node.ref_count;
+                auto ref_count = node.ref_count;
                 const BBox& parent_bb = node.bbox;
                 assert(ref_count != 0);
 
@@ -276,8 +277,8 @@ public:
                     // Partitioning can be done in-place
                     apply_object_split(object_split, refs, ref_count);
 
-                    const int right_count = ref_count - object_split.left_count;
-                    const int left_count = object_split.left_count;
+                    const size_t right_count = ref_count - object_split.left_count;
+                    const size_t left_count = object_split.left_count;
 
                     Ref *right_refs = refs + object_split.left_count;
                     Ref* left_refs = refs;
@@ -362,7 +363,7 @@ private:
         BBox left_bb, right_bb;
         size_t left_count;
 
-        ObjectSplit() : cost (FLT_MAX) {}
+        ObjectSplit() : cost(std::numeric_limits<float>::max()) {}
     };
 
     struct SpatialSplit {
@@ -370,7 +371,7 @@ private:
         float cost;
         float position;
 
-        SpatialSplit() : cost (FLT_MAX) {}
+        SpatialSplit() : cost(std::numeric_limits<float>::max()) {}
     };
 
     struct Node {
@@ -531,7 +532,7 @@ private:
             if (axis_max <= axis_min) break;
 
             size_t split_index = spatial_binning(bins, spatial_bins, split, tris, axis, refs, ref_count, axis_min, axis_max);
-            if (split_index == -1) break;
+            if (split_index == size_t(-1)) break;
 
             float bin_size = (axis_max - axis_min) / spatial_bins;
             axis_min = split.position - bin_size;

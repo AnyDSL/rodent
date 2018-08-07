@@ -11,7 +11,7 @@ include_directories(${AnyDSL_runtime_INCLUDE_DIRS})
 
 set(CLANG_FLAGS -O3 -mavx2 -mavx -mfma -ffast-math CACHE STRING "Clang compilation options")
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/modules)
 

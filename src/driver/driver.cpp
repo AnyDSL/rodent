@@ -152,18 +152,18 @@ int main(int argc, char** argv) {
 
     setup_cpu_interface(width, height);
 
-    Camera cam(
-        float3(0.0f, 0.0f, 1.8f),
-        float3(0.0f, 0.0f, -1.0f),
-        float3(0.0f, 1.0f, 0.0f),
-        60.0f,
-        float(width) / float(height));
-
     float fov = 60.0f;
     bool done = false;
     uint64_t tick_counter = 0;
     uint32_t frames = 0;
     uint32_t iter = 0;
+
+    Camera cam(
+        float3(0.0f, 0.0f, 1.8f),
+        float3(0.0f, 0.0f, -1.0f),
+        float3(0.0f, 1.0f, 0.0f),
+        fov,
+        float(width) / float(height));
 
     while (!done) {
         done = handle_events(iter, cam);
