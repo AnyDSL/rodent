@@ -6,9 +6,8 @@ extern "C" {
     fn rodent_cpu_load_png(&[u8], &mut &[u8], &mut i32, &mut i32) -> ();
     fn rodent_cpu_get_primary_stream(&mut PrimaryStream, i32) -> ();
     fn rodent_cpu_get_secondary_stream(&mut SecondaryStream, i32) -> ();
-
-    // FIXME
-    fn rodent_cpu_get_bvh8_tri4(&mut &[Node8], &mut &[Tri4]) -> ();
+    fn rodent_cpu_get_bvh4_tri4(i32, i32, &[f32], &[u32], &mut &[Node4], &mut &[Tri4]) -> ();
+    fn rodent_cpu_get_bvh8_tri4(i32, i32, &[f32], &[u32], &mut &[Node8], &mut &[Tri4]) -> ();
 }
 
 // Ray streams ---------------------------------------------------------------------
@@ -355,10 +354,7 @@ fn @cpu_trace( scene: Scene
         film_pixels(pixel * 3 + 2) += color.b;
     }
 
-    let mut nodes;
-    let mut tris;
-    rodent_cpu_get_bvh8_tri4(&mut nodes, &mut tris);
-    let bvh = make_cpu_bvh8_tri4(nodes, tris, 0);
+    let bvh = scene.geometries(0).bvh;// TODO: Support instancing
 
     for xmin, ymin, xmax, ymax in cpu_parallel_tiles(film_width, film_height, tile_size, tile_size, num_cores) {
         // Get ray streams/states from the CPU driver
@@ -517,148 +513,7 @@ fn @cpu_load_png(filename: &[u8]) -> Image {
     make_image(pixels, width, height)
 }
 
-fn @make_cpu_node4_linker(nodes: &mut [Node4]) -> NodeLinker {
-    @ |leaf, parent, child, id| {
-        nodes(parent).child(child) = if leaf { !id } else { id + 1 };
-    }
-}
-
-fn @make_cpu_node8_linker(nodes: &mut [Node8]) -> NodeLinker {
-    @ |leaf, parent, child, id| {
-        nodes(parent).child(child) = if leaf { !id } else { id + 1 };
-    }
-}
-
-fn @make_cpu_node4_writer(nodes: &mut [Node4]) -> NodeWriter {
-    @ |node_id, num_children, bboxes| {
-        for i in range(0, num_children) {
-            let bbox = bboxes(i);
-            nodes(node_id).bounds(0)(i) = bbox.min.x;
-            nodes(node_id).bounds(1)(i) = bbox.max.x;
-            nodes(node_id).bounds(2)(i) = bbox.min.y;
-            nodes(node_id).bounds(3)(i) = bbox.max.y;
-            nodes(node_id).bounds(4)(i) = bbox.min.z;
-            nodes(node_id).bounds(5)(i) = bbox.max.z;
-            nodes(node_id).child(i) = 0;
-        }
-        for i in range(num_children, 4) {
-            nodes(node_id).bounds(0)(i) =  flt_inf;
-            nodes(node_id).bounds(1)(i) = -flt_inf;
-            nodes(node_id).bounds(2)(i) =  flt_inf;
-            nodes(node_id).bounds(3)(i) = -flt_inf;
-            nodes(node_id).bounds(4)(i) =  flt_inf;
-            nodes(node_id).bounds(5)(i) = -flt_inf;
-            nodes(node_id).child(i) = 0;
-        }
-    }
-}
-
-fn @make_cpu_node8_writer(nodes: &mut [Node8]) -> NodeWriter {
-    @ |node_id, num_children, bboxes| {
-        for i in range(0, num_children) {
-            let bbox = bboxes(i);
-            nodes(node_id).bounds(0)(i) = bbox.min.x;
-            nodes(node_id).bounds(1)(i) = bbox.max.x;
-            nodes(node_id).bounds(2)(i) = bbox.min.y;
-            nodes(node_id).bounds(3)(i) = bbox.max.y;
-            nodes(node_id).bounds(4)(i) = bbox.min.z;
-            nodes(node_id).bounds(5)(i) = bbox.max.z;
-            nodes(node_id).child(i) = 0;
-        }
-        for i in range(num_children, 8) {
-            nodes(node_id).bounds(0)(i) =  flt_inf;
-            nodes(node_id).bounds(1)(i) = -flt_inf;
-            nodes(node_id).bounds(2)(i) =  flt_inf;
-            nodes(node_id).bounds(3)(i) = -flt_inf;
-            nodes(node_id).bounds(4)(i) =  flt_inf;
-            nodes(node_id).bounds(5)(i) = -flt_inf;
-            nodes(node_id).child(i) = 0;
-        }
-    }
-}
-
-fn @make_cpu_tri4_writer(tris: &mut [Tri4], tri_mesh: TriMesh) -> LeafWriter {
-    @ |mut leaf_id, num_prims, prims| {
-        for i in range_step(0, num_prims, 4) {
-            let n = if i + 4 < num_prims { 4 } else { num_prims - i };
-            for j in range(0, n) {
-                let prim_id = prims(i + j);
-                let (i0, i1, i2) = tri_mesh.triangles(prim_id);
-                let (v0, v1, v2) = (tri_mesh.vertices(i0), tri_mesh.vertices(i1), tri_mesh.vertices(i2));
-                let e1 = vec3_sub(v0, v1);
-                let e2 = vec3_sub(v2, v0);
-                let n  = vec3_cross(e1, e2);
-                tris(leaf_id).v0(0)(j) = v0.x;
-                tris(leaf_id).v0(1)(j) = v0.y;
-                tris(leaf_id).v0(2)(j) = v0.z;
-                tris(leaf_id).e1(0)(j) = e1.x;
-                tris(leaf_id).e1(1)(j) = e1.y;
-                tris(leaf_id).e1(2)(j) = e1.z;
-                tris(leaf_id).e2(0)(j) = e2.x;
-                tris(leaf_id).e2(1)(j) = e2.y;
-                tris(leaf_id).e2(2)(j) = e2.z;
-                tris(leaf_id).n (0)(j) = n.x;
-                tris(leaf_id).n (1)(j) = n.y;
-                tris(leaf_id).n (2)(j) = n.z;
-                tris(leaf_id).id(j) = -1;
-            }
-            for j in range(n, 4) {
-                tris(leaf_id).v0(0)(j) = 0.0f;
-                tris(leaf_id).v0(1)(j) = 0.0f;
-                tris(leaf_id).v0(2)(j) = 0.0f;
-                tris(leaf_id).e1(0)(j) = 0.0f;
-                tris(leaf_id).e1(1)(j) = 0.0f;
-                tris(leaf_id).e1(2)(j) = 0.0f;
-                tris(leaf_id).e2(0)(j) = 0.0f;
-                tris(leaf_id).e2(1)(j) = 0.0f;
-                tris(leaf_id).e2(2)(j) = 0.0f;
-                tris(leaf_id).n (0)(j) = 0.0f;
-                tris(leaf_id).n (1)(j) = 0.0f;
-                tris(leaf_id).n (2)(j) = 0.0f;
-                tris(leaf_id).id(j) = -1;
-            }
-            leaf_id++;
-        }
-        // Place sentinel to mark the end of the leaf
-        tris(leaf_id - 1).id(3) |= bitcast[i32](0x80000000u);
-    }
-}
-
-fn @cpu_build_bvh4_tri4(tri_mesh: TriMesh, geom_id: i32) -> Bvh {
-    let (num_nodes, num_tris) = max_bvh_size(tri_mesh.num_tris);
-    let mut nodes = runtime_alloc(0, (sizeof[Node4]() * num_nodes) as i64) as &mut [Node4];
-    let mut tris  = runtime_alloc(0, (sizeof[Tri4]()  * num_tris ) as i64) as &mut [Tri4];
-    let (node_count, leaf_count) = build_tri_mesh_bvh(
-        tri_mesh,
-        make_cpu_node4_writer(nodes),
-        make_cpu_tri4_writer(tris, tri_mesh),
-        make_cpu_node4_linker(nodes),
-        4 /*arity*/,
-        4 /*tri_size*/
-    );
-    nodes = shrink_alloc(0, nodes as &[i8], (sizeof[Node4]() * node_count) as i64) as &mut [Node4];
-    tris  = shrink_alloc(0, tris  as &[i8], (sizeof[Tri4 ]() * leaf_count) as i64) as &mut [Tri4 ];
-    make_cpu_bvh4_tri4(nodes, tris, geom_id)
-}
-
-fn @cpu_build_bvh8_tri4(tri_mesh: TriMesh, geom_id: i32) -> Bvh {
-    let (num_nodes, num_tris) = max_bvh_size(tri_mesh.num_tris);
-    let mut nodes = runtime_alloc(0, (sizeof[Node8]() * num_nodes) as i64) as &mut [Node8];
-    let mut tris  = runtime_alloc(0, (sizeof[Tri4]()  * num_tris ) as i64) as &mut [Tri4];
-    let (node_count, leaf_count) = build_tri_mesh_bvh(
-        tri_mesh,
-        make_cpu_node8_writer(nodes),
-        make_cpu_tri4_writer(tris, tri_mesh),
-        make_cpu_node8_linker(nodes),
-        8 /*arity*/,
-        4 /*tri_size*/
-    );
-    nodes = shrink_alloc(0, nodes as &[i8], (sizeof[Node8]() * node_count) as i64) as &mut [Node8];
-    tris  = shrink_alloc(0, tris  as &[i8], (sizeof[Tri4 ]() * leaf_count) as i64) as &mut [Tri4 ];
-    make_cpu_bvh8_tri4(nodes, tris, geom_id)
-}
-
-fn @cpu_load_obj(filename: &[u8], geom_id: i32, bvh_builder: fn (TriMesh, i32) -> Bvh) -> Geometry {
+fn @cpu_load_obj(filename: &[u8], geom_id: i32, vector_width: i32) -> Geometry {
     let mut num_tris     : i32;
     let mut vertices     : &[f32];
     let mut indices      : &[u32];
@@ -679,7 +534,19 @@ fn @cpu_load_obj(filename: &[u8], geom_id: i32, bvh_builder: fn (TriMesh, i32) -
         num_tris:     num_tris
     };
 
-    make_tri_mesh_geometry(cpu_intrinsics, tri_mesh, @ || bvh_builder(tri_mesh, geom_id))
+    let bvh = if vector_width == 8 {
+        let mut nodes;
+        let mut tris;
+        rodent_cpu_get_bvh8_tri4(geom_id, num_tris, vertices, indices, &mut nodes, &mut tris);
+        make_cpu_bvh8_tri4(nodes, tris, geom_id)
+    } else {
+        let mut nodes;
+        let mut tris;
+        rodent_cpu_get_bvh4_tri4(geom_id, num_tris, vertices, indices, &mut nodes, &mut tris);
+        make_cpu_bvh4_tri4(nodes, tris, geom_id)
+    };
+
+    make_tri_mesh_geometry(cpu_intrinsics, tri_mesh, bvh)
 }
 
 fn @make_cpu_device(vector_width: i32, num_cores: i32, tile_size: i32) -> Device {
@@ -697,7 +564,7 @@ fn @make_cpu_device(vector_width: i32, num_cores: i32, tile_size: i32) -> Device
                 vector_width
             )
         },
-        load_obj: @ |filename| cpu_load_obj(filename, geom_id++, if vector_width == 4 { cpu_build_bvh4_tri4 } else { cpu_build_bvh8_tri4 }),
+        load_obj: @ |filename| cpu_load_obj(filename, geom_id++, vector_width),
         load_png: cpu_load_png
     }
 }

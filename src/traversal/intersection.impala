@@ -1,3 +1,23 @@
+struct Bvh {
+    node:     fn (i32) -> Node, // Access to one node of the BVH
+    prim:     fn (i32) -> Prim, // Access to one (possibly packed) primitive
+    prefetch: fn (i32) -> (),   // Prefetches a leaf or inner node
+    arity:    i32,              // Arity of the BVH (number of children per node)
+}
+
+struct Node {
+    bbox:         fn (i32) -> BBox,             // Loads the bounding box of one child node
+    ordered_bbox: fn (i32, RayOctant) -> BBox,  // Loads the bounding box of one child with the given octant order (mapping specific)
+    child:        fn (i32) -> i32               // Gets the index of one child node
+}
+
+struct Prim {
+    intersect: fn (i32, Intrinsics, bool, Ray) -> (bool, Hit),  // Intersects a primitive in the packet
+    is_valid:  fn (i32) -> bool,                                // Returns true if the primitive in the packet is valid
+    is_last:   bool,                                            // True if this is the last primitive packet in the leaf
+    size:      i32                                              // Number of primitives in the packet (must be a constant)
+}
+
 struct Ray {
     org: Vec3,     // Origin of the ray
     dir: Vec3,     // Direction of the ray

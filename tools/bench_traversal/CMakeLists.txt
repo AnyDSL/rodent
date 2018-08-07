@@ -1,19 +1,13 @@
 set(TRAVERSAL_SRCS
     bench_traversal.impala
-    ../../src/render/light.impala
-    ../../src/render/material.impala
-    ../../src/render/geometry.impala
     ../../src/traversal/intersection.impala
     ../../src/traversal/stack.impala
-    ../../src/traversal/bvh.impala
     ../../src/traversal/mapping_cpu.impala
     ../../src/traversal/mapping_gpu.impala
-    ../../src/core/color.impala
     ../../src/core/common.impala
     ../../src/core/cpu_common.impala
     ../../src/core/sort.impala
     ../../src/core/matrix.impala
-    ../../src/core/random.impala
     ../../src/core/vector.impala)
 
 anydsl_runtime_wrap(TRAVERSAL_OBJS

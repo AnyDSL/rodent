@@ -31,7 +31,6 @@ set(RODENT_SRCS
     render/renderer.impala
     render/scene.impala
     render/mapping_cpu.impala
-    traversal/bvh.impala
     traversal/intersection.impala
     traversal/stack.impala
     traversal/mapping_cpu.impala
@@ -39,10 +38,12 @@ set(RODENT_SRCS
 
 set(DRIVER_SRCS
     driver/driver.cpp
-    driver/interface.cpp
+    driver/interface_cpu.cpp
     driver/interface.h
-    driver/load_obj.cpp
-    driver/load_obj.h
+    driver/formats/load_obj.cpp
+    driver/formats/load_obj.h
+    driver/formats/load_png.cpp
+    driver/formats/load_png.h
     driver/bvh.h
     driver/float2.h
     driver/float3.h
