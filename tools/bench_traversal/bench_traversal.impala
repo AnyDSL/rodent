@@ -294,7 +294,7 @@ extern fn cpu_occluded_single_ray1_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], ray
     if enable_cpu_bvh4_tri4 && enable_cpu_single {
         cpu_traverse_single(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
-            make_cpu_bvh4_tri4(nodes, tris),
+            make_cpu_bvh4_tri4(nodes, tris, 0),
             make_cpu_ray1(rays),
             make_cpu_hit1(hits, true /*any_hit*/),
             1 /*packet_size*/,

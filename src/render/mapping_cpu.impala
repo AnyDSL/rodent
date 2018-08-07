@@ -625,10 +625,10 @@ fn @make_cpu_tri4_writer(tris: &mut [Tri4], tri_mesh: TriMesh) -> LeafWriter {
 }
 
 fn @cpu_build_bvh4_tri4(tri_mesh: TriMesh, geom_id: i32) -> Bvh {
-    let (num_nodes, num_tris) = estimate_bvh_size(4 /*arity*/, 4 /*leaf_threshold*/, tri_mesh.num_tris);
-    let nodes = runtime_alloc(0, (sizeof[Node4]() * num_nodes) as i64) as &mut [Node4];
-    let tris  = runtime_alloc(0, (sizeof[Tri4]()  * num_tris ) as i64) as &mut [Tri4];
-    build_tri_mesh_bvh(
+    let (num_nodes, num_tris) = max_bvh_size(tri_mesh.num_tris);
+    let mut nodes = runtime_alloc(0, (sizeof[Node4]() * num_nodes) as i64) as &mut [Node4];
+    let mut tris  = runtime_alloc(0, (sizeof[Tri4]()  * num_tris ) as i64) as &mut [Tri4];
+    let (node_count, leaf_count) = build_tri_mesh_bvh(
         tri_mesh,
         make_cpu_node4_writer(nodes),
         make_cpu_tri4_writer(tris, tri_mesh),
@@ -636,14 +636,16 @@ fn @cpu_build_bvh4_tri4(tri_mesh: TriMesh, geom_id: i32) -> Bvh {
         4 /*arity*/,
         4 /*tri_size*/
     );
+    nodes = shrink_alloc(0, nodes as &[i8], (sizeof[Node4]() * node_count) as i64) as &mut [Node4];
+    tris  = shrink_alloc(0, tris  as &[i8], (sizeof[Tri4 ]() * leaf_count) as i64) as &mut [Tri4 ];
     make_cpu_bvh4_tri4(nodes, tris, geom_id)
 }
 
 fn @cpu_build_bvh8_tri4(tri_mesh: TriMesh, geom_id: i32) -> Bvh {
-    let (num_nodes, num_tris) = estimate_bvh_size(8 /*arity*/, 4 /*leaf_threshold*/, tri_mesh.num_tris);
-    let nodes = runtime_alloc(0, (sizeof[Node8]() * num_nodes) as i64) as &mut [Node8];
-    let tris  = runtime_alloc(0, (sizeof[Tri4]()  * num_tris ) as i64) as &mut [Tri4];
-    build_tri_mesh_bvh(
+    let (num_nodes, num_tris) = max_bvh_size(tri_mesh.num_tris);
+    let mut nodes = runtime_alloc(0, (sizeof[Node8]() * num_nodes) as i64) as &mut [Node8];
+    let mut tris  = runtime_alloc(0, (sizeof[Tri4]()  * num_tris ) as i64) as &mut [Tri4];
+    let (node_count, leaf_count) = build_tri_mesh_bvh(
         tri_mesh,
         make_cpu_node8_writer(nodes),
         make_cpu_tri4_writer(tris, tri_mesh),
@@ -651,6 +653,8 @@ fn @cpu_build_bvh8_tri4(tri_mesh: TriMesh, geom_id: i32) -> Bvh {
         8 /*arity*/,
         4 /*tri_size*/
     );
+    nodes = shrink_alloc(0, nodes as &[i8], (sizeof[Node8]() * node_count) as i64) as &mut [Node8];
+    tris  = shrink_alloc(0, tris  as &[i8], (sizeof[Tri4 ]() * leaf_count) as i64) as &mut [Tri4 ];
     make_cpu_bvh8_tri4(nodes, tris, geom_id)
 }
 

@@ -123,3 +123,9 @@ fn @swap_u32(a: &mut u32, b: &mut u32) -> () {
     *a = *b;
     *b = tmp;
 }
+
+fn @shrink_alloc(dev: i32, ptr: &[i8], size: i64) -> &[i8] {
+    let tmp = runtime_alloc(dev, size);
+    runtime_copy(dev, ptr, 0i64, dev, tmp, 0i64, size);
+    tmp
+}
