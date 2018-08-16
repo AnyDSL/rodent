@@ -1,3 +1,5 @@
+// Dummy file used to generate a C interface for the renderer
+
 struct Settings {
     eye: Vec3,
     dir: Vec3,

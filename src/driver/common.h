@@ -57,14 +57,14 @@ inline float int_as_float(int32_t i) {
     return v.vf;
 }
 
-inline void error() {
+inline void error [[noreturn]] () {
     std::cerr << std::endl;
     abort();
 }
 
 /// Outputs an error message in the console.
 template <typename T, typename... Args>
-inline void error(T t, Args... args) {
+inline void error [[noreturn]] (T t, Args... args) {
 #if COLORIZE
     std::cerr << "\033[1;31m";
 #endif
