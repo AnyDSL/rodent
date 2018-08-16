@@ -3,9 +3,9 @@
 #include <vector>
 #include <cstring>
 
-#include "load_obj.h"
-#include "file_path.h"
-#include "tri.h"
+#include "driver/obj.h"
+#include "driver/file_path.h"
+#include "driver/bvh.h"
 
 int build_bvh8(std::ofstream&, const std::vector<Tri>&);
 int build_bvh4(std::ofstream&, const std::vector<Tri>&);

@@ -44,8 +44,8 @@ void cleanup_cpu_interface();
 
 static bool handle_events(uint32_t& iter, Camera& cam) {
     static bool camera_on = false;
-    bool arrows[4] = { false, false, false, false };
-    bool speed[2] = { false, false };
+    static bool arrows[4] = { false, false, false, false };
+    static bool speed[2] = { false, false };
     const float rspeed = 0.005f;
     static float tspeed = 0.1f;
 
@@ -123,7 +123,7 @@ static void clear_film(size_t width, size_t height) {
     memset(get_cpu_pixels(), 0, sizeof(float) * 3 * width * height);
 }
 
-int main(int argc, char** argv) {
+int main(int /*argc*/, char** /*argv*/) {
     size_t width  = 1024;
     size_t height = 1024;
 

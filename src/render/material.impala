@@ -44,15 +44,10 @@ fn @make_material(bsdf: Bsdf) -> Material {
 }
 
 // Creates a material with no emission
-fn @make_emissive_material(surf: SurfaceElement, light: Light) -> Material {
+fn @make_emissive_material(surf: SurfaceElement, bsdf: Bsdf, light: Light) -> Material {
     Material {
-        bsdf: Bsdf {
-            eval:   @ |math, in_dir, out_dir| black,
-            pdf:    @ |math, in_dir, out_dir| 0.0f,
-            sample: @ |math, rnd, out_dir, _| BsdfSample { in_dir: out_dir, pdf: 1.0f, color: black },
-            is_specular: false
-        },
-        emission: @ |math, in_dir| light.emission(math, in_dir, surf.uv_coords),
+        bsdf: bsdf,
+        emission: @ |math, in_dir| light.emission(math, in_dir, surf),
         is_emissive: true
     }
 }
@@ -68,6 +63,16 @@ fn @make_bsdf_sample(surf: SurfaceElement, in_dir: Vec3, pdf: f32, color: Color,
     }
 }
 
+// Creates a fully absorbing BSDF that behaves like a black body
+fn @make_black_bsdf() -> Bsdf {
+    Bsdf {
+        eval:   @ |_, _, _| black,
+        pdf:    @ |_, _, _| 0.0f,
+        sample: @ |_, _, out_dir, _| BsdfSample { in_dir: out_dir, pdf: 1.0f, color: black },
+        is_specular: false
+    }
+}
+
 // Creates a purely diffuse BSDF
 fn @make_diffuse_bsdf(surf: SurfaceElement, kd: Color) -> Bsdf {
     Bsdf {
@@ -75,7 +80,7 @@ fn @make_diffuse_bsdf(surf: SurfaceElement, kd: Color) -> Bsdf {
             color_mulf(kd, 1.0f / flt_pi)
         },
         pdf: @ |math, in_dir, out_dir| {
-            cosine_hemisphere_pdf(vec3_dot(in_dir, surf.local.col(2)))
+            cosine_hemisphere_pdf(positive_cos(in_dir, surf.local.col(2)))
         },
         sample: @ |math, rnd, out_dir, _| {
             let sample = sample_cosine_hemisphere(math, randf(rnd), randf(rnd));
@@ -132,7 +137,7 @@ fn @make_mirror_bsdf(surf: SurfaceElement, ks: Color) -> Bsdf {
 }
 
 // Creates a perfect glass BSDF
-fn @make_glass_material(surf: SurfaceElement, n1: f32, n2: f32, ks: Color) -> Bsdf {
+fn @make_glass_bsdf(surf: SurfaceElement, n1: f32, n2: f32, ks: Color) -> Bsdf {
     Bsdf {
         eval: @ |math, in_dir, out_dir| black,
         pdf:  @ |math, in_dir, out_dir| 0.0f,

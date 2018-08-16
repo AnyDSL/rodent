@@ -1,7 +1,7 @@
 #include <fstream>
 
 #include "traversal.h"
-#include "sbvh_builder.h"
+#include "driver/bvh.h"
 
 static void fill_dummy_parent(Node2& node, const BBox& leaf_bb, int index) {
     node.left  = index;
@@ -28,8 +28,8 @@ public:
         : nodes_(nodes), tris_(tris)
     {}
 
-    void build(const Tri* tris, size_t tri_count) {
-        builder_.build(tris, tri_count, NodeWriter(this), LeafWriter(this, tris), 2);
+    void build(const std::vector<Tri>& tris) {
+        builder_.build(tris, NodeWriter(this), LeafWriter(this, tris), 2);
     }
 
 #ifdef STATISTICS
@@ -54,17 +54,14 @@ private:
         {}
 
         template <typename BBoxFn>
-        void operator() (const BBox& parent_bb, int count, BBoxFn bboxes) {
+        int operator() (int parent, int child, const BBox& parent_bb, int count, BBoxFn bboxes) {
             auto& nodes = builder->nodes_;
-            auto& stack = builder->stack_;
 
             int i = nodes.size();
             nodes.emplace_back();
 
-            if (!stack.is_empty()) {
-                StackElem elem = stack.pop();
-                *(&nodes[elem.parent].left + elem.child) = i + 1;
-            }
+            if (parent >= 0 && child >= 0)
+                *(&nodes[parent].left + child) = i + 1;
 
             assert(count == 2);
 
@@ -84,32 +81,24 @@ private:
             nodes[i].max2[1] = right_bb.max.y;
             nodes[i].max2[2] = right_bb.max.z;
 
-            stack.push(i, 1);
-            stack.push(i, 0);
+            return i;
         }
     };
 
     struct LeafWriter {
         Bvh2Builder* builder;
-        const Tri* ref_tris;
+        const std::vector<Tri>& ref_tris;
 
-        LeafWriter(Bvh2Builder* builder, const Tri* ref_tris)
+        LeafWriter(Bvh2Builder* builder, const std::vector<Tri>& ref_tris)
             : builder(builder), ref_tris(ref_tris)
         {}
 
         template <typename RefFn>
-        void operator() (const BBox& leaf_bb, int ref_count, RefFn refs) {
+        void operator() (int parent, int child, const BBox& leaf_bb, int ref_count, RefFn refs) {
             auto& nodes = builder->nodes_;
-            auto& stack = builder->stack_;
             auto& tris  = builder->tris_;
 
-            if (stack.is_empty()) {
-                nodes.emplace_back();
-                fill_dummy_parent(nodes.back(), leaf_bb, ~tris.size());
-            } else {
-                const StackElem& elem = stack.pop();
-                *(&nodes[elem.parent].left + elem.child) = ~tris.size();
-            }
+            *(&nodes[parent].left + child) = ~tris.size();
 
             for (int i = 0; i < ref_count; i++) {
                 const int ref = refs(i);
@@ -130,13 +119,6 @@ private:
         }
     };
 
-    struct StackElem {
-        int parent, child;
-        StackElem() {}
-        StackElem(int parent, int child) : parent(parent), child(child) {}
-    };
-
-    Stack<StackElem> stack_;
     SplitBvhBuilder<2, CostFn> builder_;
     std::vector<Node2>& nodes_;
     std::vector<Tri1>& tris_;
@@ -147,7 +129,7 @@ int build_bvh2(std::ofstream& out, const std::vector<Tri>& tris) {
     std::vector<Tri1>  new_tris;
     Bvh2Builder builder(new_nodes, new_tris);
 
-    builder.build(tris.data(), tris.size());
+    builder.build(tris);
 
     uint64_t offset = sizeof(uint32_t) * 3 +
         sizeof(Node2) * new_nodes.size() +

@@ -15,9 +15,9 @@
 #include <anydsl_runtime.hpp>
 
 #include "traversal.h"
-#include "load_obj.h"
+#include "driver/obj.h"
+#include "driver/tri.h"
 #include "load_rays.h"
-#include "tri.h"
 
 template <>
 struct RayTraits<RTCRay> {

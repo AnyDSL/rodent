@@ -69,6 +69,17 @@ fn @round_down(n: i32, d: i32) -> i32 {
     (n / d) * d
 }
 
+fn @sqrt_newton(y: f32, p: f32) -> f32 {
+    fn @(?x) newton(x: f32) -> f32 {
+        if (x * x - y) > p {
+            newton(x - (x * x - y) / (2.0f * x))
+        } else {
+            x
+        }
+    }
+    newton(1.0f)
+}
+
 fn @ilog2(i: i32) -> i32 {
     fn @(?i) ilog2_helper(i: i32, p: i32) -> i32 {
         if i <= (1 << p) {

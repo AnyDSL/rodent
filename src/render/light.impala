@@ -24,6 +24,12 @@ struct EmissionValue {
     pdf_dir: f32        // Probability to sample the point on the light
 }
 
+// Surface that emits light
+struct AreaEmitter {
+    sample: fn (Intrinsics, Vec2) -> (Vec3, Vec3, f32),
+    pdf:    fn (Intrinsics, Vec2) -> f32
+}
+
 // Opaque light structure
 struct Light {
     // Samples direct illumination from this light source at the given point on a surface
@@ -31,7 +37,7 @@ struct Light {
     // Samples the emitting surface of the light
     sample_emission: fn (Intrinsics, &mut RndState) -> EmissionSample,
     // Returns the emission properties of the light at a given point on its surface
-    emission: fn (Intrinsics, Vec3, Vec2) -> EmissionValue,
+    emission: fn (Intrinsics, Vec3, SurfaceElement) -> EmissionValue,
     // Returns true if the light has an area (can be hit by a ray)
     has_area: bool
 }
@@ -107,41 +113,50 @@ fn @make_point_light(pos: Vec3, color: Color) -> Light {
             let intensity = color_mulf(color, 1.0f / (4.0f * flt_pi));
             make_emission_sample(pos, sample.dir, intensity, 1.0f, sample.pdf, 1.0f)
         },
-        emission: @ |math, dir, surf_pos| make_emission_value(black, 1.0f, 1.0f),
+        emission: @ |math, dir, surf| make_emission_value(black, 1.0f, 1.0f),
         has_area: false
     }
 }
 
-fn @make_triangle_light(v0: Vec3, v1: Vec3, v2: Vec3, n: Vec3, inv_area: f32, color: Color) -> Light {
-    fn @sample_surface(math: Intrinsics, rnd: &mut RndState) -> Vec3 {
-        let mut u = randf(rnd);
-        let mut v = randf(rnd);
-        if (u + v > 1.0f) {
-            u = 1.0f - u;
-            v = 1.0f - v;
-        }
-        vec3_add(
-            vec3_add(vec3_mulf(v0, 1.0f - v - u),
-                     vec3_mulf(v1, u)),
-            vec3_mulf(v2, v)
-        )
-    }
-
+fn @make_area_light(area: AreaEmitter, color: Color) -> Light {
     Light {
         sample_direct: @ |math, rnd, from| {
-            let pos = sample_surface(math, rnd);
+            let (pos, n, area_pdf) = area.sample(math, make_vec2(randf(rnd), randf(rnd)));
             let dir = vec3_sub(from, pos);
             let cos = vec3_dot(dir, n) / vec3_len(math, dir);
-            make_direct_sample(pos, color, inv_area, cosine_hemisphere_pdf(cos), cos)
+            make_direct_sample(pos, color, area_pdf, cosine_hemisphere_pdf(cos), cos)
         },
         sample_emission: @ |math, rnd| {
-            let pos = sample_surface(math, rnd);
-            let u = randf(rnd);
-            let v = randf(rnd);
-            let sample = sample_cosine_hemisphere(math, u, v);
-            make_emission_sample(pos, mat3x3_mul(make_orthonormal_mat3x3(n), sample.dir), color, inv_area, sample.pdf, sample.dir.z)
+            let (pos, n, area_pdf) = area.sample(math, make_vec2(randf(rnd), randf(rnd)));
+            let sample = sample_cosine_hemisphere(math, randf(rnd), randf(rnd));
+            make_emission_sample(pos, mat3x3_mul(make_orthonormal_mat3x3(n), sample.dir), color, area_pdf, sample.pdf, sample.dir.z)
         },
-        emission: @ |math, dir, surf_pos| make_emission_value(black, inv_area, cosine_hemisphere_pdf(vec3_dot(n, dir))),
+        emission: @ |math, dir, surf| make_emission_value(color, area.pdf(math, surf.uv_coords), cosine_hemisphere_pdf(vec3_dot(surf.local.col(2), dir))),
         has_area: true
     }
+}
+
+fn @make_triangle_light(math: Intrinsics, v0: Vec3, v1: Vec3, v2: Vec3, color: Color) -> Light {
+    let mut n = vec3_cross(vec3_sub(v1, v0), vec3_sub(v2, v0));
+    let inv_area = 1.0f / (0.5f * sqrt_newton(vec3_len2(n), 1e-5f));
+    n = vec3_mulf(n, 0.5f * inv_area);
+
+    let area = AreaEmitter {
+        sample: @ |math, uv|  {
+            let mut u = uv.x;
+            let mut v = uv.y;
+            if (u + v > 1.0f) {
+                u = 1.0f - u;
+                v = 1.0f - v;
+            }
+            let pos = vec3_add(
+                vec3_add(vec3_mulf(v0, 1.0f - v - u),
+                         vec3_mulf(v1, u)),
+                vec3_mulf(v2, v)
+            );
+            (pos, n, inv_area)
+        },
+        pdf: @ |math, uv| inv_area
+    };
+    make_area_light(area, color)
 }

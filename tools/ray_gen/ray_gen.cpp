@@ -8,8 +8,8 @@
 #include "traversal.h"
 #include "load_bvh.h"
 #include "load_rays.h"
-#include "float3.h"
-#include "bbox.h"
+#include "driver/float3.h"
+#include "driver/bbox.h"
 
 class RayGen {
 public:

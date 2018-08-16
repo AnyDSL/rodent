@@ -17,10 +17,12 @@ struct Device {
     intrinsics: Intrinsics,
 
     trace: fn (Scene, PathTracer) -> (),
-    load_obj: fn (&[u8]) -> Geometry,
+    load_buffer: fn (&[u8]) -> &[i8],
+    load_bvh: fn (&[u8], i32) -> Bvh,
     load_png: fn (&[u8]) -> Image,
+    load_jpg: fn (&[u8]) -> Image
     // TODO: Add other formats
 }
 
 type Renderer = fn (Scene, Device, i32) -> ();
-type Shader   = fn (Intrinsics, Scene, SurfaceElement) -> Material;
+type Shader   = fn (Intrinsics, Scene, Ray, Hit, SurfaceElement) -> Material;

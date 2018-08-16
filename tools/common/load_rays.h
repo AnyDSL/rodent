@@ -11,7 +11,7 @@ struct Ray1;
 template <>
 struct RayTraits<Ray1> {
     enum { RayPerPacket = 1 };
-    static void write_ray(const float* org_dir, float tmin, float tmax, int j, Ray1& ray) {
+    static void write_ray(const float* org_dir, float tmin, float tmax, int /*j*/, Ray1& ray) {
         ray.org[0] = org_dir[0];
         ray.org[1] = org_dir[1];
         ray.org[2] = org_dir[2];

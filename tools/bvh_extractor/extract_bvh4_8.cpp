@@ -8,7 +8,7 @@
 
 #include "traversal.h"
 #include "load_bvh.h"
-#include "tri.h"
+#include "driver/tri.h"
 
 using namespace embree;
 

@@ -4,8 +4,8 @@
 #include <cstdlib>
 #include <cctype>
 
-#include "../common.h"
-#include "load_obj.h"
+#include "common.h"
+#include "obj.h"
 
 namespace obj {
 

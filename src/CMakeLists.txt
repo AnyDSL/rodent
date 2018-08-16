@@ -1,18 +1,8 @@
 set(CPUINFO_PATH "/proc/cpuinfo" CACHE STRING "Path to the CPU info file on the system")
-try_run(CPUID_SUCCESS
-        CPUID_COMPILE_SUCCESS
-        ${CMAKE_CURRENT_BINARY_DIR}
-        ${CMAKE_CURRENT_SOURCE_DIR}/cpuid.cpp
-        CMAKE_FLAGS -DCMAKE_CXX_STANDARD=11
-        RUN_OUTPUT_VARIABLE CPUID_RESULT
-        COMPILE_DEFINITIONS -DCPUINFO_PATH=\"${CPUINFO_PATH}\")
-if (NOT CPUID_COMPILE_SUCCESS)
-    message(FATAL_ERROR "Cannot determine CPU architecture!")
+set(SCENE_FILE "" CACHE FILEPATH "Absolute path to an OBJ scene")
+if (SCENE_FILE STREQUAL "")
+    message(FATAL_ERROR "Please specify a valid OBJ scene in the SCENE_FILE variable")
 endif()
-if (NOT CPUID_SUCCESS EQUAL 0)
-    message(FATAL_ERROR "CPU does not have vector units!")
-endif()
-message(STATUS "CPU features found: ${CPUID_RESULT}")
 
 set(RODENT_SRCS
     main.impala
@@ -40,10 +30,10 @@ set(DRIVER_SRCS
     driver/driver.cpp
     driver/interface_cpu.cpp
     driver/interface.h
-    driver/formats/load_obj.cpp
-    driver/formats/load_obj.h
-    driver/formats/load_png.cpp
-    driver/formats/load_png.h
+    driver/obj.cpp
+    driver/obj.h
+    driver/image.cpp
+    driver/image.h
     driver/bvh.h
     driver/float2.h
     driver/float3.h
@@ -52,16 +42,42 @@ set(DRIVER_SRCS
     driver/common.h
     driver/color.h)
 
+set(CONVERTER_SRCS
+    driver/converter.cpp
+    driver/obj.cpp
+    driver/obj.h
+    driver/file_path.h)
+
 anydsl_runtime_wrap(RODENT_OBJS
     NAME "rodent"
     CLANG_FLAGS ${CLANG_FLAGS}
+    IMPALA_FLAGS --log-level info
     FILES ${RODENT_SRCS}
     INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/driver/interface)
 
 find_package(SDL2 REQUIRED)
 find_package(PNG REQUIRED)
+find_package(JPEG REQUIRED)
 find_package(TBB REQUIRED)
+find_package(LZ4 REQUIRED)
+
+add_executable(converter ${CONVERTER_SRCS})
+target_link_libraries(converter ${LZ4_LIBRARY})
+target_compile_definitions(converter PUBLIC -DCPUINFO_PATH="${CPUINFO_PATH}")
+if (COLORIZE)
+    target_compile_definitions(converter PUBLIC -DCOLORIZE)
+endif()
+
+# In theory, this command depends on the converter, but introducing such a dependency
+# would create a loop (since the converter itself depends on the generated traversal interface).
+add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/main.impala
+                   COMMAND converter ${SCENE_FILE}
+                   COMMAND ${CMAKE_COMMAND} -E rename ${CMAKE_BINARY_DIR}/main.impala ${CMAKE_CURRENT_SOURCE_DIR}/main.impala
+                   WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+                   DEPENDS ${SCENE_FILE})
+
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/main.impala PROPERTIES GENERATED TRUE)
 
 add_executable(rodent ${DRIVER_SRCS} ${RODENT_OBJS})
-target_include_directories(rodent PUBLIC ${PNG_INCLUDE_DIRS} ${SDL2_INCLUDE_DIRS} ${TBB_INCLUDE_DIRS})
-target_link_libraries(rodent ${AnyDSL_runtime_LIBRARIES} ${PNG_LIBRARIES} ${SDL2_LIBRARY} ${TBB_LIBRARIES})
+target_include_directories(rodent PUBLIC ${PNG_INCLUDE_DIRS} ${JPEG_INCLUDE_DIRS} ${SDL2_INCLUDE_DIRS} ${TBB_INCLUDE_DIRS} ${LZ4_INCLUDE_DIR})
+target_link_libraries(rodent ${AnyDSL_runtime_LIBRARIES} ${PNG_LIBRARIES} ${JPEG_LIBRARIES} ${SDL2_LIBRARY} ${TBB_LIBRARIES} ${LZ4_LIBRARY})

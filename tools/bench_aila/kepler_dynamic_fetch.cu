@@ -390,7 +390,7 @@ static float4* cuda_nodes = nullptr;
 static float4* cuda_tris  = nullptr;
 static int*    cuda_ids   = nullptr;
 
-void setup_traversal(const Bvh2Node* nodes, size_t num_nodes, const Bvh2Tri* tris, size_t num_tris) {
+void setup_traversal(const Node2* nodes, size_t num_nodes, const Tri1* tris, size_t num_tris) {
     assert(sizeof(Bvh2Node) == sizeof(float4) * 4);
     assert(sizeof(Bvh2Tri)  == sizeof(float4) * 3);
     assert(!cuda_nodes && !cuda_tris && !cuda_ids);
@@ -410,9 +410,9 @@ void setup_traversal(const Bvh2Node* nodes, size_t num_nodes, const Bvh2Tri* tri
     std::vector<float4> nodes_aila(num_nodes * 4);
     for (int i = 0; i < num_nodes; i++) {
         const auto& node = nodes[i];
-        nodes_aila[i * 4 + 0] = make_float4(node.left_bb.lo_x,  node.left_bb.hi_x,  node.left_bb.lo_y,  node.left_bb.hi_y);
-        nodes_aila[i * 4 + 1] = make_float4(node.right_bb.lo_x, node.right_bb.hi_x, node.right_bb.lo_y, node.right_bb.hi_y);
-        nodes_aila[i * 4 + 2] = make_float4(node.left_bb.lo_z,  node.left_bb.hi_z,  node.right_bb.lo_z, node.right_bb.hi_z);
+        nodes_aila[i * 4 + 0] = make_float4(node.min1[0], node.min1[1], node.min1[2], node.max1[0]);
+        nodes_aila[i * 4 + 1] = make_float4(node.max1[1], node.max1[2], node.min2[0], node.min2[1]);
+        nodes_aila[i * 4 + 2] = make_float4(node.min2[2], node.max2[0], node.max2[1], node.max2[2]);
         // indexing is done on float4, not on nodes/tris
         union { int i; float f; } left { .i = node.left  < 0 ? ~((~node.left)  * 3) : (node.left  - 1) * 4 };
         union { int i; float f; } right{ .i = node.right < 0 ? ~((~node.right) * 3) : (node.right - 1) * 4 };
@@ -436,7 +436,7 @@ void shutdown_traversal() {
     CHECK_CUDA_CALL(cudaFree(cuda_nodes));
 }
 
-void bench_traversal(const Ray1AoS* rays, Hit1AoS* hits, int num_rays, double* timings, int ntimes, bool any) {
+void bench_traversal(const Ray1* rays, Hit1* hits, int num_rays, double* timings, int ntimes, bool any) {
     assert(sizeof(Ray1AoS) == sizeof(float4) * 2);
     assert(sizeof(Hit1AoS) == sizeof(int4));
 

@@ -1,11 +1,6 @@
-fn @diffuse_shader(math: Intrinsics, scene: Scene, surf: SurfaceElement) -> Material {
-    let texture = make_texture(math,
-        make_repeat_border(),
-        make_bilinear_filter(),
-        scene.images(0));
-    let bsdf = make_diffuse_bsdf(surf, texture(vec4_to_2(surf.attr(0))));
-    make_material(bsdf)
-}
+//------------------------------------------------------------------------------------
+// Generated from 'living_room3.obj' with the scene conversion tool
+//------------------------------------------------------------------------------------
 
 struct Settings {
     eye: Vec3,
@@ -17,16 +12,11 @@ struct Settings {
 };
 
 extern fn render(settings: &Settings, iter: i32) -> () {
-    let device = make_cpu_device(
-        8 /*vector_width*/,
-        0 /*num_cores (0=autodetect)*/,
-        64 /*tile_size*/
-    );
-
+    let device   = make_cpu_device_avx2();
     let renderer = make_path_tracing_renderer(32 /*max_path_len*/);
-    let image    = device.load_png("data/textures/wall.png");
-    let mesh     = device.load_obj("data/cube.obj");
+    let math     = device.intrinsics;
 
+    // Camera
     let camera = make_perspective_camera(
         settings.eye,
         make_mat3x3(settings.right, settings.up, settings.dir),
@@ -34,22 +24,184 @@ extern fn render(settings: &Settings, iter: i32) -> () {
         settings.height
     );
 
-    let light = make_point_light(
-        make_vec3(0.0f, 1.8f, 0.0f),
-        make_color(100.0f, 100.0f, 100.0f)
+    // Geometry
+    let vertices     = device.load_buffer("data/vertices.bin")     as &[Vec3];
+    let normals      = device.load_buffer("data/normals.bin")      as &[Vec3];
+    let face_normals = device.load_buffer("data/face_normals.bin") as &[Vec3];
+    let indices      = device.load_buffer("data/indices.bin")      as &[i32];
+    let texcoords    = device.load_buffer("data/texcoords.bin")    as &[Vec2];
+    let tri_mesh     = TriMesh {
+        vertices:     @ |i| vertices(i),
+        normals:      @ |i| normals(i),
+        face_normals: @ |i| face_normals(i),
+        triangles:    @ |i| (indices(i * 4 + 0), indices(i * 4 + 1), indices(i * 4 + 2)),
+        materials:    @ |i| indices(i * 4 + 3),
+        attrs:        @ |_| (false, @ |j| vec2_to_4(texcoords(j), 0.0f, 0.0f)),
+        num_attrs:    1,
+        num_tris:     786210
+    };
+    let bvh = device.load_bvh("data/bvh.bin", 0);
+    let geometries = @ |_| make_tri_mesh_geometry(math, tri_mesh, bvh);
+
+    // Images
+    let dummy_image = make_image(@ |x, y| make_color(0.0f, 0.0f, 0.0f), 1, 1);
+    let image_textures_abstract_jpg = device.load_jpg("data/textures/Abstract.jpg");
+    let image_textures_woodfloor_jpg = device.load_jpg("data/textures/WoodFloor.jpg");
+    let images = @ |i| match i {
+        0 => image_textures_abstract_jpg,
+        1 => image_textures_woodfloor_jpg,
+        _ => dummy_image
+    };
+
+    // Lights
+    let dummy_light = make_point_light(make_vec3(0.0f, 0.0f, 0.0f), make_color(0.0f, 0.0f, 0.0f));
+    let light0 = make_triangle_light(
+        math,
+        make_vec3(-6.01187f, 1.94563f, -5.33797f),
+        make_vec3(-4.98193f, 1.94563f, -5.85846f),
+        make_vec3(-4.82632f, 3.04684f, -5.55054f),
+        make_color(75f, 65f, 65f)
     );
+    let light1 = make_triangle_light(
+        math,
+        make_vec3(-6.01187f, 1.94563f, -5.33797f),
+        make_vec3(-4.82632f, 3.04684f, -5.55054f),
+        make_vec3(-5.85626f, 3.04684f, -5.03004f),
+        make_color(75f, 65f, 65f)
+    );
+    let lights = @ |i| match i {
+        0 => light0,
+        1 => light1,
+        _ => dummy_light
+    };
 
+    // Mapping from primitive to light source
+    let light_ids = device.load_buffer("data/light_ids.bin") as &[i32];
+
+    // Shaders
+    let dummy_shader = @ |math, scene, ray, hit, surf| make_material(make_diffuse_bsdf(surf, make_color(0.0f, 1.0f, 1.0f)));
+    let shader_light = @ |math, scene, ray, hit, surf| {
+        let bsdf = make_black_bsdf();
+        make_emissive_material(surf, bsdf, lights(light_ids(hit.prim_id)))
+    };
+    let shader_redglass = @ |math, scene, ray, hit, surf| {
+        let bsdf = make_glass_bsdf(surf, 1.0f, 1.5f, make_color(0.58f, 0.046f, 0.029f));
+        make_material(bsdf)
+    };
+    let shader_branches = @ |math, scene, ray, hit, surf| {
+        let kd = make_color(0.125f, 0.06f, 0.02f);
+        let diffuse = make_diffuse_bsdf(surf, kd);
+        let bsdf = diffuse;
+        make_material(bsdf)
+    };
+    let shader_painting = @ |math, scene, ray, hit, surf| {
+        let diffuse_texture = make_texture(math, make_repeat_border(), make_bilinear_filter(), scene.images(0));
+        let kd = diffuse_texture(vec4_to_2(surf.attr(0)));
+        let diffuse = make_diffuse_bsdf(surf, kd);
+        let bsdf = diffuse;
+        make_material(bsdf)
+    };
+    let shader_furniture = @ |math, scene, ray, hit, surf| {
+        let kd = make_color(0.8f, 0.8f, 0.8f);
+        let diffuse = make_diffuse_bsdf(surf, kd);
+        let bsdf = diffuse;
+        make_material(bsdf)
+    };
+    let shader_sofa = @ |math, scene, ray, hit, surf| {
+        let kd = make_color(0.8f, 0.8f, 0.8f);
+        let diffuse = make_diffuse_bsdf(surf, kd);
+        let bsdf = diffuse;
+        make_material(bsdf)
+    };
+    let shader_fruits = @ |math, scene, ray, hit, surf| {
+        let kd = make_color(0.381f, 0f, 0f);
+        let diffuse = make_diffuse_bsdf(surf, kd);
+        let bsdf = diffuse;
+        make_material(bsdf)
+    };
+    let shader_walls = @ |math, scene, ray, hit, surf| {
+        let kd = make_color(0.8f, 0.8f, 0.8f);
+        let diffuse = make_diffuse_bsdf(surf, kd);
+        let bsdf = diffuse;
+        make_material(bsdf)
+    };
+    let shader_blackpot = @ |math, scene, ray, hit, surf| {
+        let kd = make_color(0.02f, 0.02f, 0.02f);
+        let diffuse = make_diffuse_bsdf(surf, kd);
+        let ks = make_color(0.02f, 0.02f, 0.02f);
+        let ns = 96.0784f;
+        let specular = make_phong_bsdf(surf, ks, ns);
+        let bsdf = make_mix_bsdf(diffuse, specular, color_luminance(ks) / (color_luminance(ks) + color_luminance(kd)));
+        make_material(bsdf)
+    };
+    let shader_whiteglass = @ |math, scene, ray, hit, surf| {
+        let bsdf = make_glass_bsdf(surf, 1.0f, 1.5f, make_color(0.98f, 0.98f, 0.98f));
+        make_material(bsdf)
+    };
+    let shader_cushion = @ |math, scene, ray, hit, surf| {
+        let kd = make_color(0.533f, 0.25f, 0.209f);
+        let diffuse = make_diffuse_bsdf(surf, kd);
+        let bsdf = diffuse;
+        make_material(bsdf)
+    };
+    let shader_floor = @ |math, scene, ray, hit, surf| {
+        let diffuse_texture = make_texture(math, make_repeat_border(), make_bilinear_filter(), scene.images(1));
+        let kd = diffuse_texture(vec4_to_2(surf.attr(0)));
+        let diffuse = make_diffuse_bsdf(surf, kd);
+        let bsdf = diffuse;
+        make_material(bsdf)
+    };
+    let shader_feet = @ |math, scene, ray, hit, surf| {
+        let kd = make_color(0.02f, 0.02f, 0.02f);
+        let diffuse = make_diffuse_bsdf(surf, kd);
+        let bsdf = diffuse;
+        make_material(bsdf)
+    };
+    let shader_carpet = @ |math, scene, ray, hit, surf| {
+        let kd = make_color(0.235f, 0f, 0f);
+        let diffuse = make_diffuse_bsdf(surf, kd);
+        let bsdf = diffuse;
+        make_material(bsdf)
+    };
+    let shader_none = @ |math, scene, ray, hit, surf| {
+        let kd = make_color(0.8f, 0.8f, 0.8f);
+        let diffuse = make_diffuse_bsdf(surf, kd);
+        let ks = make_color(0.8f, 0.8f, 0.8f);
+        let ns = 0f;
+        let specular = make_phong_bsdf(surf, ks, ns);
+        let bsdf = make_mix_bsdf(diffuse, specular, color_luminance(ks) / (color_luminance(ks) + color_luminance(kd)));
+        make_material(bsdf)
+    };
+    let shaders = @ |i| match i {
+        1 => shader_light,
+        2 => shader_redglass,
+        3 => shader_branches,
+        4 => shader_painting,
+        5 => shader_furniture,
+        6 => shader_sofa,
+        7 => shader_fruits,
+        8 => shader_walls,
+        9 => shader_blackpot,
+        10 => shader_whiteglass,
+        11 => shader_cushion,
+        12 => shader_floor,
+        13 => shader_feet,
+        14 => shader_carpet,
+        15 => shader_none,
+        _ => dummy_shader
+    };
+
+    // Scene
     let scene = Scene {
-        num_shaders:    3,
+        num_shaders:    16,
         num_geometries: 1,
-        num_images:     1,
-        num_lights:     1,
-
-        shaders:    @ |i| diffuse_shader,
-        geometries: @ |i| mesh,
-        images:     @ |i| image,
-        lights:     @ |i| light,
-        camera:     camera
+        num_images:     2,
+        num_lights:     2,
+        shaders:        shaders,
+        geometries:     geometries,
+        images:         images,
+        lights:         lights,
+        camera:         camera
     };
 
     renderer(scene, device, iter);

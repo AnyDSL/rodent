@@ -11,9 +11,16 @@ include_directories(${AnyDSL_runtime_INCLUDE_DIRS})
 
 set(CLANG_FLAGS -O3 -mavx2 -mavx -mfma -ffast-math CACHE STRING "Clang compilation options")
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/modules)
+
+set(COLOR_TTY_AVAILABLE TRUE)
+if (WIN32)
+    # By default, Windows console does not support ANSI escape codes
+    set(COLOR_TTY_AVAILABLE FALSE)
+endif ()
+set(COLORIZE ${COLOR_TTY_AVAILABLE} CACHE BOOL "Set to TRUE to enable colorized output. Requires an ANSI compliant terminal.")
 
 add_subdirectory(src)
 add_subdirectory(tools)

@@ -2,12 +2,13 @@
 
 extern "C" {
     fn rodent_cpu_get_film_data(&mut &mut [f32], &mut i32, &mut i32) -> ();
-    fn rodent_cpu_load_obj(&[u8], &mut i32, &mut &[f32], &mut &[u32], &mut &[f32], &mut &[f32], &mut &[f32]) -> ();
-    fn rodent_cpu_load_png(&[u8], &mut &[u8], &mut i32, &mut i32) -> ();
     fn rodent_cpu_get_primary_stream(&mut PrimaryStream, i32) -> ();
     fn rodent_cpu_get_secondary_stream(&mut SecondaryStream, i32) -> ();
-    fn rodent_cpu_get_bvh4_tri4(i32, i32, &[f32], &[u32], &mut &[Node4], &mut &[Tri4]) -> ();
-    fn rodent_cpu_get_bvh8_tri4(i32, i32, &[f32], &[u32], &mut &[Node8], &mut &[Tri4]) -> ();
+    fn rodent_cpu_load_buffer(&[u8]) -> &[i8];
+    fn rodent_cpu_load_bvh4_tri4(&[u8], &mut &[Node4], &mut &[Tri4]) -> ();
+    fn rodent_cpu_load_bvh8_tri4(&[u8], &mut &[Node8], &mut &[Tri4]) -> ();
+    fn rodent_cpu_load_png(&[u8], &mut &[u8], &mut i32, &mut i32) -> ();
+    fn rodent_cpu_load_jpg(&[u8], &mut &[u8], &mut i32, &mut i32) -> ();
 }
 
 // Ray streams ---------------------------------------------------------------------
@@ -165,7 +166,7 @@ fn @cpu_sort_primary(scene: Scene, primary: PrimaryStream, ray_begins: &mut [i32
     let read_primary_hit = make_primary_stream_hit_reader(primary, 1);
 
     // Compute shader ids
-    for i in vectorized_range(vector_width, 0, primary.size) {
+    for i, _ in vectorized_range(vector_width, 0, primary.size) {
         let mut shader_id = scene.num_shaders;
         let hit = read_primary_hit(i, 0);
         if hit.geom_id >= 0 {
@@ -317,10 +318,10 @@ fn @cpu_generate_rays( primary: PrimaryStream
     let first_id = *id;
     let num_rays = cpu_intrinsics.min(tile_size * tile_size - first_id, capacity - primary.size);
     let tile_div = make_fast_div(tile_size as u32);
-    for i in vectorized_range(vector_width, 0, num_rays) {
+    for i, _ in vectorized_range(vector_width, 0, num_rays) {
         let in_tile_id = first_id + i;
 
-        // Compute x, y of ray
+        // Compute x, y of ray within tile
         let in_tile_y = fast_div(tile_div, in_tile_id as u32) as i32;
         let in_tile_x = in_tile_id - in_tile_y * tile_size;
         let x = xmin + in_tile_x;
@@ -400,7 +401,7 @@ fn @cpu_trace( scene: Scene
                 let write_secondary_ray = make_ray_stream_writer(secondary.rays, 1);
 
                 let end = ray_ends(shader_id);
-                for i in vectorized_range(vector_width, begin, end) {
+                for i, vector_width in vectorized_range(vector_width, begin, end) {
                     let ray       = read_primary_ray(i, 0);
                     let hit       = read_primary_hit(i, 0);
                     let mut state = read_primary_state(i, 0);
@@ -409,15 +410,18 @@ fn @cpu_trace( scene: Scene
                     let geom   = scene.geometries(hit.geom_id);
                     let surf   = geom.surface_element(ray, hit);
                     let shader = scene.shaders(shader_id);
-                    let mat    = shader(cpu_intrinsics, scene, surf);
+                    let mat    = shader(cpu_intrinsics, scene, ray, hit, surf);
 
                     // Execute hit point shading, and add the contribution of each lane to the frame buffer
-                    let mut hit_color = make_color(0.0f, 0.0f, 0.0f);
+                    let mut hit_color;
                     for once() {
                         @@(path_tracer.on_hit)(ray, hit, &mut state, surf, mat, @ |color| -> ! {
                             hit_color = color;
                             break()
-                        });
+                        }, @ || -> ! {
+                            hit_color = make_color(0.0f, 0.0f, 0.0f);
+                            break()
+                        })
                     }
                     for lane in unroll(0, vector_width) {
                         let j = bitcast[i32](rv_extract(bitcast[f32](ray_id), lane));
@@ -496,75 +500,63 @@ fn @cpu_trace( scene: Scene
     }
 }
 
-fn @cpu_load_png(filename: &[u8]) -> Image {
-    let mut pixel_data;
-    let mut width;
-    let mut height;
-    rodent_cpu_load_png(filename, &mut pixel_data, &mut width, &mut height);
-    let pixels = @ |x, y| {
-        let pixel = (pixel_data as &[u32])(width * y + x);
-        let r = pixel & 0xFFu;
-        let g = (pixel >> 8u) & 0xFFu;
-        let b = (pixel >> 16u) & 0xFFu;
-        make_color((r as f32) * (1.0f / 255.0f),
-                   (g as f32) * (1.0f / 255.0f),
-                   (b as f32) * (1.0f / 255.0f))
-    };
-    make_image(pixels, width, height)
-}
-
-fn @cpu_load_obj(filename: &[u8], geom_id: i32, vector_width: i32) -> Geometry {
-    let mut num_tris     : i32;
-    let mut vertices     : &[f32];
-    let mut indices      : &[u32];
-    let mut normals      : &[f32];
-    let mut face_normals : &[f32];
-    let mut texcoords    : &[f32];
-
-    rodent_cpu_load_obj(filename, &mut num_tris, &mut vertices, &mut indices, &mut normals, &mut face_normals, &mut texcoords);
-
-    let tri_mesh = TriMesh {
-        vertices:     @ |i| make_vec3(vertices(i * 3 + 0), vertices(i * 3 + 1), vertices(i * 3 + 2)),
-        normals:      @ |i| make_vec3(normals(i * 3 + 0), normals(i * 3 + 1), normals(i * 3 + 2)),
-        face_normals: @ |i| make_vec3(face_normals(i * 3 + 0), face_normals(i * 3 + 1), face_normals(i * 3 + 2)),
-        triangles:    @ |i| (indices(i * 4 + 0) as i32, indices(i * 4 + 1) as i32, indices(i * 4 + 2) as i32),
-        materials:    @ |i| indices(i * 4 + 3) as i32,
-        attrs:        @ |_| (false, @ |j| make_vec4(texcoords(j * 2 + 0), texcoords(j * 2 + 1), 0.0f, 0.0f)),
-        num_attrs:    1,
-        num_tris:     num_tris
-    };
-
-    let bvh = if vector_width == 8 {
-        let mut nodes;
-        let mut tris;
-        rodent_cpu_get_bvh8_tri4(geom_id, num_tris, vertices, indices, &mut nodes, &mut tris);
-        make_cpu_bvh8_tri4(nodes, tris, geom_id)
-    } else {
-        let mut nodes;
-        let mut tris;
-        rodent_cpu_get_bvh4_tri4(geom_id, num_tris, vertices, indices, &mut nodes, &mut tris);
-        make_cpu_bvh4_tri4(nodes, tris, geom_id)
-    };
-
-    make_tri_mesh_geometry(cpu_intrinsics, tri_mesh, bvh)
-}
-
-fn @make_cpu_device(vector_width: i32, num_cores: i32, tile_size: i32) -> Device {
-    let mut geom_id = 0;
+fn @make_cpu_device(min_max: MinMax, vector_width: i32, num_cores: i32, tile_size: i32) -> Device {
     Device {
         intrinsics: cpu_intrinsics,
         trace: @ |scene, path_tracer| {
             cpu_trace(
                 scene,
                 path_tracer,
-                make_cpu_int_min_max(),
+                min_max,
                 true /*single*/,
                 tile_size,
                 num_cores,
                 vector_width
             )
         },
-        load_obj: @ |filename| cpu_load_obj(filename, geom_id++, vector_width),
-        load_png: cpu_load_png
+        load_buffer: rodent_cpu_load_buffer,
+        load_bvh: @ |filename, geom_id| {
+            if vector_width == 4 {
+                let mut nodes;
+                let mut tris;
+                rodent_cpu_load_bvh4_tri4(filename, &mut nodes, &mut tris);
+                make_cpu_bvh4_tri4(nodes, tris, geom_id)
+            } else {
+                let mut nodes;
+                let mut tris;
+                rodent_cpu_load_bvh8_tri4(filename, &mut nodes, &mut tris);
+                make_cpu_bvh8_tri4(nodes, tris, geom_id)
+            }
+        },
+        load_png: @ |filename| {
+            let mut pixel_data;
+            let mut width;
+            let mut height;
+            rodent_cpu_load_png(filename, &mut pixel_data, &mut width, &mut height);
+            make_image_rgba32(pixel_data as &[u32], width, height)
+        },
+        load_jpg: @ |filename| {
+            let mut pixel_data;
+            let mut width;
+            let mut height;
+            rodent_cpu_load_jpg(filename, &mut pixel_data, &mut width, &mut height);
+            make_image_rgba32(pixel_data as &[u32], width, height)
+        }
     }
+}
+
+fn @make_cpu_device_avx2() -> Device {
+    make_cpu_device(make_cpu_int_min_max(), 8, 0, 64)
+}
+
+fn @make_cpu_device_avx() -> Device {
+    make_cpu_device(make_cpu_default_min_max(), 8, 0, 64)
+}
+
+fn @make_cpu_device_sse42() -> Device {
+    make_cpu_device(make_cpu_int_min_max(), 4, 0, 64)
+}
+
+fn @make_cpu_device_asimd() -> Device {
+    make_cpu_device(make_cpu_int_min_max(), 4, 0, 64)
 }

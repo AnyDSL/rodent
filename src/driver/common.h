@@ -65,11 +65,11 @@ inline void error() {
 /// Outputs an error message in the console.
 template <typename T, typename... Args>
 inline void error(T t, Args... args) {
-#if COLORIZE_LOG
+#if COLORIZE
     std::cerr << "\033[1;31m";
 #endif
     std::cerr << t;
-#if COLORIZE_LOG
+#if COLORIZE
     std::cerr << "\033[0m";
 #endif
     error(args...);
@@ -93,11 +93,11 @@ inline void warn() {
 /// Outputs an warning message in the console.
 template <typename T, typename... Args>
 inline void warn(T t, Args... args) {
-#if COLORIZE_LOG
+#if COLORIZE
     std::clog << "\033[1;33m";
 #endif
     std::clog << t;
-#if COLORIZE_LOG
+#if COLORIZE
     std::clog << "\033[0m";
 #endif
     warn(args...);
