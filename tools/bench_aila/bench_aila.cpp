@@ -12,9 +12,9 @@
 #include "load_bvh.h"
 #include "load_rays.h"
 
-void setup_traversal(const Bvh2Node* nodes, size_t num_nodes, const Bvh2Tri* tris, size_t num_tris);
+void setup_traversal(const Node2* nodes, size_t num_nodes, const Tri1* tris, size_t num_tris);
 void shutdown_traversal();
-void bench_traversal(const Ray1AoS* rays, Hit1AoS* hits, int num_rays, double* timings, int ntimes, bool any);
+void bench_traversal(const Ray1* rays, Hit1* hits, int num_rays, double* timings, int ntimes, bool any);
 
 inline void check_argument(int i, int argc, char** argv) {
     if (i + 1 >= argc) {
@@ -93,20 +93,20 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    anydsl::Array<Bvh2Node> nodes;
-    anydsl::Array<Bvh2Tri>  tris;
-    if (!load_bvh(bvh_file, nodes, tris, BvhType::BVH2, false)) {
+    anydsl::Array<Node2> nodes;
+    anydsl::Array<Tri1>  tris;
+    if (!load_bvh(bvh_file, nodes, tris, BvhType::BVH2_TRI1, false)) {
         std::cerr << "Cannot load BVH file" << std::endl;
         return 1;
     }
 
-    anydsl::Array<Ray1AoS> rays;
+    anydsl::Array<Ray1> rays;
     if (!load_rays(ray_file, rays, tmin, tmax, false)) {
         std::cerr << "Cannot load rays" << std::endl;
         return 1;
     }
 
-    std::vector<Hit1AoS> hits(rays.size());
+    std::vector<Hit1> hits(rays.size());
     std::vector<double> timings(iters);
 
     setup_traversal(nodes.data(), nodes.size(), tris.data(), tris.size());
