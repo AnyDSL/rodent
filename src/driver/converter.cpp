@@ -101,12 +101,6 @@ class BvhNTriMAdapter {
         }
     };
 
-    struct StackElem {
-        int parent, child;
-        StackElem() {}
-        StackElem(int parent, int child) : parent(parent), child(child) {}
-    };
-
     using BvhBuilder = SplitBvhBuilder<N, CostFn>;
     using Adapter    = BvhNTriMAdapter;
     using Node       = typename BvhNTriM<N, M>::Node;
@@ -546,7 +540,7 @@ static bool convert_obj(const std::string& file_name, Isa isa, std::ostream& os)
 
 int main(int argc, char** argv) {
     if (argc <= 1) {
-        std::cerr << "Not enough arguments" << std::endl;
+        std::cerr << "Not enough arguments." << std::endl;
         return 1;
     }
 

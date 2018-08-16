@@ -500,7 +500,7 @@ fn @cpu_trace( scene: Scene
     }
 }
 
-fn @make_cpu_device(min_max: MinMax, vector_width: i32, num_cores: i32, tile_size: i32) -> Device {
+fn @make_cpu_device(single: bool, min_max: MinMax, vector_width: i32, num_cores: i32, tile_size: i32) -> Device {
     Device {
         intrinsics: cpu_intrinsics,
         trace: @ |scene, path_tracer| {
@@ -546,17 +546,17 @@ fn @make_cpu_device(min_max: MinMax, vector_width: i32, num_cores: i32, tile_siz
 }
 
 fn @make_cpu_device_avx2() -> Device {
-    make_cpu_device(make_cpu_int_min_max(), 8, 0, 64)
+    make_cpu_device(true, make_cpu_int_min_max(), 8, 0, 64)
 }
 
 fn @make_cpu_device_avx() -> Device {
-    make_cpu_device(make_cpu_default_min_max(), 8, 0, 64)
+    make_cpu_device(true, make_cpu_default_min_max(), 8, 0, 64)
 }
 
 fn @make_cpu_device_sse42() -> Device {
-    make_cpu_device(make_cpu_int_min_max(), 4, 0, 64)
+    make_cpu_device(true, make_cpu_int_min_max(), 4, 0, 64)
 }
 
 fn @make_cpu_device_asimd() -> Device {
-    make_cpu_device(make_cpu_int_min_max(), 4, 0, 64)
+    make_cpu_device(false, make_cpu_int_min_max(), 4, 0, 64)
 }
