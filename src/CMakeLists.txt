@@ -5,7 +5,6 @@ if (SCENE_FILE STREQUAL "")
 endif()
 
 set(RODENT_SRCS
-    main.impala
     core/color.impala
     core/common.impala
     core/cpu_common.impala
@@ -46,13 +45,19 @@ set(CONVERTER_SRCS
     driver/converter.cpp
     driver/obj.cpp
     driver/obj.h
-    driver/file_path.h)
+    driver/file_path.h
+    driver/interface.h
+    driver/bvh.h)
 
 anydsl_runtime_wrap(RODENT_OBJS
     NAME "rodent"
     CLANG_FLAGS ${CLANG_FLAGS}
     IMPALA_FLAGS --log-level info
-    FILES ${RODENT_SRCS}
+    FILES ${RODENT_SRCS} main.impala)
+
+anydsl_runtime_wrap(DISCARD_TMP_OBJS
+    NAME "interface"
+    FILES ${RODENT_SRCS} dummy_main.impala
     INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/driver/interface)
 
 find_package(SDL2 REQUIRED)
@@ -68,13 +73,11 @@ if (COLORIZE)
     target_compile_definitions(converter PUBLIC -DCOLORIZE)
 endif()
 
-# In theory, this command depends on the converter, but introducing such a dependency
-# would create a loop (since the converter itself depends on the generated traversal interface).
 add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/main.impala
                    COMMAND converter ${SCENE_FILE}
                    COMMAND ${CMAKE_COMMAND} -E rename ${CMAKE_BINARY_DIR}/main.impala ${CMAKE_CURRENT_SOURCE_DIR}/main.impala
                    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-                   DEPENDS ${SCENE_FILE})
+                   DEPENDS ${SCENE_FILE} converter)
 
 set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/main.impala PROPERTIES GENERATED TRUE)
 
