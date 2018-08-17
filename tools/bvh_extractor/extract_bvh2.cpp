@@ -3,25 +3,6 @@
 #include "traversal.h"
 #include "driver/bvh.h"
 
-static void fill_dummy_parent(Node2& node, const BBox& leaf_bb, int index) {
-    node.left  = index;
-    node.right = 0;
-
-    node.min1[0] = leaf_bb.min.x;
-    node.min1[1] = leaf_bb.min.y;
-    node.min1[2] = leaf_bb.min.z;
-    node.max1[0] = leaf_bb.max.x;
-    node.max1[1] = leaf_bb.max.y;
-    node.max1[2] = leaf_bb.max.z;
-
-    node.min2[0] = 0.0f;
-    node.min2[1] = 0.0f;
-    node.min2[2] = 0.0f;
-    node.max2[0] = -0.0f;
-    node.max2[1] = -0.0f;
-    node.max2[2] = -0.0f;
-}
-
 class Bvh2Builder {
 public:
     Bvh2Builder(std::vector<Node2>& nodes, std::vector<Tri1>& tris)
@@ -61,25 +42,25 @@ private:
             nodes.emplace_back();
 
             if (parent >= 0 && child >= 0)
-                *(&nodes[parent].left + child) = i + 1;
+                nodes[parent].child[child] = i + 1;
 
             assert(count == 2);
 
-            const BBox& left_bb = bboxes(0);
-            nodes[i].min1[0] = left_bb.min.x;
-            nodes[i].min1[1] = left_bb.min.y;
-            nodes[i].min1[2] = left_bb.min.z;
-            nodes[i].max1[0] = left_bb.max.x;
-            nodes[i].max1[1] = left_bb.max.y;
-            nodes[i].max1[2] = left_bb.max.z;
+            const BBox& bbox1 = bboxes(0);
+            nodes[i].bounds[0] = bbox1.min.x;
+            nodes[i].bounds[2] = bbox1.min.y;
+            nodes[i].bounds[4] = bbox1.min.z;
+            nodes[i].bounds[1] = bbox1.max.x;
+            nodes[i].bounds[3] = bbox1.max.y;
+            nodes[i].bounds[5] = bbox1.max.z;
 
-            const BBox& right_bb = bboxes(1);
-            nodes[i].min2[0] = right_bb.min.x;
-            nodes[i].min2[1] = right_bb.min.y;
-            nodes[i].min2[2] = right_bb.min.z;
-            nodes[i].max2[0] = right_bb.max.x;
-            nodes[i].max2[1] = right_bb.max.y;
-            nodes[i].max2[2] = right_bb.max.z;
+            const BBox& bbox2 = bboxes(1);
+            nodes[i].bounds[ 6] = bbox2.min.x;
+            nodes[i].bounds[ 8] = bbox2.min.y;
+            nodes[i].bounds[10] = bbox2.min.z;
+            nodes[i].bounds[ 7] = bbox2.max.x;
+            nodes[i].bounds[ 9] = bbox2.max.y;
+            nodes[i].bounds[11] = bbox2.max.z;
 
             return i;
         }
@@ -98,7 +79,7 @@ private:
             auto& nodes = builder->nodes_;
             auto& tris  = builder->tris_;
 
-            *(&nodes[parent].left + child) = ~tris.size();
+            nodes[parent].child[child] = ~tris.size();
 
             for (int i = 0; i < ref_count; i++) {
                 const int ref = refs(i);

@@ -111,7 +111,7 @@ struct Interface {
         do {
             size_t node_size = 0, tri_size = 0;
             is.read((char*)&node_size, sizeof(uint32_t));
-            is.read((char*)&tri_size, sizeof(uint32_t));
+            is.read((char*)&tri_size,  sizeof(uint32_t));
             if (node_size == sizeof(Node) &&
                 tri_size  == sizeof(Tri)) {
                 info("Loaded BVH file '", filename, "'");
@@ -171,7 +171,9 @@ struct Interface {
     void clear() {
         std::fill(host_pixels.begin(), host_pixels.end(), 0.0f);
         for (auto& pair : devices) {
-            anydsl::copy(host_pixels, devices[pair.first].film_pixels);
+            auto& device_pixels = devices[pair.first].film_pixels;
+            if (device_pixels.size())
+                anydsl::copy(host_pixels, device_pixels);
         }
     }
 };
@@ -258,7 +260,7 @@ void rodent_load_bvh4_tri4(int32_t dev, const char* file, Node4** nodes, Tri4** 
     *tris  = const_cast<Tri4*>(bvh.tris.data());
 }
 
-void rodent_load_bvh4_tri8(int32_t dev, const char* file, Node8** nodes, Tri4** tris) {
+void rodent_load_bvh8_tri4(int32_t dev, const char* file, Node8** nodes, Tri4** tris) {
     auto& bvh = interface->load_bvh8_tri4(dev, file);
     *nodes = const_cast<Node8*>(bvh.nodes.data());
     *tris  = const_cast<Tri4*>(bvh.tris.data());

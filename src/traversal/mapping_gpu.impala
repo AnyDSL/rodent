@@ -1,13 +1,9 @@
 // BVH layout ----------------------------------------------------------------------
 
 struct Node2 {
-    min1:  [f32 * 3],
-    max1:  [f32 * 3],
-    min2:  [f32 * 3],
-    max2:  [f32 * 3],
-    left:  i32,
-    right: i32,
-    pad:   [i32 * 2]
+    bounds: [f32 * 12], // lo_x, hi_x, lo_y, hi_y, ...
+    child:  [i32 * 2],
+    pad:    [i32 * 2]
 }
 
 struct Tri1 {
@@ -152,6 +148,8 @@ fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
                 let prim = bvh.prim(prim_id++);
 
                 for k in unroll(0, prim.size) @{
+                    if !prim.is_valid(k) { break() }
+
                     let (was_hit, prim_hit) = prim.intersect(k, gpu_intrinsics, true /*mask*/, ray);
                     if was_hit {
                         hit = prim_hit;

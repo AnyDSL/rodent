@@ -412,12 +412,12 @@ void setup_traversal(const Node2* nodes, size_t num_nodes, const Tri1* tris, siz
     std::vector<float4> nodes_aila(num_nodes * 4);
     for (int i = 0; i < num_nodes; i++) {
         const auto& node = nodes[i];
-        nodes_aila[i * 4 + 0] = make_float4(node.min1[0], node.min1[1], node.min1[2], node.max1[0]);
-        nodes_aila[i * 4 + 1] = make_float4(node.max1[1], node.max1[2], node.min2[0], node.min2[1]);
-        nodes_aila[i * 4 + 2] = make_float4(node.min2[2], node.max2[0], node.max2[1], node.max2[2]);
+        nodes_aila[i * 4 + 0] = make_float4(node.bounds[0], node.bounds[1], node.bounds[ 2], node.bounds[ 3]);
+        nodes_aila[i * 4 + 1] = make_float4(node.bounds[4], node.bounds[5], node.bounds[ 6], node.bounds[ 7]);
+        nodes_aila[i * 4 + 2] = make_float4(node.bounds[8], node.bounds[9], node.bounds[10], node.bounds[11]);
         // indexing is done on float4, not on nodes/tris
-        union { int i; float f; } left { .i = node.left  < 0 ? ~((~node.left)  * 3) : (node.left  - 1) * 4 };
-        union { int i; float f; } right{ .i = node.right < 0 ? ~((~node.right) * 3) : (node.right - 1) * 4 };
+        union { int i; float f; } left { .i = node.child[0] < 0 ? ~((~node.child[0]) * 3) : (node.child[0] - 1) * 4 };
+        union { int i; float f; } right{ .i = node.child[1] < 0 ? ~((~node.child[1]) * 3) : (node.child[1] - 1) * 4 };
         nodes_aila[i * 4 + 3] = make_float4(left.f, right.f, 0, 0);
     }
     CHECK_CUDA_CALL(cudaMemcpy(cuda_nodes, nodes_aila.data(), sizeof(float4) * 4 * num_nodes, cudaMemcpyHostToDevice));

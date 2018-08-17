@@ -290,26 +290,26 @@ private:
             if (parent >= 0 && child >= 0) {
                 assert(parent >= 0 && parent < nodes.size());
                 assert(child >= 0 && child < 2);
-                (&nodes[parent].left)[child] = i + 1;
+                nodes[parent].child[child] = i + 1;
             }
 
             assert(count == 2);
 
             const BBox& bbox1 = bboxes(0);
-            nodes[i].min1[0] = bbox1.min.x;
-            nodes[i].min1[1] = bbox1.min.y;
-            nodes[i].min1[2] = bbox1.min.z;
-            nodes[i].max1[0] = bbox1.max.x;
-            nodes[i].max1[1] = bbox1.max.y;
-            nodes[i].max1[2] = bbox1.max.z;
+            nodes[i].bounds[0] = bbox1.min.x;
+            nodes[i].bounds[2] = bbox1.min.y;
+            nodes[i].bounds[4] = bbox1.min.z;
+            nodes[i].bounds[1] = bbox1.max.x;
+            nodes[i].bounds[3] = bbox1.max.y;
+            nodes[i].bounds[5] = bbox1.max.z;
 
             const BBox& bbox2 = bboxes(1);
-            nodes[i].min2[0] = bbox2.min.x;
-            nodes[i].min2[1] = bbox2.min.y;
-            nodes[i].min2[2] = bbox2.min.z;
-            nodes[i].max2[0] = bbox2.max.x;
-            nodes[i].max2[1] = bbox2.max.y;
-            nodes[i].max2[2] = bbox2.max.z;
+            nodes[i].bounds[ 6] = bbox2.min.x;
+            nodes[i].bounds[ 8] = bbox2.min.y;
+            nodes[i].bounds[10] = bbox2.min.z;
+            nodes[i].bounds[ 7] = bbox2.max.x;
+            nodes[i].bounds[ 9] = bbox2.max.y;
+            nodes[i].bounds[11] = bbox2.max.z;
 
             return i;
         }
@@ -329,35 +329,23 @@ private:
             auto& nodes   = adapter.nodes_;
             auto& tris    = adapter.tris_;
 
-            (&nodes[parent].left)[child] = ~tris.size();
+            nodes[parent].child[child] = ~tris.size();
 
-            for (size_t i = 0; i < ref_count; i++) {
-                const int id = refs(i);
-                auto& in_tri = in_tris[id];
-                const float3 e1 = in_tri.v0 - in_tri.v1;
-                const float3 e2 = in_tri.v2 - in_tri.v0;
-                const float3 n = cross(e1, e2);
-
-                Tri tri;
-                tri.v0[0] = in_tri.v0.x;
-                tri.v0[1] = in_tri.v0.y;
-                tri.v0[2] = in_tri.v0.z;
-
-                tri.e1[0] = e1.x;
-                tri.e1[1] = e1.y;
-                tri.e1[2] = e1.z;
-
-                tri.e2[0] = e2.x;
-                tri.e2[1] = e2.y;
-                tri.e2[2] = e2.z;
-
-                tri.nx = n.x;
-                tri.ny = n.y;
-                tri.id = id;
-
-                tris.emplace_back(tri);
+            for (int i = 0; i < ref_count; i++) {
+                const int ref = refs(i);
+                auto& tri = in_tris[ref];
+                auto e1 = tri.v0 - tri.v1;
+                auto e2 = tri.v2 - tri.v0;
+                auto n = cross(e1, e2);
+                Tri1 new_tri{
+                    { tri.v0.x, tri.v0.y, tri.v0.z}, n.x,
+                    { e1.x, e1.y, e1.z}, n.y,
+                    { e2.x, e2.y, e2.z}, ref
+                };
+                tris.emplace_back(new_tri);
             }
-            assert(ref_count > 0);
+
+            // Add sentinel
             tris.back().id |= 0x80000000;
         }
     };

@@ -29,7 +29,7 @@ fn @gpu_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics, min_max: Mi
 
         while true {
             let hit = gpu_traverse_single_helper(intrinsics, min_max, ray, bvh, false /*any_hit*/, 1 /*root*/);
-            if true || hit.geom_id == -1 {
+            if hit.geom_id == -1 {
                 break()
             }
 
@@ -121,14 +121,15 @@ fn @make_gpu_device(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics, min_m
 }
 
 fn @make_nvvm_device(dev: i32) -> Device {
+    let dev_id = runtime_device(1, dev);
     let load_bvh = @ |filename, geom_id| {
         let mut nodes;
         let mut tris;
-        rodent_load_bvh2_tri1(dev, filename, &mut nodes, &mut tris);
+        rodent_load_bvh2_tri1(dev_id, filename, &mut nodes, &mut tris);
         make_nvvm_bvh2_tri1(nodes, tris, geom_id)
     };
     make_gpu_device(
-        runtime_device(1, dev),
+        dev_id,
         nvvm_accelerator(dev),
         nvvm_intrinsics,
         make_nvvm_min_max(),
