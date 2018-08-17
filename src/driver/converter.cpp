@@ -9,6 +9,7 @@
 #include "bvh.h"
 #include "interface.h"
 #include "obj.h"
+#include "buffer.h"
 
 #ifdef WIN32
 #include <direct.h>
@@ -18,16 +19,17 @@
 #define create_directory(d) { umask(0); mkdir(d, 0777); }
 #endif
 
-enum class Isa : uint32_t {
+enum class Target : uint32_t {
     AVX2 = 1,
     AVX = 2,
     SSE42 = 3,
-    ASIMD = 4
+    ASIMD = 4,
+    NVVM = 5
 };
 
-inline Isa cpuid() {
+inline Target cpuid() {
     std::ifstream info(CPUINFO_PATH);
-    if (!info) return Isa(0);
+    if (!info) return Target(0);
 
     std::string line;
     std::vector<std::string> isa_list{
@@ -40,11 +42,11 @@ inline Isa cpuid() {
                 detected.insert(isa);
         }
     }
-    if (detected.count("avx2"))   return Isa::AVX2;
-    if (detected.count("avx"))    return Isa::AVX;
-    if (detected.count("sse4_2")) return Isa::SSE42;
-    if (detected.count("asimd"))  return Isa::ASIMD;
-    return Isa(0);
+    if (detected.count("avx2"))   return Target::AVX2;
+    if (detected.count("avx"))    return Target::AVX;
+    if (detected.count("sse4_2")) return Target::SSE42;
+    if (detected.count("asimd"))  return Target::ASIMD;
+    return Target(0);
 }
 
 void copy_file(const std::string& src, const std::string& dst) {
@@ -90,6 +92,12 @@ struct BvhNTriM<4, 4> {
     using Tri  = Tri4;
 };
 
+template <>
+struct BvhNTriM<2, 1> {
+    using Node = Node2;
+    using Tri  = Tri1;
+};
+
 template <size_t N, size_t M>
 class BvhNTriMAdapter {
     struct CostFn {
@@ -106,9 +114,9 @@ class BvhNTriMAdapter {
     using Node       = typename BvhNTriM<N, M>::Node;
     using Tri        = typename BvhNTriM<N, M>::Tri;
 
-    std::vector<Node>&       nodes_;
-    std::vector<Tri>&        tris_;
-    BvhBuilder               builder_;
+    std::vector<Node>& nodes_;
+    std::vector<Tri>&  tris_;
+    BvhBuilder         builder_;
 
 public:
     BvhNTriMAdapter(std::vector<Node>& nodes, std::vector<Tri>& tris)
@@ -189,7 +197,7 @@ private:
 
             nodes[parent].child[child] = ~tris.size();
 
-            // Group triangles by packets of 4
+            // Group triangles by packets of M
             for (size_t i = 0; i < ref_count; i += M) {
                 const size_t c = i + M <= ref_count ? M : ref_count - i;
 
@@ -231,36 +239,136 @@ private:
     };
 };
 
-template <typename T>
-static void compress(const T* in, size_t n, std::vector<char>& out) {
-    size_t in_size = sizeof(T) * n;
-    out.resize(LZ4_compressBound(in_size));
-    out.resize(LZ4_compress_default((const char*)in, out.data(), in_size, out.size()));
-}
+template <>
+class BvhNTriMAdapter<2, 1> {
+    struct CostFn {
+        static float leaf_cost(int count, float area) {
+            return count * area;
+        }
+        static float traversal_cost(float area) {
+            return area * 1.0f;
+        }
+    };
 
-template <typename T>
-static void write_buffer(std::ostream& os, const T* data, size_t n) {
-    size_t in_size = sizeof(T) * n;
-    std::vector<char> out;
-    compress(data, n, out);
-    size_t out_size = out.size();
-    os.write((char*)&in_size,  sizeof(uint32_t));
-    os.write((char*)&out_size, sizeof(uint32_t));
-    os.write(out.data(), out.size());
-}
+    using BvhBuilder = SplitBvhBuilder<2, CostFn>;
+    using Adapter    = BvhNTriMAdapter;
+    using Node       = Node2;
+    using Tri        = Tri1;
 
-template <typename T>
-static void write_buffer(const std::string& file_name, const T* data, size_t n) {
-    std::ofstream of(file_name, std::ios::binary);
-    write_buffer(of, data, n);
-}
+    std::vector<Node>& nodes_;
+    std::vector<Tri>&  tris_;
+    BvhBuilder         builder_;
+
+public:
+    BvhNTriMAdapter(std::vector<Node>& nodes, std::vector<Tri>& tris)
+        : nodes_(nodes), tris_(tris)
+    {}
+
+    void build(const std::vector<::Tri>& tris) {
+        builder_.build(tris, NodeWriter(*this), LeafWriter(*this, tris), 4);
+    }
+
+#ifdef STATISTICS
+    void print_stats() const override { builder_.print_stats(); }
+#endif
+
+private:
+    struct NodeWriter {
+        Adapter& adapter;
+
+        NodeWriter(Adapter& adapter)
+            : adapter(adapter)
+        {}
+
+        template <typename BBoxFn>
+        int operator() (int parent, int child, const BBox& /*parent_bb*/, size_t count, BBoxFn bboxes) {
+            auto& nodes = adapter.nodes_;
+
+            size_t i = nodes.size();
+            nodes.emplace_back();
+
+            if (parent >= 0 && child >= 0) {
+                assert(parent >= 0 && parent < nodes.size());
+                assert(child >= 0 && child < 2);
+                (&nodes[parent].left)[child] = i + 1;
+            }
+
+            assert(count == 2);
+
+            const BBox& bbox1 = bboxes(0);
+            nodes[i].min1[0] = bbox1.min.x;
+            nodes[i].min1[1] = bbox1.min.y;
+            nodes[i].min1[2] = bbox1.min.z;
+            nodes[i].max1[0] = bbox1.max.x;
+            nodes[i].max1[1] = bbox1.max.y;
+            nodes[i].max1[2] = bbox1.max.z;
+
+            const BBox& bbox2 = bboxes(1);
+            nodes[i].min2[0] = bbox2.min.x;
+            nodes[i].min2[1] = bbox2.min.y;
+            nodes[i].min2[2] = bbox2.min.z;
+            nodes[i].max2[0] = bbox2.max.x;
+            nodes[i].max2[1] = bbox2.max.y;
+            nodes[i].max2[2] = bbox2.max.z;
+
+            return i;
+        }
+    };
+
+    struct LeafWriter {
+        Adapter& adapter;
+        const std::vector<::Tri>& in_tris;
+
+        LeafWriter(Adapter& adapter, const std::vector<::Tri>& in_tris)
+            : adapter(adapter)
+            , in_tris(in_tris)
+        {}
+
+        template <typename RefFn>
+        void operator() (int parent, int child, const BBox& /*leaf_bb*/, size_t ref_count, RefFn refs) {
+            auto& nodes   = adapter.nodes_;
+            auto& tris    = adapter.tris_;
+
+            (&nodes[parent].left)[child] = ~tris.size();
+
+            for (size_t i = 0; i < ref_count; i++) {
+                const int id = refs(i);
+                auto& in_tri = in_tris[id];
+                const float3 e1 = in_tri.v0 - in_tri.v1;
+                const float3 e2 = in_tri.v2 - in_tri.v0;
+                const float3 n = cross(e1, e2);
+
+                Tri tri;
+                tri.v0[0] = in_tri.v0.x;
+                tri.v0[1] = in_tri.v0.y;
+                tri.v0[2] = in_tri.v0.z;
+
+                tri.e1[0] = e1.x;
+                tri.e1[1] = e1.y;
+                tri.e1[2] = e1.z;
+
+                tri.e2[0] = e2.x;
+                tri.e2[1] = e2.y;
+                tri.e2[2] = e2.z;
+
+                tri.nx = n.x;
+                tri.ny = n.y;
+                tri.id = id;
+
+                tris.emplace_back(tri);
+            }
+            assert(ref_count > 0);
+            tris.back().id |= 0x80000000;
+        }
+    };
+};
 
 static void write_tri_mesh(const obj::TriMesh& tri_mesh) {
-    write_buffer("data/vertices.bin",     tri_mesh.vertices.data(),     tri_mesh.vertices.size());
-    write_buffer("data/normals.bin",      tri_mesh.normals.data(),      tri_mesh.normals.size());
-    write_buffer("data/face_normals.bin", tri_mesh.face_normals.data(), tri_mesh.face_normals.size());
-    write_buffer("data/indices.bin",      tri_mesh.indices.data(),      tri_mesh.indices.size());
-    write_buffer("data/texcoords.bin",    tri_mesh.texcoords.data(),    tri_mesh.texcoords.size());
+    write_buffer("data/vertices.bin",     tri_mesh.vertices);
+    write_buffer("data/normals.bin",      tri_mesh.normals);
+    write_buffer("data/face_normals.bin", tri_mesh.face_normals);
+    write_buffer("data/indices.bin",      tri_mesh.indices);
+    write_buffer("data/texcoords.bin",    tri_mesh.texcoords);
 }
 
 template <size_t N, size_t M>
@@ -286,11 +394,11 @@ static void write_bvhn_trim(const obj::TriMesh& tri_mesh) {
     size_t tri_size  = sizeof(Tri);
     of.write((char*)&node_size, sizeof(uint32_t));
     of.write((char*)&tri_size,  sizeof(uint32_t));
-    write_buffer(of, nodes.data(), nodes.size());
-    write_buffer(of, tris .data(), tris .size());
+    write_buffer(of, nodes);
+    write_buffer(of, tris );
 }
 
-static bool convert_obj(const std::string& file_name, Isa isa, std::ostream& os) {
+static bool convert_obj(const std::string& file_name, Target target, std::ostream& os) {
     info("Converting OBJ file '", file_name, "'");
     obj::File obj_file;
     obj::MaterialLib mtl_lib;
@@ -339,12 +447,16 @@ static bool convert_obj(const std::string& file_name, Isa isa, std::ostream& os)
 
     os << "\nextern fn render(settings: &Settings, iter: i32) -> () {\n";
 
-    assert(isa != Isa(0));
-    switch (isa) {
-        case Isa::AVX2:  os << "    let device   = make_cpu_device_avx2();\n";  break;
-        case Isa::AVX:   os << "    let device   = make_cpu_device_avx();\n";   break;
-        case Isa::SSE42: os << "    let device   = make_cpu_device_sse42();\n"; break;
-        case Isa::ASIMD: os << "    let device   = make_cpu_device_asimd();\n"; break;
+    assert(isa != Target(0));
+    switch (target) {
+        case Target::AVX2:  os << "    let device   = make_avx2_device();\n";  break;
+        case Target::AVX:   os << "    let device   = make_avx_device();\n";   break;
+        case Target::SSE42: os << "    let device   = make_sse42_device();\n"; break;
+        case Target::ASIMD: os << "    let device   = make_asimd_device();\n"; break;
+        case Target::NVVM:  os << "    let device   = make_nvvm_device(0);\n";  break;
+        default:
+            assert(false);
+            break;
     }
 
     os << "    let renderer = make_path_tracing_renderer(32 /*max_path_len*/);\n"
@@ -385,8 +497,12 @@ static bool convert_obj(const std::string& file_name, Isa isa, std::ostream& os)
     // Generate BVHs
     info("Generating BVH for '", file_name, "'");
     std::remove("data/bvh.bin");
-    write_bvhn_trim<4, 4>(tri_mesh);
-    write_bvhn_trim<8, 4>(tri_mesh);
+    if (target == Target::NVVM)
+        write_bvhn_trim<2, 1>(tri_mesh);
+    else if (target == Target::ASIMD || target == Target::SSE42)
+        write_bvhn_trim<4, 4>(tri_mesh);
+    else
+        write_bvhn_trim<8, 4>(tri_mesh);
 
     // Generate images
     os << "\n    // Images\n"
@@ -447,7 +563,7 @@ static bool convert_obj(const std::string& file_name, Isa isa, std::ostream& os)
     os << "        _ => dummy_light\n"
        << "    };\n";
 
-    write_buffer("data/light_ids.bin", light_ids.data(), light_ids.size());
+    write_buffer("data/light_ids.bin", light_ids);
 
     os << "\n    // Mapping from primitive to light source\n"
        << "    let light_ids = device.load_buffer(\"data/light_ids.bin\") as &[i32];\n";
@@ -532,26 +648,78 @@ static bool convert_obj(const std::string& file_name, Isa isa, std::ostream& os)
        << "    };\n";
 
     os << "\n    renderer(scene, device, iter);\n"
+       << "      device.present();\n"
        << "}\n";
 
     info("Scene was converted successfully");
     return true;
 }
 
+static void usage() {
+    std::cout << "converter [options] file\n"
+              << "Available options:\n"
+              << "    -h     --help       Shows this message\n"
+              << "    -t     --target     Sets the target device (one of: sse42, avx, avx2, asimd, nvvm)\n"
+              << std::flush;
+}
+
+static bool check_option(int i, int argc, char** argv) {
+    if (i + 1 >= argc) {
+        std::cerr << "Missing argument for '" << argv[i] << "'. Aborting." << std::endl;
+        return false;
+    }
+    return true;
+}
+
 int main(int argc, char** argv) {
     if (argc <= 1) {
-        std::cerr << "Not enough arguments." << std::endl;
+        std::cerr << "Not enough arguments. Run with --help to get a list of options." << std::endl;
         return 1;
     }
 
-    auto isa = cpuid();
-    if (isa == Isa(0)) {
-        std::cerr << "No vector instruction set detected. Aborting." << std::endl;
-        return 1;
+    std::string obj_file;
+    auto target = Target(0);
+    for (int i = 1; i < argc; ++i) {
+        if (argv[i][0] == '-') {
+            if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) {
+                usage();
+                return 0;
+            } else if (!strcmp(argv[i], "-t") || !strcmp(argv[i], "--target")) {
+                if (!check_option(i, argc, argv)) return 1;
+                i++;
+                if (!strcmp(argv[i], "sse42"))
+                    target = Target::SSE42;
+                else if (!strcmp(argv[i], "avx"))
+                    target = Target::AVX;
+                else if (!strcmp(argv[i], "avx2"))
+                    target = Target::AVX2;
+                else if (!strcmp(argv[i], "asimd"))
+                    target = Target::ASIMD;
+                else if (!strcmp(argv[i], "nvvm"))
+                    target = Target::NVVM;
+            } else {
+                std::cerr << "Unknown option '" << argv[i] << "'. Aborting." << std::endl;
+                return 1;
+            }
+        } else {
+            if (obj_file != "") {
+                std::cerr << "Only one OBJ file can be converted. Aborting." << std::endl;
+                return 1;
+            }
+            obj_file = argv[i];
+        }
+    }
+
+    if (target == Target(0)) {
+        auto target = cpuid();
+        if (target == Target(0)) {
+            std::cerr << "No vector instruction set detected. Aborting." << std::endl;
+            return 1;
+        }
     }
 
     std::ofstream of("main.impala");
-    if (!convert_obj(argv[1], isa, of))
+    if (!convert_obj(obj_file, target, of))
         return 1;
     return 0;
 }

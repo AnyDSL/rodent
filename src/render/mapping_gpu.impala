@@ -1,0 +1,137 @@
+// Trace function ------------------------------------------------------------------
+
+fn @gpu_get_film_data(dev_id: i32) -> (&mut [f32], i32, i32) {
+    let mut film_pixels : &mut [f32];
+    let mut film_width  : i32;
+    let mut film_height : i32;
+    rodent_get_film_data(dev_id, &mut film_pixels, &mut film_width, &mut film_height);
+    (film_pixels, film_width, film_height)
+}
+
+fn @gpu_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics, min_max: MinMax, scene: Scene, path_tracer: PathTracer) -> () {
+    let (film_pixels, film_width, film_height) = gpu_get_film_data(dev_id);
+
+    let bvh = scene.geometries(0).bvh; // TODO: Support instancing
+
+    let (bx, by, bz) = (8, 8, 1);
+    let (gx, gy, gz) = (round_up(film_width, bx), round_up(film_height, by), bz);
+    with tid, bid, bdim, gdim, gid in acc.exec((gx, gy, gz), (bx, by, bz)) {
+        let (gidx, gidy, _) = gid;
+        let (x, y) = (gidx(), gidy());
+        if x >= film_width || y >= film_height {
+            break()
+        }
+        let (init_ray, init_state) = @@(path_tracer.on_emit)(x, y, film_width, film_height);
+
+        let mut ray = init_ray;
+        let mut state = init_state;
+        let mut final_color = make_color(0.0f, 0.0f, 0.0f);
+
+        while true {
+            let hit = gpu_traverse_single_helper(intrinsics, min_max, ray, bvh, false /*any_hit*/, 1 /*root*/);
+            if true || hit.geom_id == -1 {
+                break()
+            }
+
+            let geom   = scene.geometries(hit.geom_id);
+            let surf   = geom.surface_element(ray, hit);
+            let shader = scene.shaders(geom.shader_id(hit));
+            let mat    = shader(cpu_intrinsics, scene, ray, hit, surf);
+
+            for once() {
+                @@(path_tracer.on_hit)(ray, hit, &mut state, surf, mat, @ |color| -> ! {
+                    final_color = color_add(final_color, color);
+                    break()
+                });
+            }
+
+            let mut trace_shadow;
+            let mut shadow_color;
+            let mut shadow_ray;
+            for once() {
+                @@(path_tracer.on_shadow)(ray, hit, &mut state, surf, mat, @ |ray, color| -> ! {
+                    trace_shadow = true;
+                    shadow_color = color;
+                    shadow_ray   = ray;
+                    break()
+                }, @ || -> ! {
+                    trace_shadow = false;
+                    break()
+                })
+            }
+
+            let mut done = true;
+            for once() {
+                @@(path_tracer.on_bounce)(ray, hit, &mut state, surf, mat, @ |new_ray, new_state| -> ! {
+                    ray   = new_ray;
+                    state = new_state;
+                    done  = false;
+                    break()
+                }, break)
+            }
+
+            if trace_shadow && gpu_traverse_single_helper(intrinsics, min_max, shadow_ray, bvh, true /*any_hit*/, 1 /*root*/).prim_id == -1 {
+                final_color = color_add(final_color, shadow_color);
+            }
+
+            if done { break() }
+        }
+
+        let pixel = 3 * (y * film_width + x);
+        film_pixels(pixel + 0) += final_color.r;
+        film_pixels(pixel + 1) += final_color.g;
+        film_pixels(pixel + 2) += final_color.b;
+    }
+    acc.sync()
+}
+
+// GPU device ----------------------------------------------------------------------
+
+fn @make_gpu_device(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics, min_max: MinMax, load_bvh: fn (&[u8], i32) -> Bvh) -> Device {
+    Device {
+        intrinsics: intrinsics,
+        trace: @ |scene, path_tracer| {
+            gpu_trace(
+                dev_id,
+                acc,
+                intrinsics,
+                min_max,
+                scene,
+                path_tracer
+            )
+        },
+        present: @ || rodent_present(dev_id),
+        load_buffer: @ |filename| rodent_load_buffer(dev_id, filename),
+        load_bvh: load_bvh,
+        load_png: @ |filename| {
+            let mut pixel_data;
+            let mut width;
+            let mut height;
+            rodent_load_png(dev_id, filename, &mut pixel_data, &mut width, &mut height);
+            make_image_rgba32(pixel_data as &[u32], width, height)
+        },
+        load_jpg: @ |filename| {
+            let mut pixel_data;
+            let mut width;
+            let mut height;
+            rodent_load_jpg(dev_id, filename, &mut pixel_data, &mut width, &mut height);
+            make_image_rgba32(pixel_data as &[u32], width, height)
+        }
+    }
+}
+
+fn @make_nvvm_device(dev: i32) -> Device {
+    let load_bvh = @ |filename, geom_id| {
+        let mut nodes;
+        let mut tris;
+        rodent_load_bvh2_tri1(dev, filename, &mut nodes, &mut tris);
+        make_nvvm_bvh2_tri1(nodes, tris, geom_id)
+    };
+    make_gpu_device(
+        runtime_device(1, dev),
+        nvvm_accelerator(dev),
+        nvvm_intrinsics,
+        make_nvvm_min_max(),
+        load_bvh
+    )
+}

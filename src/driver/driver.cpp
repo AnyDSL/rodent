@@ -38,9 +38,10 @@ struct Camera {
     }
 };
 
-void setup_cpu_interface(size_t, size_t);
-float* get_cpu_pixels();
-void cleanup_cpu_interface();
+void setup_interface(size_t, size_t);
+float* get_pixels();
+void clear_pixels();
+void cleanup_interface();
 
 static bool handle_events(uint32_t& iter, Camera& cam) {
     static bool camera_on = false;
@@ -101,7 +102,7 @@ static bool handle_events(uint32_t& iter, Camera& cam) {
 }
 
 static void update_texture(uint32_t* buf, SDL_Texture* texture, size_t width, size_t height, uint32_t iter) {
-    auto film = get_cpu_pixels();
+    auto film = get_pixels();
     auto inv_iter = 1.0f / iter;
     auto gamma = 0.5f;
     for (size_t y = 0; y < height; ++y) {
@@ -117,10 +118,6 @@ static void update_texture(uint32_t* buf, SDL_Texture* texture, size_t width, si
         }
     }
     SDL_UpdateTexture(texture, nullptr, buf, width * sizeof(uint32_t));
-}
-
-static void clear_film(size_t width, size_t height) {
-    memset(get_cpu_pixels(), 0, sizeof(float) * 3 * width * height);
 }
 
 int main(int /*argc*/, char** /*argv*/) {
@@ -150,7 +147,7 @@ int main(int /*argc*/, char** /*argv*/) {
 
     std::unique_ptr<uint32_t> buf(new uint32_t[width * height]);
 
-    setup_cpu_interface(width, height);
+    setup_interface(width, height);
 
     float fov = 60.0f;
     bool done = false;
@@ -169,7 +166,7 @@ int main(int /*argc*/, char** /*argv*/) {
         done = handle_events(iter, cam);
 
         if (iter == 0)
-            clear_film(width, height);
+            clear_pixels();
 
         Settings settings {
             Vec3 { cam.eye.x, cam.eye.y, cam.eye.z },
@@ -200,7 +197,7 @@ int main(int /*argc*/, char** /*argv*/) {
         SDL_RenderPresent(renderer);
     }
 
-    cleanup_cpu_interface();
+    cleanup_interface();
 
     SDL_DestroyTexture(texture);
     SDL_DestroyRenderer(renderer);

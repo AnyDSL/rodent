@@ -1,7 +1,13 @@
 set(CPUINFO_PATH "/proc/cpuinfo" CACHE STRING "Path to the CPU info file on the system")
+set(TARGET_DEVICE "" CACHE STRING "Target device for the converter tool. Must be one of: sse42, avx, avx2, asimd, nvvm")
 set(SCENE_FILE "" CACHE FILEPATH "Absolute path to an OBJ scene")
 if (SCENE_FILE STREQUAL "")
     message(FATAL_ERROR "Please specify a valid OBJ scene in the SCENE_FILE variable")
+endif()
+if (NOT TARGET_DEVICE STREQUAL "")
+    set(TARGET_OPTION "--target" "${TARGET_DEVICE}")
+else()
+    set(TARGET_OPTION "")
 endif()
 
 set(RODENT_SRCS
@@ -19,7 +25,9 @@ set(RODENT_SRCS
     render/material.impala
     render/renderer.impala
     render/scene.impala
+    render/driver.impala
     render/mapping_cpu.impala
+    render/mapping_gpu.impala
     traversal/intersection.impala
     traversal/stack.impala
     traversal/mapping_cpu.impala
@@ -27,7 +35,7 @@ set(RODENT_SRCS
 
 set(DRIVER_SRCS
     driver/driver.cpp
-    driver/interface_cpu.cpp
+    driver/interface.cpp
     driver/interface.h
     driver/obj.cpp
     driver/obj.h
@@ -74,13 +82,15 @@ if (COLORIZE)
 endif()
 
 add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/main.impala
-                   COMMAND converter ${SCENE_FILE}
+                   COMMAND converter ${SCENE_FILE} ${TARGET_OPTION}
                    COMMAND ${CMAKE_COMMAND} -E rename ${CMAKE_BINARY_DIR}/main.impala ${CMAKE_CURRENT_SOURCE_DIR}/main.impala
                    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
                    DEPENDS ${SCENE_FILE} converter)
 
 set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/main.impala PROPERTIES GENERATED TRUE)
 
-add_executable(rodent ${DRIVER_SRCS} ${RODENT_OBJS})
+add_library(driver ${DRIVER_SRCS})
+
+add_executable(rodent ${RODENT_OBJS})
 target_include_directories(rodent PUBLIC ${PNG_INCLUDE_DIRS} ${JPEG_INCLUDE_DIRS} ${SDL2_INCLUDE_DIRS} ${TBB_INCLUDE_DIRS} ${LZ4_INCLUDE_DIR})
-target_link_libraries(rodent ${AnyDSL_runtime_LIBRARIES} ${PNG_LIBRARIES} ${JPEG_LIBRARIES} ${SDL2_LIBRARY} ${TBB_LIBRARIES} ${LZ4_LIBRARY})
+target_link_libraries(rodent driver ${AnyDSL_runtime_LIBRARIES} ${PNG_LIBRARIES} ${JPEG_LIBRARIES} ${SDL2_LIBRARY} ${TBB_LIBRARIES} ${LZ4_LIBRARY})

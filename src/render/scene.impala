@@ -17,6 +17,7 @@ struct Device {
     intrinsics: Intrinsics,
 
     trace: fn (Scene, PathTracer) -> (),
+    present: fn () -> (),
     load_buffer: fn (&[u8]) -> &[i8],
     load_bvh: fn (&[u8], i32) -> Bvh,
     load_png: fn (&[u8]) -> Image,

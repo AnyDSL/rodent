@@ -97,6 +97,8 @@ TRACE_FUNC
     float   idiry;
     float   idirz;
 
+    static constexpr unsigned all_mask = unsigned(-1);
+
     // Initialize persistent threads.
 
     __shared__ volatile int nextRayArray[MaxBlockHeight]; // Current ray index in global buffer.
@@ -111,7 +113,7 @@ TRACE_FUNC
         // Fetch new rays from the global pool using lane 0.
 
         const bool          terminated     = nodeAddr==EntrypointSentinel;
-        const unsigned int  maskTerminated = __ballot(terminated);
+        const unsigned int  maskTerminated = __ballot_sync(all_mask, terminated);
         const int           numTerminated  = __popc(maskTerminated);
         const int           idxTerminated  = __popc(maskTerminated & ((1u<<tidx)-1));
 
@@ -239,7 +241,7 @@ TRACE_FUNC
                 asm("{\n"
                     "   .reg .pred p;               \n"
                     "setp.ge.s32        p, %1, 0;   \n"
-                    "vote.ballot.b32    %0,p;       \n"
+                    "vote.sync.ballot.b32    %0,p,0xffffffff;       \n"
                     "}"
                     : "=r"(mask)
                     : "r"(leafAddr));
@@ -356,7 +358,7 @@ TRACE_FUNC
 
             // DYNAMIC FETCH
 
-            if( __popc(__ballot(true)) < DYNAMIC_FETCH_THRESHOLD )
+            if( __popc(__ballot_sync(all_mask, true)) < DYNAMIC_FETCH_THRESHOLD )
                 break;
 
         } // traversal

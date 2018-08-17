@@ -1,0 +1,55 @@
+// Driver functions ----------------------------------------------------------------
+
+extern "C" {
+    fn rodent_get_film_data(i32, &mut &mut [f32], &mut i32, &mut i32) -> ();
+    fn rodent_present(i32) -> ();
+    fn rodent_get_primary_stream(&mut PrimaryStream, i32) -> ();
+    fn rodent_get_secondary_stream(&mut SecondaryStream, i32) -> ();
+
+    fn rodent_load_buffer(i32, &[u8]) -> &[i8];
+    fn rodent_load_bvh2_tri1(i32, &[u8], &mut &[Node2], &mut &[Tri1]) -> ();
+    fn rodent_load_bvh4_tri4(i32, &[u8], &mut &[Node4], &mut &[Tri4]) -> ();
+    fn rodent_load_bvh8_tri4(i32, &[u8], &mut &[Node8], &mut &[Tri4]) -> ();
+    fn rodent_load_png(i32, &[u8], &mut &[u8], &mut i32, &mut i32) -> ();
+    fn rodent_load_jpg(i32, &[u8], &mut &[u8], &mut i32, &mut i32) -> ();
+}
+
+// Ray streams ---------------------------------------------------------------------
+
+struct RayStream {
+    id: &mut [i32], // this field is also used to indicate if the ray is alive
+    org_x: &mut [f32],
+    org_y: &mut [f32],
+    org_z: &mut [f32],
+    dir_x: &mut [f32],
+    dir_y: &mut [f32],
+    dir_z: &mut [f32],
+    tmin: &mut [f32],
+    tmax: &mut [f32],
+}
+
+struct PrimaryStream {
+    size: i32,
+    rays: RayStream,
+    shader_id: &mut [i32],
+    geom_id: &mut [i32],
+    prim_id: &mut [i32],
+    t: &mut [f32],
+    u: &mut [f32],
+    v: &mut [f32],
+    rnd: &mut [RndState],
+    mis: &mut [f32],
+    contrib_r: &mut [f32],
+    contrib_g: &mut [f32],
+    contrib_b: &mut [f32],
+    depth: &mut [i32]
+}
+
+struct SecondaryStream {
+    size: i32,
+    rays: RayStream,
+    prim_id: &mut [i32],
+    color_r: &mut [f32],
+    color_g: &mut [f32],
+    color_b: &mut [f32]
+}
