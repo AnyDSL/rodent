@@ -213,7 +213,7 @@ inline void get_ray_stream(RayStream& rays, float* ptr, size_t capacity) {
 
 extern "C" {
 
-void rodent_get_film_data(int32_t dev, float** pixels, int* width, int* height) {
+void rodent_get_film_data(int32_t dev, float** pixels, int32_t* width, int32_t* height) {
     if (dev != 0) {
         auto& device = interface->devices[dev];
         if (!device.film_pixels.size()) {
@@ -266,7 +266,7 @@ void rodent_load_bvh8_tri4(int32_t dev, const char* file, Node8** nodes, Tri4** 
     *tris  = const_cast<Tri4*>(bvh.tris.data());
 }
 
-void rodent_get_primary_stream(PrimaryStream* primary, int size) {
+void rodent_get_primary_stream(PrimaryStream* primary, int32_t size) {
     auto& array = interface->primary_stream(size);
     auto capacity = array.size() / 21;
     primary->size = 0;
@@ -285,7 +285,7 @@ void rodent_get_primary_stream(PrimaryStream* primary, int size) {
     primary->depth     = (int*)array.data() + 20 * capacity;
 }
 
-void rodent_get_secondary_stream(SecondaryStream* secondary, int size) {
+void rodent_get_secondary_stream(SecondaryStream* secondary, int32_t size) {
     auto& array = interface->secondary_stream(size);
     auto capacity = array.size() / 13;
     secondary->size = 0;

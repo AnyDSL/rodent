@@ -413,6 +413,14 @@ static bool convert_obj(const std::string& file_name, Target target, std::ostrea
         }
     }
 
+    // Check that all materials exist
+    for (auto& mtl_name : obj_file.materials) {
+        if (mtl_name != "" && !mtl_lib.count(mtl_name)) {
+            warn("Missing material definition for '", mtl_name, "'. Replaced by dummy material.");
+            mtl_name = "";
+        }
+    }
+
     std::unordered_map<std::string, size_t> images;
     for (auto& pair : mtl_lib) {
         auto & mat = pair.second;
@@ -573,8 +581,11 @@ static bool convert_obj(const std::string& file_name, Target target, std::ostrea
     os << "\n    // Shaders\n";
     os << "    let dummy_shader = @ |math, scene, ray, hit, surf| make_material(make_diffuse_bsdf(surf, make_color(0.0f, 1.0f, 1.0f)));\n";
     for (auto& mtl_name : obj_file.materials) {
+        if (mtl_name == "")
+            continue;
         auto it = mtl_lib.find(mtl_name);
-        if (mtl_name == "" || it == mtl_lib.end()) continue;
+        if (it == mtl_lib.end())
+            continue;
 
         auto& mat = it->second;
         bool has_emission = mat.ke != rgb(0.0f) || mat.map_ke != "";

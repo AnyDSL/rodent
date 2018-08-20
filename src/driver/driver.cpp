@@ -104,7 +104,7 @@ static bool handle_events(uint32_t& iter, Camera& cam) {
 static void update_texture(uint32_t* buf, SDL_Texture* texture, size_t width, size_t height, uint32_t iter) {
     auto film = get_pixels();
     auto inv_iter = 1.0f / iter;
-    auto gamma = 0.5f;
+    auto inv_gamma = 1.0f / 2.2f;
     for (size_t y = 0; y < height; ++y) {
         for (size_t x = 0; x < width; ++x) {
             auto r = film[(y * width + x) * 3 + 0];
@@ -112,9 +112,9 @@ static void update_texture(uint32_t* buf, SDL_Texture* texture, size_t width, si
             auto b = film[(y * width + x) * 3 + 2];
 
             buf[y * width + x] =
-                (uint32_t(clamp(pow(r * inv_iter, gamma), 0.0f, 1.0f) * 255.0f) << 16) |
-                (uint32_t(clamp(pow(g * inv_iter, gamma), 0.0f, 1.0f) * 255.0f) << 8)  |
-                 uint32_t(clamp(pow(b * inv_iter, gamma), 0.0f, 1.0f) * 255.0f);
+                (uint32_t(clamp(pow(r * inv_iter, inv_gamma), 0.0f, 1.0f) * 255.0f) << 16) |
+                (uint32_t(clamp(pow(g * inv_iter, inv_gamma), 0.0f, 1.0f) * 255.0f) << 8)  |
+                 uint32_t(clamp(pow(b * inv_iter, inv_gamma), 0.0f, 1.0f) * 255.0f);
         }
     }
     SDL_UpdateTexture(texture, nullptr, buf, width * sizeof(uint32_t));

@@ -8,7 +8,7 @@ fn @gpu_get_film_data(dev_id: i32) -> (&mut [f32], i32, i32) {
     (film_pixels, film_width, film_height)
 }
 
-fn @gpu_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics, min_max: MinMax, scene: Scene, path_tracer: PathTracer) -> () {
+fn @gpu_mega_kernel_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics, min_max: MinMax, scene: Scene, path_tracer: PathTracer) -> () {
     let (film_pixels, film_width, film_height) = gpu_get_film_data(dev_id);
 
     let bvh = scene.geometries(0).bvh; // TODO: Support instancing
@@ -91,7 +91,7 @@ fn @make_gpu_device(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics, min_m
     Device {
         intrinsics: intrinsics,
         trace: @ |scene, path_tracer| {
-            gpu_trace(
+            gpu_mega_kernel_trace(
                 dev_id,
                 acc,
                 intrinsics,
