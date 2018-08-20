@@ -1,6 +1,6 @@
 // Opaque camera object
 struct Camera {
-    // Generates a ray for a point on the image plane (in [0, 1]^2)
+    // Generates a ray for a point on the image plane (in [-1, 1]^2)
     generate_ray: fn (Intrinsics, f32, f32) -> Ray,
     // Projects a 3D point on the image plane
     project: fn (Intrinsics, Vec3) -> Vec3,
@@ -35,8 +35,8 @@ fn @make_perspective_camera(eye: Vec3, view: Mat3x3, w: f32, h: f32) -> Camera {
         generate_ray: @ |math, x, y| {
             let d = vec3_normalize(math,
                 vec3_add(
-                    vec3_add(vec3_mulf(right, w * (x - 0.5f)),
-                             vec3_mulf(up, h * (y - 0.5f))),
+                    vec3_add(vec3_mulf(right, w * x),
+                             vec3_mulf(up, h * y)),
                     dir
                 )
             );
