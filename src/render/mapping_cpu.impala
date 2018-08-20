@@ -168,7 +168,8 @@ fn @cpu_generate_rays( primary: PrimaryStream
                      , id: &mut i32
                      , xmin: i32
                      , ymin: i32
-                     , tile_size: i32
+                     , xmax: i32
+                     , ymax: i32
                      , film_width: i32
                      , film_height: i32
                      , vector_width: i32
@@ -176,14 +177,15 @@ fn @cpu_generate_rays( primary: PrimaryStream
     let write_ray = make_ray_stream_writer(primary.rays, 1);
     let write_state = make_primary_stream_state_writer(primary, 1);
     let first_id = *id;
-    let num_rays = cpu_intrinsics.min(tile_size * tile_size - first_id, capacity - primary.size);
-    let tile_div = make_fast_div(tile_size as u32);
+    let (tile_width, tile_height) = (xmax - xmin, ymax - ymin);
+    let num_rays = cpu_intrinsics.min(tile_width * tile_height - first_id, capacity - primary.size);
+    let tile_div = make_fast_div(tile_width as u32);
     for i, _ in vectorized_range(vector_width, 0, num_rays) {
         let in_tile_id = first_id + i;
 
         // Compute x, y of ray within tile
         let in_tile_y = fast_div(tile_div, in_tile_id as u32) as i32;
-        let in_tile_x = in_tile_id - in_tile_y * tile_size;
+        let in_tile_x = in_tile_id - in_tile_y * tile_width;
         let x = xmin + in_tile_x;
         let y = ymin + in_tile_y;
         let (ray, state) = @@(path_tracer.on_emit)(x, y, film_width, film_height);
@@ -231,11 +233,11 @@ fn @cpu_trace( scene: Scene
         rodent_get_secondary_stream(&mut secondary, capacity);
 
         let mut id = 0;
-        let num_rays = tile_size * tile_size;
+        let num_rays = (ymax - ymin) * (xmax - xmin);
         while id < num_rays || primary.size > 0 {
             // (Re-)generate primary rays
             if primary.size < capacity {
-                primary.size = cpu_generate_rays(primary, capacity, path_tracer, &mut id, xmin, ymin, tile_size, film_width, film_height, vector_width);
+                primary.size = cpu_generate_rays(primary, capacity, path_tracer, &mut id, xmin, ymin, xmax, ymax, film_width, film_height, vector_width);
             }
 
             // Trace primary rays
@@ -332,7 +334,7 @@ fn @cpu_trace( scene: Scene
             // Filter terminated rays
             secondary.size = primary.size;
             primary.size   = cpu_compact_primary(primary);
-  
+
             // Compact and trace secondary rays
             secondary.size = cpu_compact_secondary(secondary);
             if likely(secondary.size > 0) {

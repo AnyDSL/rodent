@@ -153,7 +153,7 @@ private:
                 nodes[parent].child[child] = i + 1;
             }
 
-            assert(count >= 1 && count <= N);
+            assert(count >= 2 && count <= N);
 
             for (size_t j = 0; j < count; j++) {
                 const BBox& bbox = bboxes(j);
