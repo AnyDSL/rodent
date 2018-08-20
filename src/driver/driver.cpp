@@ -26,8 +26,8 @@ struct Camera {
     }
 
     void rotate(float yaw, float pitch) {
-        dir = ::rotate(dir, right,  pitch);
-        dir = ::rotate(dir, up,    -yaw);
+        dir = ::rotate(dir, right,  -pitch);
+        dir = ::rotate(dir, up,     -yaw);
         dir = normalize(dir);
         right = normalize(cross(dir, up));
         up = normalize(cross(right, dir));
@@ -156,8 +156,8 @@ int main(int /*argc*/, char** /*argv*/) {
     uint32_t iter = 0;
 
     Camera cam(
-        float3(0.0, 2.0f, -7.5f),
-        float3(-3.0f, -1.4f, 9.5f),
+        float3(0, 0.5, 3),
+        float3(0, 0, -1),
         float3(0.0f, 1.0f, 0.0f),
         fov,
         float(width) / float(height));
