@@ -3,6 +3,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <cstring>
+#include <limits>
 
 #include <lz4.h>
 
@@ -152,7 +153,7 @@ private:
                 nodes[parent].child[child] = i + 1;
             }
 
-            assert(count >= 2 && count <= N);
+            assert(count >= 1 && count <= N);
 
             for (size_t j = 0; j < count; j++) {
                 const BBox& bbox = bboxes(j);
@@ -293,7 +294,7 @@ private:
                 nodes[parent].child[child] = i + 1;
             }
 
-            assert(count == 2);
+            assert(count >= 1 && count <= 2);
 
             const BBox& bbox1 = bboxes(0);
             nodes[i].bounds[0] = bbox1.min.x;
@@ -303,13 +304,22 @@ private:
             nodes[i].bounds[3] = bbox1.max.y;
             nodes[i].bounds[5] = bbox1.max.z;
 
-            const BBox& bbox2 = bboxes(1);
-            nodes[i].bounds[ 6] = bbox2.min.x;
-            nodes[i].bounds[ 8] = bbox2.min.y;
-            nodes[i].bounds[10] = bbox2.min.z;
-            nodes[i].bounds[ 7] = bbox2.max.x;
-            nodes[i].bounds[ 9] = bbox2.max.y;
-            nodes[i].bounds[11] = bbox2.max.z;
+            if (count == 2) {
+                const BBox& bbox2 = bboxes(1);
+                nodes[i].bounds[ 6] = bbox2.min.x;
+                nodes[i].bounds[ 8] = bbox2.min.y;
+                nodes[i].bounds[10] = bbox2.min.z;
+                nodes[i].bounds[ 7] = bbox2.max.x;
+                nodes[i].bounds[ 9] = bbox2.max.y;
+                nodes[i].bounds[11] = bbox2.max.z;
+            } else {
+                nodes[i].bounds[ 6] =  std::numeric_limits<float>::infinity();
+                nodes[i].bounds[ 8] =  std::numeric_limits<float>::infinity();
+                nodes[i].bounds[10] =  std::numeric_limits<float>::infinity();
+                nodes[i].bounds[ 7] = -std::numeric_limits<float>::infinity();
+                nodes[i].bounds[ 9] = -std::numeric_limits<float>::infinity();
+                nodes[i].bounds[11] = -std::numeric_limits<float>::infinity();
+            }
 
             return i;
         }
@@ -435,7 +445,7 @@ static bool convert_obj(const std::string& file_name, Target target, std::ostrea
 
     os << "\nextern fn render(settings: &Settings, iter: i32) -> () {\n";
 
-    assert(isa != Target(0));
+    assert(target != Target(0));
     switch (target) {
         case Target::AVX2:  os << "    let device   = make_avx2_device();\n";  break;
         case Target::AVX:   os << "    let device   = make_avx_device();\n";   break;
@@ -525,6 +535,8 @@ static bool convert_obj(const std::string& file_name, Target target, std::ostrea
     size_t num_lights = 0;
     for (size_t i = 0; i < tri_mesh.indices.size(); i += 4) {
         auto& mtl_name = obj_file.materials[tri_mesh.indices[i + 3]];
+        if (mtl_name == "")
+            continue;
         auto& mat = mtl_lib.find(mtl_name)->second;
         if (mat.ke == rgb(0.0f) && mat.map_ke == "")
             continue;
@@ -699,7 +711,7 @@ int main(int argc, char** argv) {
     }
 
     if (target == Target(0)) {
-        auto target = cpuid();
+        target = cpuid();
         if (target == Target(0)) {
             std::cerr << "No vector instruction set detected. Aborting." << std::endl;
             return 1;
