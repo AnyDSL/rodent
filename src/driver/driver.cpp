@@ -121,8 +121,8 @@ static void update_texture(uint32_t* buf, SDL_Texture* texture, size_t width, si
 }
 
 int main(int /*argc*/, char** /*argv*/) {
-    size_t width  = 1080;
-    size_t height = 720;
+    size_t width  = 512;
+    size_t height = 512;
 
     if (SDL_Init(SDL_INIT_VIDEO) != 0)
         error("Cannot initialize SDL.");
@@ -156,7 +156,7 @@ int main(int /*argc*/, char** /*argv*/) {
     uint32_t iter = 0;
 
     Camera cam(
-        float3(0, 0.9, 2.5),
+        float3(0, 1.0, 2.5),
         float3(0, 0, -1),
         float3(0.0f, 1.0f, 0.0f),
         fov,

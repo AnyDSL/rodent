@@ -43,7 +43,7 @@ fn @make_material(bsdf: Bsdf) -> Material {
     }
 }
 
-// Creates a material with no emission
+// Creates a material that emits light
 fn @make_emissive_material(surf: SurfaceElement, bsdf: Bsdf, light: Light) -> Material {
     Material {
         bsdf: bsdf,
@@ -184,11 +184,18 @@ fn @make_mix_bsdf(mat1: Bsdf, mat2: Bsdf, k: f32) -> Bsdf {
                  k),
         sample: @ |rnd, out_dir, adjoint| {
             let u = randf(rnd);
-            if u < k {
+            let use_mat1 = u < k;
+            let s = if use_mat1 {
                 mat1.sample(rnd, out_dir, adjoint)
             } else {
                 mat2.sample(rnd, out_dir, adjoint)
-            }
+            };
+            let pdf = if use_mat1 {
+                lerp(s.pdf, mat2.pdf(s.in_dir, out_dir), k)
+            } else {
+                lerp(mat1.pdf(s.in_dir, out_dir), s.pdf, k)
+            };
+            BsdfSample { in_dir: s.in_dir, pdf: pdf, color: s.color }
         },
         is_specular: mat1.is_specular & mat2.is_specular
     }

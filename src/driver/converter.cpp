@@ -490,7 +490,7 @@ static bool convert_obj(const std::string& file_name, Target target, std::ostrea
             break;
     }
 
-    os << "    let renderer = make_path_tracing_renderer(32 /*max_path_len*/);\n"
+    os << "    let renderer = make_path_tracing_renderer(8 /*max_path_len*/);\n"
        << "    let math     = device.intrinsics;\n";
 
     // Setup camera

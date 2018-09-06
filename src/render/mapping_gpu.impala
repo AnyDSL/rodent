@@ -25,13 +25,18 @@ fn @gpu_traverse_primary(primary: PrimaryStream, acc: Accelerator, intrinsics: I
     acc.sync();
 }
 
-fn @gpu_traverse_secondary(secondary: SecondaryStream, acc: Accelerator, intrinsics: Intrinsics, min_max: MinMax, scene: Scene) -> () {
+fn @gpu_traverse_secondary(secondary: SecondaryStream, acc: Accelerator, intrinsics: Intrinsics, min_max: MinMax, scene: Scene, film_pixels: &mut [f32]) -> () {
     let block_w = 64;
     let grid  = (round_up(secondary.size, block_w), 1, 1);
     let block = (block_w, 1, 1);
     with work_item in acc.exec(grid, block) {
         let gid = work_item.gidx();
-        if gid >= secondary.size || secondary.rays.id(gid) < 0 {
+        if gid >= secondary.size {
+            break()
+        }
+
+        let pixel = secondary.rays.id(gid);
+        if pixel < 0 {
             break()
         }
 
@@ -41,11 +46,14 @@ fn @gpu_traverse_secondary(secondary: SecondaryStream, acc: Accelerator, intrins
             min_max,
             ray,
             scene.bvh,
-            false /*any_hit*/,
+            true /*any_hit*/,
             1 /*root*/
         );
-
-        make_secondary_stream_hit_writer(secondary, 1)(gid, 0, hit);
+        if hit.geom_id < 0 {
+            film_pixels(pixel * 3 + 0) += secondary.color_r(gid);
+            film_pixels(pixel * 3 + 1) += secondary.color_g(gid);
+            film_pixels(pixel * 3 + 2) += secondary.color_b(gid);
+        }
     }
     acc.sync();
 }
@@ -95,8 +103,8 @@ fn @gpu_shade(acc: Accelerator, scene: Scene, path_tracer: PathTracer, film_pixe
 
         for once() {
             @@(path_tracer.on_bounce)(ray, hit, &mut state, surf, mat, @ |new_ray, new_state| -> ! {
-                make_ray_stream_writer(primary.rays, 1)(ray_id, 0, ray);
-                make_primary_stream_state_writer(primary, 1)(ray_id, 0, state);
+                make_ray_stream_writer(primary.rays, 1)(ray_id, 0, new_ray);
+                make_primary_stream_state_writer(primary, 1)(ray_id, 0, new_state);
                 break()
             }, @ || -> ! {
                 primary.rays.id(ray_id) = -1;
@@ -104,6 +112,33 @@ fn @gpu_shade(acc: Accelerator, scene: Scene, path_tracer: PathTracer, film_pixe
             })
         }
     }
+}
+
+fn @copy_primary_ray( primary: PrimaryStream
+                    , other_primary: PrimaryStream
+                    , src_id: i32
+                    , dst_id: i32
+                    ) -> () {
+    other_primary.rays.id(dst_id)    = primary.rays.id(src_id);
+    other_primary.rays.org_x(dst_id) = primary.rays.org_x(src_id);
+    other_primary.rays.org_y(dst_id) = primary.rays.org_y(src_id);
+    other_primary.rays.org_z(dst_id) = primary.rays.org_z(src_id);
+    other_primary.rays.dir_x(dst_id) = primary.rays.dir_x(src_id);
+    other_primary.rays.dir_y(dst_id) = primary.rays.dir_y(src_id);
+    other_primary.rays.dir_z(dst_id) = primary.rays.dir_z(src_id);
+    other_primary.rays.tmin(dst_id)  = primary.rays.tmin(src_id);
+    other_primary.rays.tmax(dst_id)  = primary.rays.tmax(src_id);
+    other_primary.geom_id(dst_id)    = primary.geom_id(src_id);
+    other_primary.prim_id(dst_id)    = primary.prim_id(src_id);
+    other_primary.t(dst_id)          = primary.t(src_id);
+    other_primary.u(dst_id)          = primary.u(src_id);
+    other_primary.v(dst_id)          = primary.v(src_id);
+    other_primary.rnd(dst_id)        = primary.rnd(src_id);
+    other_primary.mis(dst_id)        = primary.mis(src_id);
+    other_primary.contrib_r(dst_id)  = primary.contrib_r(src_id);
+    other_primary.contrib_g(dst_id)  = primary.contrib_g(src_id);
+    other_primary.contrib_b(dst_id)  = primary.contrib_b(src_id);
+    other_primary.depth(dst_id)      = primary.depth(src_id);
 }
 
 fn @gpu_sort_primary( primary: PrimaryStream
@@ -142,7 +177,7 @@ fn @gpu_sort_primary( primary: PrimaryStream
 
     // Perform a scan on the CPU (there are very few elements to scan)
     let mut ray_begins : [i32 * 1024];
-    runtime_copy(dev_id, gpu_tmp as &[i8], 0i64, 0, &ray_ends as &[i8], 0i64, (sizeof[i32]() * (scene.num_geometries + 1)) as i64);
+    runtime_copy(dev_id, gpu_tmp as &[i8], 0i64, 0, ray_ends as &[i8], 0i64, (sizeof[i32]() * (scene.num_geometries + 1)) as i64);
     let mut n = 0;
     for i in range(0, scene.num_geometries + 1) {
         ray_begins(i) = n;
@@ -158,28 +193,8 @@ fn @gpu_sort_primary( primary: PrimaryStream
             break()
         }
         let geom_id = primary.geom_id(src_id);
-        let dst_id = atomic_add(&mut gpu_tmp(geom_id), 1);
-
-        other_primary.geom_id(dst_id)    = geom_id;
-        other_primary.rays.id(dst_id)    = primary.rays.id(src_id);
-        other_primary.rays.org_x(dst_id) = primary.rays.org_x(src_id);
-        other_primary.rays.org_y(dst_id) = primary.rays.org_y(src_id);
-        other_primary.rays.org_z(dst_id) = primary.rays.org_z(src_id);
-        other_primary.rays.dir_x(dst_id) = primary.rays.dir_x(src_id);
-        other_primary.rays.dir_y(dst_id) = primary.rays.dir_y(src_id);
-        other_primary.rays.dir_z(dst_id) = primary.rays.dir_z(src_id);
-        other_primary.rays.tmin(dst_id)  = primary.rays.tmin(src_id);
-        other_primary.rays.tmax(dst_id)  = primary.rays.tmax(src_id);
-        other_primary.prim_id(dst_id)    = primary.prim_id(src_id);
-        other_primary.t(dst_id)          = primary.t(src_id);
-        other_primary.u(dst_id)          = primary.u(src_id);
-        other_primary.v(dst_id)          = primary.v(src_id);
-        other_primary.rnd(dst_id)        = primary.rnd(src_id);
-        other_primary.mis(dst_id)        = primary.mis(src_id);
-        other_primary.contrib_r(dst_id)  = primary.contrib_r(src_id);
-        other_primary.contrib_g(dst_id)  = primary.contrib_g(src_id);
-        other_primary.contrib_b(dst_id)  = primary.contrib_b(src_id);
-        other_primary.depth(dst_id)      = primary.depth(src_id);
+        let dst_id  = atomic_add(&mut gpu_tmp(geom_id), 1);
+        copy_primary_ray(primary, other_primary, src_id, dst_id);
     }
     acc.sync();
 }
@@ -225,6 +240,44 @@ fn @gpu_generate_rays( primary: PrimaryStream
     primary.size + num_rays
 }
 
+fn @gpu_compact_primary( primary: PrimaryStream
+                       , other_primary: PrimaryStream
+                       , dev_id: i32
+                       , acc: Accelerator
+                       , intrinsics: Intrinsics
+                       , atomic_add: AtomicAddFn
+                       , gpu_tmp: &mut [i32]
+                       ) -> i32 {
+    let block_w = 64;
+
+    // Fill ray_ends with 0s
+    with work_item in acc.exec((round_up(primary.size, block_w), 1, 1), (block_w, 1, 1)) {
+        let src_id = work_item.gidx();
+        if src_id >= primary.size {
+            break()
+        }
+
+        let ray_id = primary.rays.id(src_id);
+        if ray_id < 0 {
+            break()
+        }
+
+        let dst_id = atomic_add(&mut gpu_tmp(0), 1);
+        copy_primary_ray(primary, other_primary, src_id, dst_id);
+    }
+    acc.sync();
+
+    let mut size = 0;
+    runtime_copy(dev_id, gpu_tmp as &[i8], 0i64, 0, &mut size as &[i8], 0i64, sizeof[i32]() as i64);
+    size
+}
+
+fn @gpu_swap_streams(a: &mut PrimaryStream, b: &mut PrimaryStream) -> () {
+    let tmp = *a;
+    *a = *b;
+    *b = tmp;
+}
+
 fn @gpu_streaming_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics, atomic_add: AtomicAddFn, min_max: MinMax, scene: Scene, path_tracer: PathTracer) -> () {
     let (film_pixels, film_width, film_height) = gpu_get_film_data(dev_id);
 
@@ -252,13 +305,8 @@ fn @gpu_streaming_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics, a
 
         // Sort rays by geometry
         let mut ray_ends : [i32 * 1024];
-        other_primary.size = primary.size;
         gpu_sort_primary(primary, other_primary, dev_id, acc, intrinsics, atomic_add, scene, gpu_tmp, &mut ray_ends);
-
-        // Swap primary streams
-        let tmp_primary = primary;
-        primary = other_primary;
-        other_primary = tmp_primary;
+        gpu_swap_streams(&mut primary, &mut other_primary);
 
         // Shade rays
         let mut first = 0;
@@ -270,11 +318,18 @@ fn @gpu_streaming_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics, a
             gpu_shade(acc, scene, path_tracer, film_pixels, primary, secondary, first, last, geom_id);
             first = last;
         }
-        secondary.size = primary.size;
+        primary.size   = first;
+        secondary.size = first;
         acc.sync();
 
-        // Trace secondary rays
-        gpu_traverse_secondary(secondary, acc, intrinsics, min_max, scene);
+        if first > 0 {
+            // Trace secondary rays
+            gpu_traverse_secondary(secondary, acc, intrinsics, min_max, scene, film_pixels);
+
+            // Compact primary rays
+            other_primary.size = gpu_compact_primary(primary, other_primary, dev_id, acc, intrinsics, atomic_add, gpu_tmp);
+            gpu_swap_streams(&mut primary, &mut other_primary);
+        }
     }
 }
 
