@@ -58,7 +58,8 @@ void extract_bvh_leaf(NodeRef leaf, std::vector<BvhTri>& new_tris) {
             new_tri. n[0][cur] = new_tri.e1[1][cur] * new_tri.e2[2][cur] - new_tri.e1[2][cur] * new_tri.e2[1][cur];
             new_tri. n[1][cur] = new_tri.e1[2][cur] * new_tri.e2[0][cur] - new_tri.e1[0][cur] * new_tri.e2[2][cur];
             new_tri. n[2][cur] = new_tri.e1[0][cur] * new_tri.e2[1][cur] - new_tri.e1[1][cur] * new_tri.e2[0][cur];
-            new_tri.id[cur] = tris[i].primID(j);
+            new_tri.prim_id[cur] = tris[i].primID(j);
+            new_tri.geom_id[cur] = tris[i].geomID(j);
             cur++;
         }
     }
@@ -76,11 +77,12 @@ void extract_bvh_leaf(NodeRef leaf, std::vector<BvhTri>& new_tris) {
             new_tri.n[0][j]  = 0.0f;
             new_tri.n[1][j]  = 0.0f;
             new_tri.n[2][j]  = 0.0f;
-            new_tri.id[j]    = 0xFFFFFFFF;
+            new_tri.prim_id[j] = 0xFFFFFFFF;
+            new_tri.geom_id[j] = 0xFFFFFFFF;
         }
         new_tris.push_back(new_tri);
     }
-    new_tris.back().id[M - 1] |= 0x80000000;
+    new_tris.back().prim_id[M - 1] |= 0x80000000;
 }
 
 template <int N, int M, typename Bvh, typename NodeRef, typename BvhNode, typename BvhTri>

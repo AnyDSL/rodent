@@ -87,16 +87,15 @@ private:
                 auto e1 = tri.v0 - tri.v1;
                 auto e2 = tri.v2 - tri.v0;
                 auto n = cross(e1, e2);
-                Tri1 new_tri{
-                    { tri.v0.x, tri.v0.y, tri.v0.z}, n.x,
-                    { e1.x, e1.y, e1.z}, n.y,
+                tris.emplace_back(Tri1 {
+                    { tri.v0.x, tri.v0.y, tri.v0.z}, 0,
+                    { e1.x, e1.y, e1.z}, 0,
                     { e2.x, e2.y, e2.z}, ref
-                };
-                tris.emplace_back(new_tri);
+                });
             }
 
             // Add sentinel
-            tris.back().id |= 0x80000000;
+            tris.back().prim_id |= 0x80000000;
         }
     };
 

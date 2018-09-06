@@ -2,10 +2,8 @@
 struct Geometry {
     // Computes the surface element after an intersection on this geometry
     surface_element: fn (Ray, Hit) -> SurfaceElement,
-    // Returns the shader index at the given hit point
-    shader_id: fn (Hit) -> i32,
-    // BVH for the geometry
-    bvh: Bvh
+    // Shader for this geometry
+    shader: Shader
 }
 
 // Triangle mesh with per-vertex/per-face attributes
@@ -14,14 +12,13 @@ struct TriMesh {
     normals:      fn (i32) -> Vec3,
     face_normals: fn (i32) -> Vec3,
     triangles:    fn (i32) -> (i32, i32, i32),
-    materials:    fn (i32) -> i32,
     attrs:        fn (i32) -> (bool, fn (i32) -> Vec4),
     num_attrs:    i32,
     num_tris:     i32
 }
 
 // Creates a geometry object from a triangle mesh definition
-fn @make_tri_mesh_geometry(math: Intrinsics, tri_mesh: TriMesh, bvh: Bvh) -> Geometry {
+fn @make_tri_mesh_geometry(math: Intrinsics, tri_mesh: TriMesh, shader: Shader) -> Geometry {
     Geometry {
         surface_element: @ |ray, hit| {
             let (i0, i1, i2) = tri_mesh.triangles(hit.prim_id);
@@ -52,7 +49,6 @@ fn @make_tri_mesh_geometry(math: Intrinsics, tri_mesh: TriMesh, bvh: Bvh) -> Geo
                 attr:        attr
             }
         },
-        shader_id: @ |hit| tri_mesh.materials(hit.prim_id),
-        bvh: bvh
+        shader: shader
     }
 }

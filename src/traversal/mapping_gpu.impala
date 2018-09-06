@@ -8,14 +8,14 @@ struct Node2 {
 
 struct Tri1 {
     v0: [f32 * 3],
-    nx: f32,
+    pad: i32,
     e1: [f32 * 3],
-    ny: f32,
+    geom_id: i32,
     e2: [f32 * 3],
-    id: i32
+    prim_id: i32
 }
 
-fn @make_nvvm_bvh2_tri1(nodes: &[Node2], tris: &[Tri1], geom_id: i32) -> Bvh {
+fn @make_nvvm_bvh2_tri1(nodes: &[Node2], tris: &[Tri1]) -> Bvh {
     Bvh {
         node: @ |j| {
             let simd_ptr = &nodes(j) as &[1][simd[f32 * 4]];
@@ -43,19 +43,20 @@ fn @make_nvvm_bvh2_tri1(nodes: &[Node2], tris: &[Tri1], geom_id: i32) -> Bvh {
             let tri0 = nvvm_ldg4_f32(&simd_ptr(0));
             let tri1 = nvvm_ldg4_f32(&simd_ptr(1));
             let tri2 = nvvm_ldg4_f32(&simd_ptr(2));
-            let id  = bitcast[i32](tri2(3));
+            let prim_id = bitcast[i32](tri2(3));
+            let geom_id = bitcast[i32](tri1(3));
             Prim {
                 intersect: @ |_, math, mask, ray| {
                     let v0  = make_vec3(tri0(0), tri0(1), tri0(2));
                     let e1  = make_vec3(tri1(0), tri1(1), tri1(2));
                     let e2  = make_vec3(tri2(0), tri2(1), tri2(2));
-                    let n   = make_vec3(tri0(3), tri1(3), vec3_cross(e1, e2).z);
+                    let n   = vec3_cross(e1, e2);
                     let tri = make_tri(v0, e1, e2, n);
                     let (mask, t, u, v) = intersect_ray_tri(math, false /*backface_culling*/, mask, ray, tri);
-                    (mask, make_hit(geom_id, id & 0x7FFFFFFF, t, make_vec2(u, v)))
+                    (mask, make_hit(geom_id, prim_id & 0x7FFFFFFF, t, make_vec2(u, v)))
                 },
                 is_valid: @ |_| true,
-                is_last: id < 0,
+                is_last: prim_id < 0,
                 size: 1
             }
         },
@@ -184,10 +185,8 @@ fn @gpu_traverse_single( acc: Accelerator
     let grid  = ((ray_count / block_size) * block_size, packet_size, 1);
     let block = (block_size, packet_size, 1);
 
-    for tid, bid, bdim, gdim, gid in acc.exec(grid, block) {
-        let (tidx, tidy, _) = tid;
-        let (bidx, bidy, _) = bid;
-        let (i, j) = (tidx() + bidx() * block_size, tidy());
+    for work_item in acc.exec(grid, block) {
+        let (i, j) = (work_item.tidx() + work_item.bidx() * block_size, work_item.tidy());
         if (i + j) >= ray_count { continue() }
 
         hits(i, j, gpu_traverse_single_helper(gpu_intrinsics, min_max, rays(i, j), bvh, any_hit, 1 /*root*/));

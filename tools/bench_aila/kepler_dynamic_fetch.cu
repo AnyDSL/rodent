@@ -393,8 +393,8 @@ static float4* cuda_tris  = nullptr;
 static int*    cuda_ids   = nullptr;
 
 void setup_traversal(const Node2* nodes, size_t num_nodes, const Tri1* tris, size_t num_tris) {
-    assert(sizeof(Bvh2Node) == sizeof(float4) * 4);
-    assert(sizeof(Bvh2Tri)  == sizeof(float4) * 3);
+    assert(sizeof(Node2) == sizeof(float4) * 4);
+    assert(sizeof(Tri1)  == sizeof(float4) * 3);
     assert(!cuda_nodes && !cuda_tris && !cuda_ids);
 
     CHECK_CUDA_CALL(cudaMalloc(&cuda_nodes, sizeof(float4) * 4 * num_nodes));
@@ -403,9 +403,9 @@ void setup_traversal(const Node2* nodes, size_t num_nodes, const Tri1* tris, siz
 
     std::vector<int> ids(num_tris * 3);
     for (int i = 0; i < num_tris; i++) {
-        ids[3 * i + 0] = tris[i].id;
-        ids[3 * i + 1] = tris[i].id;
-        ids[3 * i + 2] = tris[i].id;
+        ids[3 * i + 0] = tris[i].prim_id;
+        ids[3 * i + 1] = tris[i].prim_id;
+        ids[3 * i + 2] = tris[i].prim_id;
     }
     CHECK_CUDA_CALL(cudaMemcpy(cuda_ids, ids.data(), sizeof(int) * 3 * num_tris, cudaMemcpyHostToDevice));
 
@@ -439,8 +439,8 @@ void shutdown_traversal() {
 }
 
 void bench_traversal(const Ray1* rays, Hit1* hits, int num_rays, double* timings, int ntimes, bool any) {
-    assert(sizeof(Ray1AoS) == sizeof(float4) * 2);
-    assert(sizeof(Hit1AoS) == sizeof(int4));
+    assert(sizeof(Ray1) == sizeof(float4) * 2);
+    assert(sizeof(Hit1) == sizeof(int4));
 
     float4* cuda_rays;
     int4*   cuda_hits;

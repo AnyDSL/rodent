@@ -189,8 +189,7 @@ fn @intersect_ray_tri(math: Intrinsics, backface_culling: bool, mut mask: bool, 
 
     if likely(rv_all(!mask)) { no_hit() }
 
-    let inv_det = 1.0f / abs_det;
-    (mask, t * inv_det, u * inv_det, v * inv_det)
+    (mask, t / abs_det, u / abs_det, v / abs_det)
 }
 
 fn @intersect_ray_box(min_max: MinMax, ordered: bool, ray: Ray, bbox: BBox) -> (f32, f32) {

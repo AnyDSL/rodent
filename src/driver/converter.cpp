@@ -124,8 +124,8 @@ public:
         : nodes_(nodes), tris_(tris)
     {}
 
-    void build(const std::vector<::Tri>& tris) {
-        builder_.build(tris, NodeWriter(*this), LeafWriter(*this, tris), M);
+    void build(const obj::TriMesh& tri_mesh, const std::vector<::Tri>& tris) {
+        builder_.build(tris, NodeWriter(*this), LeafWriter(*this, tris, tri_mesh.indices), M);
     }
 
 #ifdef STATISTICS
@@ -185,10 +185,12 @@ private:
     struct LeafWriter {
         Adapter& adapter;
         const std::vector<::Tri>& in_tris;
+        const std::vector<uint32_t>& indices;
 
-        LeafWriter(Adapter& adapter, const std::vector<::Tri>& in_tris)
+        LeafWriter(Adapter& adapter, const std::vector<::Tri>& in_tris, const std::vector<uint32_t>& indices)
             : adapter(adapter)
             , in_tris(in_tris)
+            , indices(indices)
         {}
 
         template <typename RefFn>
@@ -226,16 +228,17 @@ private:
                     tri.n[1][j] = n.y;
                     tri.n[2][j] = n.z;
 
-                    tri.id[j] = id;
+                    tri.prim_id[j] = id;
+                    tri.geom_id[j] = indices[id * 4 + 3];
                 }
 
                 for (size_t j = c; j < 4; j++)
-                    tri.id[j] = 0xFFFFFFFF;
+                    tri.prim_id[j] = 0xFFFFFFFF;
 
                 tris.emplace_back(tri);
             }
             assert(ref_count > 0);
-            tris.back().id[M - 1] |= 0x80000000;
+            tris.back().prim_id[M - 1] |= 0x80000000;
         }
     };
 };
@@ -265,8 +268,8 @@ public:
         : nodes_(nodes), tris_(tris)
     {}
 
-    void build(const std::vector<::Tri>& tris) {
-        builder_.build(tris, NodeWriter(*this), LeafWriter(*this, tris), 4);
+    void build(const obj::TriMesh& tri_mesh, const std::vector<::Tri>& tris) {
+        builder_.build(tris, NodeWriter(*this), LeafWriter(*this, tris, tri_mesh.indices), 4);
     }
 
 #ifdef STATISTICS
@@ -328,10 +331,12 @@ private:
     struct LeafWriter {
         Adapter& adapter;
         const std::vector<::Tri>& in_tris;
+        const std::vector<uint32_t>& indices;
 
-        LeafWriter(Adapter& adapter, const std::vector<::Tri>& in_tris)
+        LeafWriter(Adapter& adapter, const std::vector<::Tri>& in_tris, const std::vector<uint32_t>& indices)
             : adapter(adapter)
             , in_tris(in_tris)
+            , indices(indices)
         {}
 
         template <typename RefFn>
@@ -347,26 +352,44 @@ private:
                 auto e1 = tri.v0 - tri.v1;
                 auto e2 = tri.v2 - tri.v0;
                 auto n = cross(e1, e2);
-                Tri1 new_tri{
-                    { tri.v0.x, tri.v0.y, tri.v0.z}, n.x,
-                    { e1.x, e1.y, e1.z}, n.y,
+                int geom_id = indices[ref * 4 + 3];
+                tris.emplace_back(Tri1 {
+                    { tri.v0.x, tri.v0.y, tri.v0.z}, 0,
+                    { e1.x, e1.y, e1.z}, geom_id,
                     { e2.x, e2.y, e2.z}, ref
-                };
-                tris.emplace_back(new_tri);
+                });
             }
 
             // Add sentinel
-            tris.back().id |= 0x80000000;
+            tris.back().prim_id |= 0x80000000;
         }
     };
 };
 
-static void write_tri_mesh(const obj::TriMesh& tri_mesh) {
-    write_buffer("data/vertices.bin",     tri_mesh.vertices);
-    write_buffer("data/normals.bin",      tri_mesh.normals);
-    write_buffer("data/face_normals.bin", tri_mesh.face_normals);
+template <typename T>
+static std::vector<uint8_t> pad_buffer(const std::vector<T>& elems, bool enable, size_t size) {
+    std::vector<uint8_t> new_elems;
+    if (!enable) {
+        new_elems.resize(sizeof(T) * elems.size());
+        memcpy(new_elems.data(), elems.data(), sizeof(T) * elems.size());
+        return new_elems;
+    }
+    assert(size >= sizeof(T));
+    new_elems.resize(size * elems.size(), 0);
+    uint8_t* ptr = new_elems.data();
+    for (auto& elem : elems) {
+        memcpy(ptr, &elem, sizeof(T));
+        ptr += size;
+    }
+    return new_elems;
+}
+
+static void write_tri_mesh(const obj::TriMesh& tri_mesh, bool enable_padding) {
+    write_buffer("data/vertices.bin",     pad_buffer(tri_mesh.vertices,     enable_padding, sizeof(float) * 4));
+    write_buffer("data/normals.bin",      pad_buffer(tri_mesh.normals,      enable_padding, sizeof(float) * 4));
+    write_buffer("data/face_normals.bin", pad_buffer(tri_mesh.face_normals, enable_padding, sizeof(float) * 4));
     write_buffer("data/indices.bin",      tri_mesh.indices);
-    write_buffer("data/texcoords.bin",    tri_mesh.texcoords);
+    write_buffer("data/texcoords.bin",    pad_buffer(tri_mesh.texcoords,    enable_padding, sizeof(float) * 4));
 }
 
 template <size_t N, size_t M>
@@ -385,7 +408,7 @@ static void write_bvhn_trim(const obj::TriMesh& tri_mesh) {
         auto& v2 = tri_mesh.vertices[tri_mesh.indices[i * 4 + 2]];
         in_tris[i] = ::Tri(v0, v1, v2);
     }
-    adapter.build(in_tris);
+    adapter.build(tri_mesh, in_tris);
 
     std::ofstream of("data/bvh.bin", std::ios::app | std::ios::binary);
     size_t node_size = sizeof(Node);
@@ -422,11 +445,12 @@ static bool convert_obj(const std::string& file_name, Target target, std::ostrea
     }
 
     std::unordered_map<std::string, size_t> images;
+    bool has_map_ke = false;
     for (auto& pair : mtl_lib) {
         auto & mat = pair.second;
-        if (mat.map_kd != "")   images.emplace(mat.map_kd, images.size());
-        if (mat.map_ks != "")   images.emplace(mat.map_kd, images.size());
-        if (mat.map_ke != "")   images.emplace(mat.map_ke, images.size());
+        if (mat.map_kd != "") images.emplace(mat.map_kd, images.size());
+        if (mat.map_ks != "") images.emplace(mat.map_kd, images.size());
+        if (mat.map_ke != "") images.emplace(mat.map_ke, images.size()), has_map_ke = true;
     }
 
     auto tri_mesh = compute_tri_mesh(obj_file, mtl_lib, 0);
@@ -454,6 +478,7 @@ static bool convert_obj(const std::string& file_name, Target target, std::ostrea
     os << "\nextern fn render(settings: &Settings, iter: i32) -> () {\n";
 
     assert(target != Target(0));
+    bool enable_padding = target == Target::NVVM;
     switch (target) {
         case Target::AVX2:  os << "    let device   = make_avx2_device();\n";  break;
         case Target::AVX:   os << "    let device   = make_avx_device();\n";   break;
@@ -471,34 +496,33 @@ static bool convert_obj(const std::string& file_name, Target target, std::ostrea
     // Setup camera
     os << "\n    // Camera\n"
        << "    let camera = make_perspective_camera(\n"
+       << "        math,\n"
        << "        settings.eye,\n"
        << "        make_mat3x3(settings.right, settings.up, settings.dir),\n"
        << "        settings.width,\n"
        << "        settings.height\n"
        << "    );\n";
 
-    // Generate geometry
-    os << "\n    // Geometry\n"
-       << "    let vertices     = device.load_buffer(\"data/vertices.bin\")     as &[Vec3];\n"
-       << "    let normals      = device.load_buffer(\"data/normals.bin\")      as &[Vec3];\n"
-       << "    let face_normals = device.load_buffer(\"data/face_normals.bin\") as &[Vec3];\n"
-       << "    let indices      = device.load_buffer(\"data/indices.bin\")      as &[i32];\n"
-       << "    let texcoords    = device.load_buffer(\"data/texcoords.bin\")    as &[Vec2];\n"
+    // Setup triangle mesh
+    info("Generating triangle mesh for '", file_name, "'");
+    os << "\n    // Triangle mesh\n"
+       << "    let vertices     = device.load_buffer(\"data/vertices.bin\");\n"
+       << "    let normals      = device.load_buffer(\"data/normals.bin\");\n"
+       << "    let face_normals = device.load_buffer(\"data/face_normals.bin\");\n"
+       << "    let indices      = device.load_buffer(\"data/indices.bin\");\n"
+       << "    let texcoords    = device.load_buffer(\"data/texcoords.bin\");\n"
        << "    let tri_mesh     = TriMesh {\n"
-       << "        vertices:     @ |i| vertices(i),\n"
-       << "        normals:      @ |i| normals(i),\n"
-       << "        face_normals: @ |i| face_normals(i),\n"
-       << "        triangles:    @ |i| (indices(i * 4 + 0), indices(i * 4 + 1), indices(i * 4 + 2)),\n"
-       << "        materials:    @ |i| indices(i * 4 + 3),\n"
-       << "        attrs:        @ |_| (false, @ |j| vec2_to_4(texcoords(j), 0.0f, 0.0f)),\n"
+       << "        vertices:     @ |i| vertices.load_vec3(i),\n"
+       << "        normals:      @ |i| normals.load_vec3(i),\n"
+       << "        face_normals: @ |i| face_normals.load_vec3(i),\n"
+       << "        triangles:    @ |i| { let (i, j, k, _) = indices.load_int4(i); (i, j, k) },\n"
+       << "        attrs:        @ |_| (false, @ |j| vec2_to_4(texcoords.load_vec2(j), 0.0f, 0.0f)),\n"
        << "        num_attrs:    1,\n"
        << "        num_tris:     " << tri_mesh.indices.size() / 4 << "\n"
        << "    };\n"
-       << "    let bvh = device.load_bvh(\"data/bvh.bin\", 0);\n"
-       << "    let geometries = @ |_| make_tri_mesh_geometry(math, tri_mesh, bvh);\n";
+       << "    let bvh = device.load_bvh(\"data/bvh.bin\");\n";
 
-    info("Generating geometry for '", file_name, "'");
-    write_tri_mesh(tri_mesh);
+    write_tri_mesh(tri_mesh, enable_padding);
 
     // Generate BVHs
     info("Generating BVH for '", file_name, "'");
@@ -511,6 +535,7 @@ static bool convert_obj(const std::string& file_name, Target target, std::ostrea
         write_bvhn_trim<8, 4>(tri_mesh);
 
     // Generate images
+    info("Generating images for '", file_name, "'");
     os << "\n    // Images\n"
        << "    let dummy_image = make_image(@ |x, y| make_color(0.0f, 0.0f, 0.0f), 1, 1);\n";
     for (size_t i = 0; i < images.size(); i++) {
@@ -529,18 +554,15 @@ static bool convert_obj(const std::string& file_name, Target target, std::ostrea
             os << "dummy_image; // Cannot determine image type for " << name << "\n";
         }
     }
-    os << "    let images = @ |i| match i {\n";
-    for (size_t i = 0; i < images.size(); i++) {
-        os << "        " << i << " => image_" << make_id(image_names[i]) << ",\n";
-    }
-    os << "        _ => dummy_image\n"
-       << "    };\n";
 
     // Lights
     std::vector<int> light_ids(tri_mesh.indices.size() / 4, 0);
-    os << "\n    // Lights\n"
-       << "    let dummy_light = make_point_light(make_vec3(0.0f, 0.0f, 0.0f), make_color(0.0f, 0.0f, 0.0f));\n";
+    os << "\n    // Lights\n";
     size_t num_lights = 0;
+    std::vector<rgb>    light_colors;
+    std::vector<float3> light_verts;
+    std::vector<float3> light_norms;
+    std::vector<float>  light_areas;
     for (size_t i = 0; i < tri_mesh.indices.size(); i += 4) {
         auto& mtl_name = obj_file.materials[tri_mesh.indices[i + 3]];
         if (mtl_name == "")
@@ -552,34 +574,77 @@ static bool convert_obj(const std::string& file_name, Target target, std::ostrea
         auto& v0 = tri_mesh.vertices[tri_mesh.indices[i + 0]];
         auto& v1 = tri_mesh.vertices[tri_mesh.indices[i + 1]];
         auto& v2 = tri_mesh.vertices[tri_mesh.indices[i + 2]];
+
         light_ids[i / 4] = num_lights++;
-        os << "    let light" << num_lights - 1 << " = make_triangle_light(\n"
-           << "        math,\n"
-           << "        make_vec3(" << v0.x << "f, " << v0.y << "f, " << v0.z << "f),\n"
-           << "        make_vec3(" << v1.x << "f, " << v1.y << "f, " << v1.z << "f),\n"
-           << "        make_vec3(" << v2.x << "f, " << v2.y << "f, " << v2.z << "f),\n";
-        if (mat.map_ke != "") {
-            os << "        make_texture(math, make_repeat_border(), make_bilinear_filter(), scene.images(" << images[mat.map_ke] << "))\n";
+        if (has_map_ke) {
+            os << "    let light" << num_lights - 1 << " = make_triangle_light(\n"
+               << "        math,\n"
+               << "        make_vec3(" << v0.x << "f, " << v0.y << "f, " << v0.z << "f),\n"
+               << "        make_vec3(" << v1.x << "f, " << v1.y << "f, " << v1.z << "f),\n"
+               << "        make_vec3(" << v2.x << "f, " << v2.y << "f, " << v2.z << "f),\n";
+            if (mat.map_ke != "") {
+                os << "        make_texture(math, make_repeat_border(), make_bilinear_filter(), image_" << make_id(image_names[images[mat.map_ke]]) <<")\n";
+            } else {
+                os << "        make_color(" << mat.ke.x << "f, " << mat.ke.y << "f, " << mat.ke.z << "f)\n";
+            }
+            os << "    );\n";
         } else {
-            os << "        make_color(" << mat.ke.x << "f, " << mat.ke.y << "f, " << mat.ke.z << "f)\n";
+            auto n = cross(v1 - v0, v2 - v0);
+            auto inv_area = 1.0f / (0.5f * length(n));
+            n = normalize(n);
+            light_verts.emplace_back(v0);
+            light_verts.emplace_back(v1);
+            light_verts.emplace_back(v2);
+            light_norms.emplace_back(n);
+            light_areas.emplace_back(inv_area);
+            light_colors.emplace_back(mat.ke);
         }
-        os << "    );\n";
     }
-    os << "    let lights = @ |i| match i {\n";
-    for (size_t i = 0; i < num_lights; ++i)
-        os << "        " << i << " => light" << i << ",\n";
-    os << "        _ => dummy_light\n"
-       << "    };\n";
+    if (has_map_ke || num_lights == 0) {
+        if (num_lights != 0) {
+            os << "    let lights = @ |i| match i {\n";
+            for (size_t i = 0; i < num_lights; ++i) {
+                if (i == num_lights - 1)
+                    os << "        _ => light" << i << "\n";
+                else
+                    os << "        " << i << " => light" << i << ",\n";
+            }
+            os << "    };\n";
+        } else {
+            os << "    let lights = @ |_| make_point_light(math, black, black);\n";
+        }
+    } else {
+        write_buffer("data/light_verts.bin",  pad_buffer(light_verts,  enable_padding, sizeof(float) * 4));
+        write_buffer("data/light_areas.bin",  light_areas);
+        write_buffer("data/light_norms.bin",  pad_buffer(light_norms,  enable_padding, sizeof(float) * 4));
+        write_buffer("data/light_colors.bin", pad_buffer(light_colors, enable_padding, sizeof(float) * 4));
+        os << "    let light_verts = device.load_buffer(\"data/light_verts.bin\");\n"
+           << "    let light_areas = device.load_buffer(\"data/light_areas.bin\");\n"
+           << "    let light_norms = device.load_buffer(\"data/light_norms.bin\");\n"
+           << "    let light_colors = device.load_buffer(\"data/light_colors.bin\");\n"
+           << "    let lights = @ |i| {\n"
+           << "        let color = light_colors.load_vec3(i);\n"
+           << "        make_precomputed_triangle_light(\n"
+           << "            math,\n"
+           << "            light_verts.load_vec3(i * 3 + 0),\n"
+           << "            light_verts.load_vec3(i * 3 + 1),\n"
+           << "            light_verts.load_vec3(i * 3 + 2),\n"
+           << "            light_norms.load_vec3(i),\n"
+           << "            light_areas.load_f32(i),\n"
+           << "            make_color(color.x, color.y, color.z)\n"
+           << "        )\n"
+           << "    };\n";
+    }
 
     write_buffer("data/light_ids.bin", light_ids);
 
     os << "\n    // Mapping from primitive to light source\n"
-       << "    let light_ids = device.load_buffer(\"data/light_ids.bin\") as &[i32];\n";
+       << "    let light_ids = device.load_buffer(\"data/light_ids.bin\");\n";
 
     // Generate shaders
     info("Generating materials for '", file_name, "'");
     os << "\n    // Shaders\n";
-    os << "    let dummy_shader = @ |math, scene, ray, hit, surf| make_material(make_diffuse_bsdf(surf, make_color(0.0f, 1.0f, 1.0f)));\n";
+    os << "    let dummy_shader = @ |ray, hit, surf| make_material(make_diffuse_bsdf(math, surf, pink));\n";
     for (auto& mtl_name : obj_file.materials) {
         if (mtl_name == "")
             continue;
@@ -589,33 +654,33 @@ static bool convert_obj(const std::string& file_name, Target target, std::ostrea
 
         auto& mat = it->second;
         bool has_emission = mat.ke != rgb(0.0f) || mat.map_ke != "";
-        os << "    let shader_" << make_id(mtl_name) << " = @ |math, scene, ray, hit, surf| {\n";
+        os << "    let shader_" << make_id(mtl_name) << " = @ |ray, hit, surf| {\n";
         if (mat.illum == 5) {
-            os << "        let bsdf = make_mirror_bsdf(surf, make_color(" << mat.tf.x << "f, " << mat.tf.y << "f, " << mat.tf.z << "f));\n";
+            os << "        let bsdf = make_mirror_bsdf(math, surf, make_color(" << mat.tf.x << "f, " << mat.tf.y << "f, " << mat.tf.z << "f));\n";
         } else if (mat.illum == 7) {
-            os << "        let bsdf = make_glass_bsdf(surf, 1.0f, " << mat.ni << "f, make_color(" << mat.tf.x << "f, " << mat.tf.y << "f, " << mat.tf.z << "f));\n";
+            os << "        let bsdf = make_glass_bsdf(math, surf, 1.0f, " << mat.ni << "f, make_color(" << mat.tf.x << "f, " << mat.tf.y << "f, " << mat.tf.z << "f));\n";
         } else {
             bool has_diffuse  = mat.kd != rgb(0.0f) || mat.map_kd != "";
             bool has_specular = mat.ks != rgb(0.0f) || mat.map_ks != "";
 
             if (has_diffuse) {
                 if (mat.map_kd != "") {
-                    os << "        let diffuse_texture = make_texture(math, make_repeat_border(), make_bilinear_filter(), scene.images(" << images[mat.map_kd] << "));\n";
+                    os << "        let diffuse_texture = make_texture(math, make_repeat_border(), make_bilinear_filter(), image_" << make_id(image_names[images[mat.map_kd]]) << ");\n";
                     os << "        let kd = diffuse_texture(vec4_to_2(surf.attr(0)));\n";
                 } else {
                     os << "        let kd = make_color(" << mat.kd.x << "f, " << mat.kd.y << "f, " << mat.kd.z << "f);\n";
                 }
-                os << "        let diffuse = make_diffuse_bsdf(surf, kd);\n";
+                os << "        let diffuse = make_diffuse_bsdf(math, surf, kd);\n";
             }
             if (has_specular) {
                 if (mat.map_ks != "") {
-                    os << "        let specular_texture = make_texture(math, make_repeat_border(), make_bilinear_filter(), scene.images(" << images[mat.map_ks] << "));\n";
+                    os << "        let specular_texture = make_texture(math, make_repeat_border(), make_bilinear_filter(), image_" << make_id(image_names[images[mat.map_kd]]) << ");\n";
                     os << "        let ks = specular_texture(vec4_to_2(surf.attr(0)));\n";
                 } else {
                     os << "        let ks = make_color(" << mat.ks.x << "f, " << mat.ks.y << "f, " << mat.ks.z << "f);\n";
                 }
                 os << "        let ns = " << mat.ns << "f;\n";
-                os << "        let specular = make_phong_bsdf(surf, ks, ns);\n";
+                os << "        let specular = make_phong_bsdf(math, surf, ks, ns);\n";
             }
             os << "        let bsdf = ";
             if (has_diffuse && has_specular) {
@@ -628,38 +693,38 @@ static bool convert_obj(const std::string& file_name, Target target, std::ostrea
             }
         }
         if (has_emission) {
-            os << "        make_emissive_material(surf, bsdf, lights(light_ids(hit.prim_id)))\n";
+            os << "        make_emissive_material(surf, bsdf, lights(light_ids.load_i32(hit.prim_id)))\n";
         } else {
             os << "        make_material(bsdf)\n";
         }
         os << "    };\n";
     }
-    os << "    let shaders = @ |i| match i {\n";
-    for (size_t i = 0; i < obj_file.materials.size(); i++) {
-        auto& mtl_name = obj_file.materials[i];
-        auto it = mtl_lib.find(mtl_name);
-        if (mtl_name == "" || it == mtl_lib.end()) continue;
-        os << "        " << i << " => shader_" << make_id(mtl_name) << ",\n";
+
+    // Generate geometries
+    size_t num_mats = obj_file.materials.size();
+
+    os << "\n    // Geometries\n"
+       << "    let geometries = @ |i| match i {\n";
+    for (uint32_t mat = 1; mat < num_mats; ++mat) {
+        os << "        " << mat << " => make_tri_mesh_geometry(math, tri_mesh, shader_" << make_id(obj_file.materials[mat]) << "),\n";
     }
-    os << "        _ => dummy_shader\n"
+    os << "        _ => make_tri_mesh_geometry(math, tri_mesh, dummy_shader)\n"
        << "    };\n";
 
     // Scene
     os << "\n    // Scene\n"
        << "    let scene = Scene {\n"
-       << "        num_shaders:    " << mtl_lib.size() + 1 << ",\n"
-       << "        num_geometries: " << 1 << ",\n"
-       << "        num_images:     " << images.size() << ",\n"
+       << "        num_geometries: " << num_mats << ",\n"
        << "        num_lights:     " << num_lights << ",\n"
-       << "        shaders:        shaders,\n"
-       << "        geometries:     geometries,\n"
-       << "        images:         images,\n"
-       << "        lights:         lights,\n"
-       << "        camera:         camera\n"
+       << "        geometries:     @ |i| geometries(i),\n"
+       << "        lights:         @ |i| lights(i),\n"
+       << "        camera:         camera,\n"
+       << "        bvh:            bvh\n"
        << "    };\n";
 
-    os << "\n    renderer(scene, device, iter);\n"
-       << "      device.present();\n"
+    os << "\n"
+       << "    renderer(scene, device, iter);\n"
+       << "    device.present();\n"
        << "}\n";
 
     info("Scene was converted successfully");

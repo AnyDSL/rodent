@@ -160,7 +160,7 @@ extern fn cpu_intersect_hybrid_ray4_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], ra
     if enable_cpu_bvh4_tri4 && enable_cpu_ray4 && enable_cpu_hybrid {
         cpu_traverse_hybrid(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
-            make_cpu_bvh4_tri4(nodes, tris, 0),
+            make_cpu_bvh4_tri4(nodes, tris),
             make_cpu_ray4(rays),
             make_cpu_hit4(hits, false /*any_hit*/),
             4 /*packet_size*/,
@@ -175,7 +175,7 @@ extern fn cpu_occluded_hybrid_ray4_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], ray
     if enable_cpu_bvh4_tri4 && enable_cpu_ray4 && enable_cpu_hybrid {
         cpu_traverse_hybrid(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
-            make_cpu_bvh4_tri4(nodes, tris, 0),
+            make_cpu_bvh4_tri4(nodes, tris),
             make_cpu_ray4(rays),
             make_cpu_hit4(hits, true /*any_hit*/),
             4 /*packet_size*/,
@@ -190,7 +190,7 @@ extern fn cpu_intersect_packet_ray4_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], ra
     if enable_cpu_bvh4_tri4 && enable_cpu_ray4 && enable_cpu_packet {
         cpu_traverse_hybrid(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
-            make_cpu_bvh4_tri4(nodes, tris, 0),
+            make_cpu_bvh4_tri4(nodes, tris),
             make_cpu_ray4(rays),
             make_cpu_hit4(hits, false /*any_hit*/),
             4 /*packet_size*/,
@@ -205,7 +205,7 @@ extern fn cpu_occluded_packet_ray4_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], ray
     if enable_cpu_bvh4_tri4 && enable_cpu_ray4 && enable_cpu_packet {
         cpu_traverse_hybrid(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
-            make_cpu_bvh4_tri4(nodes, tris, 0),
+            make_cpu_bvh4_tri4(nodes, tris),
             make_cpu_ray4(rays),
             make_cpu_hit4(hits, true /*any_hit*/),
             4 /*packet_size*/,
@@ -220,7 +220,7 @@ extern fn cpu_intersect_hybrid_ray8_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], ra
     if enable_cpu_bvh4_tri4 && enable_cpu_ray8 && enable_cpu_hybrid {
         cpu_traverse_hybrid(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
-            make_cpu_bvh4_tri4(nodes, tris, 0),
+            make_cpu_bvh4_tri4(nodes, tris),
             make_cpu_ray8(rays),
             make_cpu_hit8(hits, false /*any_hit*/),
             8 /*packet_size*/,
@@ -235,7 +235,7 @@ extern fn cpu_occluded_hybrid_ray8_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], ray
     if enable_cpu_bvh4_tri4 && enable_cpu_ray8 && enable_cpu_hybrid {
         cpu_traverse_hybrid(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
-            make_cpu_bvh4_tri4(nodes, tris, 0),
+            make_cpu_bvh4_tri4(nodes, tris),
             make_cpu_ray8(rays),
             make_cpu_hit8(hits, true /*any_hit*/),
             8 /*packet_size*/,
@@ -250,7 +250,7 @@ extern fn cpu_intersect_packet_ray8_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], ra
     if enable_cpu_bvh4_tri4 && enable_cpu_ray8 && enable_cpu_packet {
         cpu_traverse_hybrid(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
-            make_cpu_bvh4_tri4(nodes, tris, 0),
+            make_cpu_bvh4_tri4(nodes, tris),
             make_cpu_ray8(rays),
             make_cpu_hit8(hits, false /*any_hit*/),
             8 /*packet_size*/,
@@ -265,7 +265,7 @@ extern fn cpu_occluded_packet_ray8_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], ray
     if enable_cpu_bvh4_tri4 && enable_cpu_ray8 && enable_cpu_packet {
         cpu_traverse_hybrid(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
-            make_cpu_bvh4_tri4(nodes, tris, 0),
+            make_cpu_bvh4_tri4(nodes, tris),
             make_cpu_ray8(rays),
             make_cpu_hit8(hits, true /*any_hit*/),
             8 /*packet_size*/,
@@ -280,7 +280,7 @@ extern fn cpu_intersect_single_ray1_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], ra
     if enable_cpu_bvh4_tri4 && enable_cpu_single {
         cpu_traverse_single(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
-            make_cpu_bvh4_tri4(nodes, tris, 0),
+            make_cpu_bvh4_tri4(nodes, tris),
             make_cpu_ray1(rays),
             make_cpu_hit1(hits, false /*any_hit*/),
             1 /*packet_size*/,
@@ -294,7 +294,7 @@ extern fn cpu_occluded_single_ray1_bvh4_tri4(nodes: &[Node4], tris: &[Tri4], ray
     if enable_cpu_bvh4_tri4 && enable_cpu_single {
         cpu_traverse_single(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
-            make_cpu_bvh4_tri4(nodes, tris, 0),
+            make_cpu_bvh4_tri4(nodes, tris),
             make_cpu_ray1(rays),
             make_cpu_hit1(hits, true /*any_hit*/),
             1 /*packet_size*/,
@@ -310,7 +310,7 @@ extern fn cpu_intersect_hybrid_ray4_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], ra
     if enable_cpu_bvh4_tri4 && enable_cpu_ray4 && enable_cpu_hybrid {
         cpu_traverse_hybrid(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
-            make_cpu_bvh8_tri4(nodes, tris, 0),
+            make_cpu_bvh8_tri4(nodes, tris),
             make_cpu_ray4(rays),
             make_cpu_hit4(hits, false /*any_hit*/),
             4 /*packet_size*/,
@@ -325,7 +325,7 @@ extern fn cpu_occluded_hybrid_ray4_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], ray
     if enable_cpu_bvh4_tri4 && enable_cpu_ray4 && enable_cpu_hybrid {
         cpu_traverse_hybrid(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
-            make_cpu_bvh8_tri4(nodes, tris, 0),
+            make_cpu_bvh8_tri4(nodes, tris),
             make_cpu_ray4(rays),
             make_cpu_hit4(hits, true /*any_hit*/),
             4 /*packet_size*/,
@@ -340,7 +340,7 @@ extern fn cpu_intersect_packet_ray4_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], ra
     if enable_cpu_bvh4_tri4 && enable_cpu_ray4 && enable_cpu_packet {
         cpu_traverse_hybrid(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
-            make_cpu_bvh8_tri4(nodes, tris, 0),
+            make_cpu_bvh8_tri4(nodes, tris),
             make_cpu_ray4(rays),
             make_cpu_hit4(hits, false /*any_hit*/),
             4 /*packet_size*/,
@@ -355,7 +355,7 @@ extern fn cpu_occluded_packet_ray4_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], ray
     if enable_cpu_bvh4_tri4 && enable_cpu_ray4 && enable_cpu_packet {
         cpu_traverse_hybrid(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
-            make_cpu_bvh8_tri4(nodes, tris, 0),
+            make_cpu_bvh8_tri4(nodes, tris),
             make_cpu_ray4(rays),
             make_cpu_hit4(hits, true /*any_hit*/),
             4 /*packet_size*/,
@@ -370,7 +370,7 @@ extern fn cpu_intersect_hybrid_ray8_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], ra
     if enable_cpu_bvh8_tri4 && enable_cpu_ray8 && enable_cpu_hybrid {
         cpu_traverse_hybrid(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
-            make_cpu_bvh8_tri4(nodes, tris, 0),
+            make_cpu_bvh8_tri4(nodes, tris),
             make_cpu_ray8(rays),
             make_cpu_hit8(hits, false /*any_hit*/),
             8 /*packet_size*/,
@@ -385,7 +385,7 @@ extern fn cpu_occluded_hybrid_ray8_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], ray
     if enable_cpu_bvh8_tri4 && enable_cpu_ray8 && enable_cpu_hybrid {
         cpu_traverse_hybrid(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
-            make_cpu_bvh8_tri4(nodes, tris, 0),
+            make_cpu_bvh8_tri4(nodes, tris),
             make_cpu_ray8(rays),
             make_cpu_hit8(hits, true /*any_hit*/),
             8 /*packet_size*/,
@@ -400,7 +400,7 @@ extern fn cpu_intersect_packet_ray8_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], ra
     if enable_cpu_bvh8_tri4 && enable_cpu_ray8 && enable_cpu_packet {
         cpu_traverse_hybrid(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
-            make_cpu_bvh8_tri4(nodes, tris, 0),
+            make_cpu_bvh8_tri4(nodes, tris),
             make_cpu_ray8(rays),
             make_cpu_hit8(hits, false /*any_hit*/),
             8 /*packet_size*/,
@@ -415,7 +415,7 @@ extern fn cpu_occluded_packet_ray8_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], ray
     if enable_cpu_bvh8_tri4 && enable_cpu_ray8 && enable_cpu_packet {
         cpu_traverse_hybrid(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
-            make_cpu_bvh8_tri4(nodes, tris, 0),
+            make_cpu_bvh8_tri4(nodes, tris),
             make_cpu_ray8(rays),
             make_cpu_hit8(hits, true /*any_hit*/),
             8 /*packet_size*/,
@@ -430,7 +430,7 @@ extern fn cpu_intersect_single_ray1_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], ra
     if enable_cpu_bvh8_tri4 && enable_cpu_single {
         cpu_traverse_single(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
-            make_cpu_bvh8_tri4(nodes, tris, 0),
+            make_cpu_bvh8_tri4(nodes, tris),
             make_cpu_ray1(rays),
             make_cpu_hit1(hits, false /*any_hit*/),
             1 /*packet_size*/,
@@ -444,7 +444,7 @@ extern fn cpu_occluded_single_ray1_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], ray
     if enable_cpu_bvh8_tri4 && enable_cpu_single {
         cpu_traverse_single(
             if enable_cpu_int_min_max { make_cpu_int_min_max() } else { make_cpu_default_min_max() },
-            make_cpu_bvh8_tri4(nodes, tris, 0),
+            make_cpu_bvh8_tri4(nodes, tris),
             make_cpu_ray1(rays),
             make_cpu_hit1(hits, true /*any_hit*/),
             1 /*packet_size*/,
@@ -462,7 +462,7 @@ extern fn nvvm_intersect_single_ray1_bvh2_tri1(nodes: &[Node2], tris: &[Tri1], r
             nvvm_accelerator(0),
             nvvm_intrinsics,
             make_nvvm_min_max(),
-            make_nvvm_bvh2_tri1(nodes, tris, 0),
+            make_nvvm_bvh2_tri1(nodes, tris),
             make_gpu_ray1(rays),
             make_gpu_hit1(hits),
             1 /*packet_size*/,
@@ -478,7 +478,7 @@ extern fn nvvm_occluded_single_ray1_bvh2_tri1(nodes: &[Node2], tris: &[Tri1], ra
             nvvm_accelerator(0),
             nvvm_intrinsics,
             make_nvvm_min_max(),
-            make_nvvm_bvh2_tri1(nodes, tris, 0),
+            make_nvvm_bvh2_tri1(nodes, tris),
             make_gpu_ray1(rays),
             make_gpu_hit1(hits),
             1 /*packet_size*/,

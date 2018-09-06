@@ -1,15 +1,12 @@
 // Compile-time scene data
 struct Scene {
-    num_shaders:    i32,
     num_geometries: i32,
-    num_images:     i32,
     num_lights:     i32,
 
-    shaders:    fn (i32) -> Shader,
     geometries: fn (i32) -> Geometry,
-    images:     fn (i32) -> Image,
     lights:     fn (i32) -> Light,
-    camera:     Camera
+    camera:     Camera,
+    bvh:        Bvh    
 }
 
 // Rendering device
@@ -18,12 +15,24 @@ struct Device {
 
     trace: fn (Scene, PathTracer) -> (),
     present: fn () -> (),
-    load_buffer: fn (&[u8]) -> &[i8],
-    load_bvh: fn (&[u8], i32) -> Bvh,
+
+    // General formats
+    load_buffer: fn (&[u8]) -> DeviceBuffer,
+    load_bvh: fn (&[u8]) -> Bvh,
     load_png: fn (&[u8]) -> Image,
     load_jpg: fn (&[u8]) -> Image
-    // TODO: Add other formats
+}
+
+struct DeviceBuffer {
+    load_i32:  fn (i32) -> i32,
+    load_f32:  fn (i32) -> f32,
+    load_vec2: fn (i32) -> Vec2,
+    load_vec3: fn (i32) -> Vec3,
+    load_vec4: fn (i32) -> Vec4,
+    load_int2: fn (i32) -> (i32, i32),
+    load_int3: fn (i32) -> (i32, i32, i32),
+    load_int4: fn (i32) -> (i32, i32, i32, i32),
 }
 
 type Renderer = fn (Scene, Device, i32) -> ();
-type Shader   = fn (Intrinsics, Scene, Ray, Hit, SurfaceElement) -> Material;
+type Shader   = fn (Ray, Hit, SurfaceElement) -> Material;

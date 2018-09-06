@@ -1,7 +1,7 @@
 // Opaque material structure
 struct Material {
     bsdf:        Bsdf,
-    emission:    fn (Intrinsics, Vec3) -> EmissionValue,
+    emission:    fn (Vec3) -> EmissionValue,
     is_emissive: bool
 }
 
@@ -25,11 +25,11 @@ struct BsdfSample {
 // Opaque BSDF structure
 struct Bsdf {
     // Evaluates the reflectance of the material for the given set of directions at the given point on a surface
-    eval: fn (Intrinsics, Vec3, Vec3) -> Color,
+    eval: fn (Vec3, Vec3) -> Color,
     // Evaluates the sampling probability density for a given direction and point on a surface
-    pdf: fn (Intrinsics, Vec3, Vec3) -> f32,
+    pdf: fn (Vec3, Vec3) -> f32,
     // Samples a direction at the given point on a surface
-    sample: fn (Intrinsics, &mut RndState, Vec3, bool) -> BsdfSample,
+    sample: fn (&mut RndState, Vec3, bool) -> BsdfSample,
     // Returns true if the material is purely specular
     is_specular: bool
 }
@@ -38,7 +38,7 @@ struct Bsdf {
 fn @make_material(bsdf: Bsdf) -> Material {
     Material {
         bsdf:        bsdf,
-        emission:    @ |math, in_dir| make_emission_value(black, 1.0f, 1.0f),
+        emission:    @ |in_dir| make_emission_value(black, 1.0f, 1.0f),
         is_emissive: false
     }
 }
@@ -47,7 +47,7 @@ fn @make_material(bsdf: Bsdf) -> Material {
 fn @make_emissive_material(surf: SurfaceElement, bsdf: Bsdf, light: Light) -> Material {
     Material {
         bsdf: bsdf,
-        emission: @ |math, in_dir| light.emission(math, in_dir, surf),
+        emission: @ |in_dir| light.emission(in_dir, surf.uv_coords),
         is_emissive: true
     }
 }
@@ -66,23 +66,23 @@ fn @make_bsdf_sample(surf: SurfaceElement, in_dir: Vec3, pdf: f32, color: Color,
 // Creates a fully absorbing BSDF that behaves like a black body
 fn @make_black_bsdf() -> Bsdf {
     Bsdf {
-        eval:   @ |_, _, _| black,
-        pdf:    @ |_, _, _| 0.0f,
-        sample: @ |_, _, out_dir, _| BsdfSample { in_dir: out_dir, pdf: 1.0f, color: black },
+        eval:   @ |_, _| black,
+        pdf:    @ |_, _| 0.0f,
+        sample: @ |_, out_dir, _| BsdfSample { in_dir: out_dir, pdf: 1.0f, color: black },
         is_specular: false
     }
 }
 
 // Creates a purely diffuse BSDF
-fn @make_diffuse_bsdf(surf: SurfaceElement, kd: Color) -> Bsdf {
+fn @make_diffuse_bsdf(math: Intrinsics, surf: SurfaceElement, kd: Color) -> Bsdf {
     Bsdf {
-        eval: @ |math, in_dir, out_dir| {
+        eval: @ |in_dir, out_dir| {
             color_mulf(kd, 1.0f / flt_pi)
         },
-        pdf: @ |math, in_dir, out_dir| {
+        pdf: @ |in_dir, out_dir| {
             cosine_hemisphere_pdf(positive_cos(in_dir, surf.local.col(2)))
         },
-        sample: @ |math, rnd, out_dir, _| {
+        sample: @ |rnd, out_dir, _| {
             let sample = sample_cosine_hemisphere(math, randf(rnd), randf(rnd));
             let color = color_mulf(kd, sample.dir.z * (1.0f / flt_pi));
             make_bsdf_sample(surf, mat3x3_mul(surf.local, sample.dir), sample.pdf, color, false)
@@ -92,17 +92,17 @@ fn @make_diffuse_bsdf(surf: SurfaceElement, kd: Color) -> Bsdf {
 }
 
 // Creates a physically-correct Phong BSDF
-fn @make_phong_bsdf(surf: SurfaceElement, ks: Color, ns: f32) -> Bsdf {
+fn @make_phong_bsdf(math: Intrinsics, surf: SurfaceElement, ks: Color, ns: f32) -> Bsdf {
     Bsdf {
-        eval: @ |math, in_dir, out_dir| {
+        eval: @ |in_dir, out_dir| {
             let cos = positive_cos(in_dir, vec3_reflect(out_dir, surf.local.col(2)));
             color_mulf(ks, math.powf(cos, ns) * (ns + 2.0f) * (1.0f / (2.0f * flt_pi)))
         },
-        pdf: @ |math, in_dir, out_dir| {
+        pdf: @ |in_dir, out_dir| {
             let cos = positive_cos(in_dir, vec3_reflect(out_dir, surf.local.col(2)));
             cosine_power_hemisphere_pdf(math, cos, ns)
         },
-        sample: @ |math, rnd, out_dir, _| {
+        sample: @ |rnd, out_dir, _| {
             let u = randf(rnd);
             let v = randf(rnd);
 
@@ -125,11 +125,11 @@ fn @make_phong_bsdf(surf: SurfaceElement, ks: Color, ns: f32) -> Bsdf {
 }
 
 // Creates a perfect mirror BSDF
-fn @make_mirror_bsdf(surf: SurfaceElement, ks: Color) -> Bsdf {
+fn @make_mirror_bsdf(math: Intrinsics, surf: SurfaceElement, ks: Color) -> Bsdf {
     Bsdf {
-        eval: @ |math, in_dir, out_dir| black,
-        pdf:  @ |math, in_dir, out_dir| 0.0f,
-        sample: @ |math, rnd, out_dir, _| {
+        eval: @ |in_dir, out_dir| black,
+        pdf:  @ |in_dir, out_dir| 0.0f,
+        sample: @ |rnd, out_dir, _| {
             make_bsdf_sample(surf, vec3_reflect(out_dir, surf.local.col(2)), 1.0f, ks, false)
         },
         is_specular: true
@@ -137,11 +137,11 @@ fn @make_mirror_bsdf(surf: SurfaceElement, ks: Color) -> Bsdf {
 }
 
 // Creates a perfect glass BSDF
-fn @make_glass_bsdf(surf: SurfaceElement, n1: f32, n2: f32, ks: Color) -> Bsdf {
+fn @make_glass_bsdf(math: Intrinsics, surf: SurfaceElement, n1: f32, n2: f32, ks: Color) -> Bsdf {
     Bsdf {
-        eval: @ |math, in_dir, out_dir| black,
-        pdf:  @ |math, in_dir, out_dir| 0.0f,
-        sample: @ |math, rnd, out_dir, adjoint| {
+        eval: @ |in_dir, out_dir| black,
+        pdf:  @ |in_dir, out_dir| 0.0f,
+        sample: @ |rnd, out_dir, adjoint| {
             let (k1, k2) = if surf.is_entering {
                 (n1, n2)
             } else {
@@ -174,20 +174,20 @@ fn @make_glass_bsdf(surf: SurfaceElement, n1: f32, n2: f32, ks: Color) -> Bsdf {
 // Creates a BSDF that interpolates between two other BSDFs
 fn @make_mix_bsdf(mat1: Bsdf, mat2: Bsdf, k: f32) -> Bsdf {
     Bsdf {
-        eval: @ |math, in_dir, out_dir|
-            color_lerp(mat1.eval(math, in_dir, out_dir),
-                       mat2.eval(math, in_dir, out_dir),
+        eval: @ |in_dir, out_dir|
+            color_lerp(mat1.eval(in_dir, out_dir),
+                       mat2.eval(in_dir, out_dir),
                        k),
-        pdf: @ |math, in_dir, out_dir|
-            lerp(mat1.pdf(math, in_dir, out_dir),
-                 mat2.pdf(math, in_dir, out_dir),
+        pdf: @ |in_dir, out_dir|
+            lerp(mat1.pdf(in_dir, out_dir),
+                 mat2.pdf(in_dir, out_dir),
                  k),
-        sample: @ |math, rnd, out_dir, adjoint| {
+        sample: @ |rnd, out_dir, adjoint| {
             let u = randf(rnd);
             if u < k {
-                mat1.sample(math, rnd, out_dir, adjoint)
+                mat1.sample(rnd, out_dir, adjoint)
             } else {
-                mat2.sample(math, rnd, out_dir, adjoint)
+                mat2.sample(rnd, out_dir, adjoint)
             }
         },
         is_specular: mat1.is_specular & mat2.is_specular

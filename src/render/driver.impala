@@ -2,8 +2,12 @@
 
 extern "C" {
     fn rodent_get_film_data(i32, &mut &mut [f32], &mut i32, &mut i32) -> ();
-    fn rodent_get_primary_stream(&mut PrimaryStream, i32) -> ();
-    fn rodent_get_secondary_stream(&mut SecondaryStream, i32) -> ();
+    fn rodent_cpu_get_primary_stream(&mut PrimaryStream, i32) -> ();
+    fn rodent_cpu_get_secondary_stream(&mut SecondaryStream, i32) -> ();
+    fn rodent_gpu_get_first_primary_stream(i32, &mut PrimaryStream, i32) -> ();
+    fn rodent_gpu_get_second_primary_stream(i32, &mut PrimaryStream, i32) -> ();
+    fn rodent_gpu_get_secondary_stream(i32, &mut SecondaryStream, i32) -> ();
+    fn rodent_gpu_get_tmp_buffer(i32, &mut &mut [i32], i32) -> ();
     fn rodent_load_buffer(i32, &[u8]) -> &[i8];
     fn rodent_load_bvh2_tri1(i32, &[u8], &mut &[Node2], &mut &[Tri1]) -> ();
     fn rodent_load_bvh4_tri4(i32, &[u8], &mut &[Node4], &mut &[Tri4]) -> ();
@@ -30,7 +34,6 @@ struct RayStream {
 struct PrimaryStream {
     size: i32,
     rays: RayStream,
-    shader_id: &mut [i32],
     geom_id: &mut [i32],
     prim_id: &mut [i32],
     t: &mut [f32],
@@ -96,10 +99,10 @@ fn @make_primary_stream_hit_reader(primary: PrimaryStream, vector_width: i32) ->
     }
 }
 
-fn @make_primary_stream_hit_writer(primary: PrimaryStream, vector_width: i32) -> fn (i32, i32, Hit) -> () {
+fn @make_primary_stream_hit_writer(primary: PrimaryStream, vector_width: i32, invalid_geom_id: i32) -> fn (i32, i32, Hit) -> () {
     @ |i, j, hit| {
         let k = i * vector_width + j;
-        primary.geom_id(k) = hit.geom_id;
+        primary.geom_id(k) = if hit.geom_id == -1 { invalid_geom_id } else { hit.geom_id };
         primary.prim_id(k) = hit.prim_id;
         primary.t(k)       = hit.distance;
         primary.u(k)       = hit.uv_coords.x;

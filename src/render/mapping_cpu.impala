@@ -22,42 +22,32 @@ fn @cpu_parallel_tiles( width: i32
     }
 }
 
-fn @cpu_sort_primary(scene: Scene, primary: PrimaryStream, ray_begins: &mut [i32], ray_ends: &mut[i32], vector_width: i32) -> i32 {
+fn @cpu_sort_primary(scene: Scene, primary: PrimaryStream, ray_begins: &mut [i32], ray_ends: &mut[i32]) -> i32 {
     let read_primary_hit = make_primary_stream_hit_reader(primary, 1);
 
-    // Compute shader ids
-    for i, _ in vectorized_range(vector_width, 0, primary.size) {
-        let mut shader_id = scene.num_shaders;
-        let hit = read_primary_hit(i, 0);
-        if hit.geom_id >= 0 {
-            shader_id = scene.geometries(hit.geom_id).shader_id(hit);
-        }
-        primary.shader_id(i) = shader_id;
-    }
-
     // Count the number of rays per shader
-    for i in range(0, scene.num_shaders + 1) {
+    for i in range(0, scene.num_geometries + 1) {
         ray_ends(i) = 0;
     }
     for i in range(0, primary.size) {
-        ray_ends(primary.shader_id(i))++;
+        ray_ends(primary.geom_id(i))++;
     }
     // Compute scan over shader bins
     let mut n = 0;
-    for i in range(0, scene.num_shaders + 1) {
+    for i in range(0, scene.num_geometries + 1) {
         ray_begins(i) = n;
         n += ray_ends(i);
         ray_ends(i) = n;
     }
 
     // Sort by shader
-    for i in range(0, scene.num_shaders) {
+    for i in range(0, scene.num_geometries) {
         let (begin, end) = (ray_begins(i), ray_ends(i));
         let mut j = begin;
         while j < end {
-            let shader_id = primary.shader_id(j);
-            if shader_id != i {
-                let k = ray_begins(shader_id)++;
+            let geom_id = primary.geom_id(j);
+            if geom_id != i {
+                let k = ray_begins(geom_id)++;
 
                 swap_i32(&mut primary.rays.id(k),    &mut primary.rays.id(j));
                 swap_f32(&mut primary.rays.org_x(k), &mut primary.rays.org_x(j));
@@ -69,7 +59,6 @@ fn @cpu_sort_primary(scene: Scene, primary: PrimaryStream, ray_begins: &mut [i32
                 swap_f32(&mut primary.rays.tmin(k),  &mut primary.rays.tmin(j));
                 swap_f32(&mut primary.rays.tmax(k),  &mut primary.rays.tmax(j));
 
-                swap_i32(&mut primary.shader_id(k), &mut primary.shader_id(j));
                 swap_i32(&mut primary.geom_id(k),   &mut primary.geom_id(j));
                 swap_i32(&mut primary.prim_id(k),   &mut primary.prim_id(j));
                 swap_f32(&mut primary.t(k),         &mut primary.t(j));
@@ -88,7 +77,7 @@ fn @cpu_sort_primary(scene: Scene, primary: PrimaryStream, ray_begins: &mut [i32
     }
 
     // Kill rays that have not intersected anything
-    ray_ends(scene.num_shaders - 1)
+    ray_ends(scene.num_geometries - 1)
 }
 
 fn @cpu_permute_ray_stream(rays: RayStream, i: i32, j: i32, perm: Perm) -> () {
@@ -117,7 +106,6 @@ fn @cpu_compact_primary(primary: PrimaryStream) -> i32 {
 
             cpu_permute_ray_stream(primary.rays, k + j, i + j, perm);
 
-            primary.shader_id(k + j) = cpu_permute_i32(primary.shader_id(i + j), perm);
             primary.geom_id(k + j)   = cpu_permute_i32(primary.geom_id(i + j), perm);
             primary.prim_id(k + j)   = cpu_permute_i32(primary.prim_id(i + j), perm);
             primary.t(k + j)         = cpu_permute_f32(primary.t(i + j), perm);
@@ -222,15 +210,13 @@ fn @cpu_trace( scene: Scene
         film_pixels(pixel * 3 + 2) += color.b;
     }
 
-    let bvh = scene.geometries(0).bvh; // TODO: Support instancing
-
     for xmin, ymin, xmax, ymax in cpu_parallel_tiles(film_width, film_height, tile_size, tile_size, num_cores) {
         // Get ray streams/states from the CPU driver
         let mut primary   : PrimaryStream;
         let mut secondary : SecondaryStream;
         let capacity = 1024;
-        rodent_get_primary_stream(&mut primary,     capacity);
-        rodent_get_secondary_stream(&mut secondary, capacity);
+        rodent_cpu_get_primary_stream(&mut primary,     capacity);
+        rodent_cpu_get_secondary_stream(&mut secondary, capacity);
 
         let mut id = 0;
         let num_rays = (ymax - ymin) * (xmax - xmin);
@@ -243,9 +229,9 @@ fn @cpu_trace( scene: Scene
             // Trace primary rays
             cpu_traverse_hybrid(
                 min_max,
-                bvh,
+                scene.bvh,
                 make_ray_stream_reader(primary.rays, vector_width),
-                make_primary_stream_hit_writer(primary, vector_width),
+                make_primary_stream_hit_writer(primary, vector_width, scene.num_geometries),
                 vector_width /*packet_size*/,
                 primary.size / vector_width + select(primary.size % vector_width != 0, 1, 0),
                 single,
@@ -255,11 +241,11 @@ fn @cpu_trace( scene: Scene
             // Sort hits by shader id, and filter invalid hits
             let mut ray_begins : [i32 * 1024];
             let mut ray_ends   : [i32 * 1024];
-            primary.size = cpu_sort_primary(scene, primary, &mut ray_begins, &mut ray_ends, vector_width);
+            primary.size = cpu_sort_primary(scene, primary, &mut ray_begins, &mut ray_ends);
 
             // Perform (vectorized) shading
             let mut begin = 0;
-            for shader_id in unroll(0, scene.num_shaders) {
+            for geom_id in unroll(0, scene.num_geometries) {
                 let read_primary_ray    = make_ray_stream_reader(primary.rays, 1);
                 let read_primary_hit    = make_primary_stream_hit_reader(primary, 1);
                 let read_primary_state  = make_primary_stream_state_reader(primary, 1);
@@ -267,17 +253,16 @@ fn @cpu_trace( scene: Scene
                 let write_primary_state = make_primary_stream_state_writer(primary, 1);
                 let write_secondary_ray = make_ray_stream_writer(secondary.rays, 1);
 
-                let end = ray_ends(shader_id);
+                let end = ray_ends(geom_id);
                 for i, vector_width in vectorized_range(vector_width, begin, end) {
                     let ray       = read_primary_ray(i, 0);
                     let hit       = read_primary_hit(i, 0);
                     let mut state = read_primary_state(i, 0);
                     let ray_id    = primary.rays.id(i);
 
-                    let geom   = scene.geometries(hit.geom_id);
+                    let geom   = scene.geometries(geom_id);
                     let surf   = geom.surface_element(ray, hit);
-                    let shader = scene.shaders(shader_id);
-                    let mat    = shader(cpu_intrinsics, scene, ray, hit, surf);
+                    let mat    = geom.shader(ray, hit, surf);
 
                     // Execute hit point shading, and add the contribution of each lane to the frame buffer
                     let mut hit_color;
@@ -340,7 +325,7 @@ fn @cpu_trace( scene: Scene
             if likely(secondary.size > 0) {
                 cpu_traverse_hybrid(
                     min_max,
-                    bvh,
+                    scene.bvh,
                     make_ray_stream_reader(secondary.rays, vector_width),
                     make_secondary_stream_hit_writer(secondary, vector_width),
                     vector_width /*packet_size*/,
@@ -369,6 +354,19 @@ fn @cpu_trace( scene: Scene
 
 // CPU device ----------------------------------------------------------------------
 
+fn @make_cpu_buffer(p: &[i8]) -> DeviceBuffer {
+    DeviceBuffer {
+        load_f32:  @ |i| (p as &[f32])(i),
+        load_i32:  @ |i| (p as &[i32])(i),
+        load_vec2: @ |i| { let q = p as &[f32]; make_vec2(q(i * 2 + 0), q(i * 2 + 1)) },
+        load_vec3: @ |i| { let q = p as &[f32]; make_vec3(q(i * 3 + 0), q(i * 3 + 1), q(i * 3 + 2)) },
+        load_vec4: @ |i| { let v = (p as &[simd[f32 * 4]])(i); make_vec4(v(0), v(1), v(2), v(3)) },
+        load_int2: @ |i| { let q = p as &[i32]; (q(i * 2 + 0), q(i * 2 + 1)) },
+        load_int3: @ |i| { let q = p as &[i32]; (q(i * 3 + 0), q(i * 3 + 1), q(i * 3 + 2)) },
+        load_int4: @ |i| { let v = (p as &[simd[i32 * 4]])(i); (v(0), v(1), v(2), v(3)) }
+    }
+}
+
 fn @make_cpu_device(single: bool, min_max: MinMax, vector_width: i32, num_cores: i32, tile_size: i32) -> Device {
     Device {
         intrinsics: cpu_intrinsics,
@@ -384,18 +382,30 @@ fn @make_cpu_device(single: bool, min_max: MinMax, vector_width: i32, num_cores:
             )
         },
         present: @ || rodent_present(0),
-        load_buffer: @ |filename| rodent_load_buffer(0, filename),
-        load_bvh: @ |filename, geom_id| {
+        load_buffer: @ |filename| {
+            let p = rodent_load_buffer(0, filename);
+            DeviceBuffer {
+                load_f32:  @ |i| (p as &[f32])(i),
+                load_i32:  @ |i| (p as &[i32])(i),
+                load_vec2: @ |i| { let q = p as &[f32]; make_vec2(q(i * 2 + 0), q(i * 2 + 1)) },
+                load_vec3: @ |i| { let q = p as &[f32]; make_vec3(q(i * 3 + 0), q(i * 3 + 1), q(i * 3 + 2)) },
+                load_vec4: @ |i| { let v = (p as &[simd[f32 * 4]])(i); make_vec4(v(0), v(1), v(2), v(3)) },
+                load_int2: @ |i| { let q = p as &[i32]; (q(i * 2 + 0), q(i * 2 + 1)) },
+                load_int3: @ |i| { let q = p as &[i32]; (q(i * 3 + 0), q(i * 3 + 1), q(i * 3 + 2)) },
+                load_int4: @ |i| { let v = (p as &[simd[i32 * 4]])(i); (v(0), v(1), v(2), v(3)) }
+            }
+        },
+        load_bvh: @ |filename| {
             if vector_width == 4 {
                 let mut nodes;
                 let mut tris;
                 rodent_load_bvh4_tri4(0, filename, &mut nodes, &mut tris);
-                make_cpu_bvh4_tri4(nodes, tris, geom_id)
+                make_cpu_bvh4_tri4(nodes, tris)
             } else {
                 let mut nodes;
                 let mut tris;
                 rodent_load_bvh8_tri4(0, filename, &mut nodes, &mut tris);
-                make_cpu_bvh8_tri4(nodes, tris, geom_id)
+                make_cpu_bvh8_tri4(nodes, tris)
             }
         },
         load_png: @ |filename| {
@@ -411,7 +421,7 @@ fn @make_cpu_device(single: bool, min_max: MinMax, vector_width: i32, num_cores:
             let mut height;
             rodent_load_jpg(0, filename, &mut pixel_data, &mut width, &mut height);
             make_image_rgba32(pixel_data as &[u32], width, height)
-        },
+        }
     }
 }
 

@@ -32,7 +32,7 @@ fn @make_camera_emitter(scene: Scene, device: Device, iter: i32) -> Emitter {
         let mut rnd = hash as RndState;
         let kx = 2.0f * (x as f32 + randf(&mut rnd)) / (width  as f32) - 1.0f;
         let ky = 1.0f - 2.0f * (y as f32 + randf(&mut rnd)) / (height as f32);
-        let ray = scene.camera.generate_ray(device.intrinsics, kx, ky);
+        let ray = scene.camera.generate_ray(kx, ky);
         let state = make_ray_state(rnd, white, 0.0f, 0);
         (ray, state)
     }
@@ -72,10 +72,15 @@ fn @make_path_tracing_renderer(max_path_len: i32) -> Renderer {
                      , mat: Material
                      , emit: fn (Ray, Color) -> !
                      ) -> () {
+            // No shadow rays for specular materials
+            if mat.bsdf.is_specular {
+                return()
+            }
+
             let rnd = &mut state.rnd;
             let light_id = randi(rnd) % scene.num_lights;
-            let light = scene.lights(light_id);
-            let light_sample = light.sample_direct(device.intrinsics, rnd, surf.point);
+            let light = @@(scene.lights)(light_id);
+            let light_sample = @@(light.sample_direct)(rnd, surf.point);
             let light_dir = vec3_sub(light_sample.pos, surf.point);
             let vis = vec3_dot(light_dir, surf.local.col(2));
 
@@ -85,7 +90,7 @@ fn @make_path_tracing_renderer(max_path_len: i32) -> Renderer {
                 let in_dir = vec3_mulf(light_dir, inv_d);
                 let out_dir = vec3_neg(ray.dir);
 
-                let pdf_e = if light.has_area { mat.bsdf.pdf(device.intrinsics, in_dir, out_dir) } else { 0.0f };
+                let pdf_e = if light.has_area { mat.bsdf.pdf(in_dir, out_dir) } else { 0.0f };
                 let pdf_l = light_sample.pdf_area * pdf_lightpick;
 
                 let cos_e = vis * inv_d;
@@ -94,7 +99,7 @@ fn @make_path_tracing_renderer(max_path_len: i32) -> Renderer {
                 let mis = if light.has_area { 1.0f / (1.0f + pdf_e * cos_l * inv_d2 / pdf_l) } else { 1.0f };
                 let geom_factor = cos_e * cos_l * inv_d2 / pdf_l;
 
-                let contrib = color_mul(light_sample.intensity, color_mul(state.contrib, mat.bsdf.eval(device.intrinsics, in_dir, out_dir)));
+                let contrib = color_mul(light_sample.intensity, color_mul(state.contrib, mat.bsdf.eval(in_dir, out_dir)));
                 emit(
                     make_ray(surf.point, light_dir, offset, 1.0f - offset),
                     color_mulf(contrib, geom_factor * mis)
@@ -112,7 +117,7 @@ fn @make_path_tracing_renderer(max_path_len: i32) -> Renderer {
             // Hits on a light source
             if mat.is_emissive && surf.is_entering {
                 let out_dir = vec3_neg(ray.dir);
-                let emit = mat.emission(device.intrinsics, out_dir);
+                let emit = mat.emission(out_dir);
                 let next_mis = state.mis * hit.distance * hit.distance / vec3_dot(out_dir, surf.local.col(2));
                 let mis = 1.0f / (1.0f + next_mis * pdf_lightpick * emit.pdf_area);
                 accumulate(color_mulf(color_mul(state.contrib, emit.intensity), mis))
@@ -134,7 +139,7 @@ fn @make_path_tracing_renderer(max_path_len: i32) -> Renderer {
 
             // Bounce
             let out_dir = vec3_neg(ray.dir);
-            let mat_sample = mat.bsdf.sample(device.intrinsics, &mut state.rnd, out_dir, false);
+            let mat_sample = mat.bsdf.sample(&mut state.rnd, out_dir, false);
             let contrib = color_mul(state.contrib, mat_sample.color);
             let mis = if mat.bsdf.is_specular { 0.0f } else { 1.0f / mat_sample.pdf };
             bounce(

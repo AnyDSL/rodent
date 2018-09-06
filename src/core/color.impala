@@ -40,3 +40,4 @@ fn @is_black(c: Color) -> bool {
 
 static black = Color { r: 0.0f, g: 0.0f, b: 0.0f };
 static white = Color { r: 1.0f, g: 1.0f, b: 1.0f };
+static pink  = Color { r: 1.0f, g: 0.0f, b: 1.0f }; 

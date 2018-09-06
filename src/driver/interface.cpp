@@ -50,7 +50,7 @@ struct Interface {
     anydsl::Array<float>& primary_stream(size_t size) {
         size_t capacity = (size & ~((1 << 5) - 1)) + 32; // round to 32
         if (primary.size() < capacity) {
-            primary = std::move(anydsl::Array<float>(capacity * 21));
+            primary = std::move(anydsl::Array<float>(capacity * 20));
         }
         return primary;
     }
@@ -268,21 +268,20 @@ void rodent_load_bvh8_tri4(int32_t dev, const char* file, Node8** nodes, Tri4** 
 
 void rodent_get_primary_stream(PrimaryStream* primary, int32_t size) {
     auto& array = interface->primary_stream(size);
-    auto capacity = array.size() / 21;
+    auto capacity = array.size() / 20;
     primary->size = 0;
     get_ray_stream(primary->rays, array.data(), capacity);
-    primary->shader_id = (int*)array.data() +  9 * capacity;
-    primary->geom_id   = (int*)array.data() + 10 * capacity;
-    primary->prim_id   = (int*)array.data() + 11 * capacity;
-    primary->t         = array.data() + 12 * capacity;
-    primary->u         = array.data() + 13 * capacity;
-    primary->v         = array.data() + 14 * capacity;
-    primary->rnd       = (unsigned int*)array.data() + 15 * capacity;
-    primary->mis       = array.data() + 16 * capacity;
-    primary->contrib_r = array.data() + 17 * capacity;
-    primary->contrib_g = array.data() + 18 * capacity;
-    primary->contrib_b = array.data() + 19 * capacity;
-    primary->depth     = (int*)array.data() + 20 * capacity;
+    primary->geom_id   = (int*)array.data() + 9 * capacity;
+    primary->prim_id   = (int*)array.data() + 10 * capacity;
+    primary->t         = array.data() + 11 * capacity;
+    primary->u         = array.data() + 12 * capacity;
+    primary->v         = array.data() + 13 * capacity;
+    primary->rnd       = (unsigned int*)array.data() + 14 * capacity;
+    primary->mis       = array.data() + 15 * capacity;
+    primary->contrib_r = array.data() + 16 * capacity;
+    primary->contrib_g = array.data() + 17 * capacity;
+    primary->contrib_b = array.data() + 18 * capacity;
+    primary->depth     = (int*)array.data() + 19 * capacity;
 }
 
 void rodent_get_secondary_stream(SecondaryStream* secondary, int32_t size) {
