@@ -85,7 +85,7 @@ fn @make_path_tracing_renderer(max_path_len: i32, spp: i32)-> Renderer {
             let light_dir = vec3_sub(light_sample.pos, surf.point);
             let vis = vec3_dot(light_dir, surf.local.col(2));
 
-            if (vis > 0.0f) & !is_black(light_sample.intensity) {
+            if vis > 0.0f && light_sample.cos > 0.0f {
                 let inv_d = 1.0f / vec3_len(device.intrinsics, light_dir);
                 let inv_d2 = inv_d * inv_d;
                 let in_dir = vec3_mulf(light_dir, inv_d);
@@ -145,7 +145,7 @@ fn @make_path_tracing_renderer(max_path_len: i32, spp: i32)-> Renderer {
             let mis = if mat.bsdf.is_specular { 0.0f } else { 1.0f / mat_sample.pdf };
             bounce(
                 make_ray(surf.point, mat_sample.in_dir, offset, flt_max),
-                make_ray_state(state.rnd, color_mulf(contrib, 1.0f / (mat_sample.pdf * rr_prob)), mis, state.depth + 1)
+                make_ray_state(state.rnd, color_mulf(contrib, mat_sample.cos / (mat_sample.pdf * rr_prob)), mis, state.depth + 1)
             )
         }
 

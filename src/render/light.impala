@@ -80,7 +80,7 @@ fn @make_direct_sample(pos: Vec3, intensity: Color, pdf_area: f32, pdf_dir: f32,
             intensity: black,
             pdf_area: 1.0f,
             pdf_dir: 1.0f,
-            cos: 1.0f
+            cos: 0.0f
         }
     }
 }
