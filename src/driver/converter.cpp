@@ -69,7 +69,7 @@ inline std::string make_id(const std::string& str) {
     auto id = str;
     std::transform(id.begin(), id.end(), id.begin(), [] (char c) {
         if (std::isspace(c) || !std::isalnum(c)) return '_';
-        return char(std::tolower(c));
+        return c;
     });
     return id;
 }
@@ -419,7 +419,7 @@ static void write_bvhn_trim(const obj::TriMesh& tri_mesh) {
     write_buffer(of, tris );
 }
 
-static bool convert_obj(const std::string& file_name, Target target, std::ostream& os) {
+static bool convert_obj(const std::string& file_name, Target target, size_t max_path_len, size_t spp, std::ostream& os) {
     info("Converting OBJ file '", file_name, "'");
     obj::File obj_file;
     obj::MaterialLib mtl_lib;
@@ -475,6 +475,8 @@ static bool convert_obj(const std::string& file_name, Target target, std::ostrea
        << "    height: f32\n"
        << "};\n";
 
+    os << "\nextern fn get_spp() -> i32 { " << spp << " }\n";
+
     os << "\nextern fn render(settings: &Settings, iter: i32) -> () {\n";
 
     assert(target != Target(0));
@@ -490,7 +492,7 @@ static bool convert_obj(const std::string& file_name, Target target, std::ostrea
             break;
     }
 
-    os << "    let renderer = make_path_tracing_renderer(64 /*max_path_len*/, 4 /*spp*/);\n"
+    os << "    let renderer = make_path_tracing_renderer(" << max_path_len << " /*max_path_len*/, " << spp << " /*spp*/);\n"
        << "    let math     = device.intrinsics;\n";
 
     // Setup camera
@@ -656,7 +658,7 @@ static bool convert_obj(const std::string& file_name, Target target, std::ostrea
         bool has_emission = mat.ke != rgb(0.0f) || mat.map_ke != "";
         os << "    let shader_" << make_id(mtl_name) << " = @ |ray, hit, surf| {\n";
         if (mat.illum == 5) {
-            os << "        let bsdf = make_mirror_bsdf(math, surf, make_color(" << mat.tf.x << "f, " << mat.tf.y << "f, " << mat.tf.z << "f));\n";
+            os << "        let bsdf = make_mirror_bsdf(math, surf, make_color(" << mat.ks.x << "f, " << mat.ks.y << "f, " << mat.ks.z << "f));\n";
         } else if (mat.illum == 7) {
             os << "        let bsdf = make_glass_bsdf(math, surf, 1.0f, " << mat.ni << "f, make_color(" << mat.tf.x << "f, " << mat.tf.y << "f, " << mat.tf.z << "f));\n";
         } else {
@@ -734,8 +736,10 @@ static bool convert_obj(const std::string& file_name, Target target, std::ostrea
 static void usage() {
     std::cout << "converter [options] file\n"
               << "Available options:\n"
-              << "    -h     --help       Shows this message\n"
-              << "    -t     --target     Sets the target device (one of: sse42, avx, avx2, asimd, nvvm)\n"
+              << "    -h     --help                Shows this message\n"
+              << "    -t     --target              Sets the target device (one of: sse42, avx, avx2, asimd, nvvm)\n"
+              << "           --max-path-len        Sets the maximum path length (default: 64)\n"
+              << "    -spp   --samples-per-pixel   Sets the number of samples per pixel (default: 4)\n"
               << std::flush;
 }
 
@@ -754,6 +758,8 @@ int main(int argc, char** argv) {
     }
 
     std::string obj_file;
+    size_t spp = 4;
+    size_t max_path_len = 64;
     auto target = Target(0);
     for (int i = 1; i < argc; ++i) {
         if (argv[i][0] == '-') {
@@ -761,8 +767,7 @@ int main(int argc, char** argv) {
                 usage();
                 return 0;
             } else if (!strcmp(argv[i], "-t") || !strcmp(argv[i], "--target")) {
-                if (!check_option(i, argc, argv)) return 1;
-                i++;
+                if (!check_option(i++, argc, argv)) return 1;
                 if (!strcmp(argv[i], "sse42"))
                     target = Target::SSE42;
                 else if (!strcmp(argv[i], "avx"))
@@ -773,6 +778,12 @@ int main(int argc, char** argv) {
                     target = Target::ASIMD;
                 else if (!strcmp(argv[i], "nvvm"))
                     target = Target::NVVM;
+            } else if (!strcmp(argv[i], "-spp") || !strcmp(argv[i], "--samples-per-pixel")) {
+                if (!check_option(i++, argc, argv)) return 1;
+                spp = strtol(argv[i], NULL, 10);
+            } else if (!strcmp(argv[i], "--max-path-len")) {
+                if (!check_option(i++, argc, argv)) return 1;
+                max_path_len = strtol(argv[i], NULL, 10);
             } else {
                 std::cerr << "Unknown option '" << argv[i] << "'. Aborting." << std::endl;
                 return 1;
@@ -795,7 +806,7 @@ int main(int argc, char** argv) {
     }
 
     std::ofstream of("main.impala");
-    if (!convert_obj(obj_file, target, of))
+    if (!convert_obj(obj_file, target, max_path_len, spp, of))
         return 1;
     return 0;
 }

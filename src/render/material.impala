@@ -107,7 +107,7 @@ fn @make_phong_bsdf(math: Intrinsics, surf: SurfaceElement, ks: Color, ns: f32) 
             let v = randf(rnd);
 
             let reflect_out = vec3_reflect(out_dir, surf.local.col(2));
-            let sample = sample_cosine_hemisphere(math, u, v);
+            let sample = sample_cosine_power_hemisphere(math, ns, u, v);
             let in_dir = mat3x3_mul(make_orthonormal_mat3x3(reflect_out), sample.dir);
 
             let cos_r = sample.dir.z;
@@ -195,7 +195,12 @@ fn @make_mix_bsdf(mat1: Bsdf, mat2: Bsdf, k: f32) -> Bsdf {
             } else {
                 lerp(mat1.pdf(s.in_dir, out_dir), s.pdf, k)
             };
-            BsdfSample { in_dir: s.in_dir, pdf: pdf, color: s.color }
+            let color = if use_mat1 {
+                color_lerp(s.color, mat2.eval(s.in_dir, out_dir), k)
+            } else {
+                color_lerp(mat1.eval(s.in_dir, out_dir), s.color, k)
+            };
+            BsdfSample { in_dir: s.in_dir, pdf: pdf, color: color }
         },
         is_specular: mat1.is_specular & mat2.is_specular
     }

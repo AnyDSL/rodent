@@ -121,8 +121,8 @@ static void update_texture(uint32_t* buf, SDL_Texture* texture, size_t width, si
 }
 
 int main(int /*argc*/, char** /*argv*/) {
-    size_t width  = 512;
-    size_t height = 512;
+    size_t width  = 1080;
+    size_t height = 720;
 
     if (SDL_Init(SDL_INIT_VIDEO) != 0)
         error("Cannot initialize SDL.");
@@ -149,6 +149,7 @@ int main(int /*argc*/, char** /*argv*/) {
 
     setup_interface(width, height);
 
+    auto spp = get_spp();
     float fov = 60.0f;
     bool done = false;
     uint64_t tick_counter = 0;
@@ -185,7 +186,7 @@ int main(int /*argc*/, char** /*argv*/) {
         if (frames > 10 || tick_counter >= 5000) {
             std::ostringstream os;
             os << "Rodent [" << double(frames) * 1000.0 / double(tick_counter) << " FPS, "
-               << iter << " " << "sample" << (iter > 1 ? "s" : "") << "]";
+               << iter * spp << " " << "sample" << (iter * spp > 1 ? "s" : "") << "]";
             SDL_SetWindowTitle(window, os.str().c_str());
             frames = 0;
             tick_counter = 0;

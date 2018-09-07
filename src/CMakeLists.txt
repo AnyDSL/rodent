@@ -1,6 +1,8 @@
 set(CPUINFO_PATH "/proc/cpuinfo" CACHE STRING "Path to the CPU info file on the system")
 set(TARGET_DEVICE "" CACHE STRING "Target device for the converter tool. Must be one of: sse42, avx, avx2, asimd, nvvm")
 set(SCENE_FILE "" CACHE FILEPATH "Absolute path to an OBJ scene")
+set(MAX_PATH_LEN "64" CACHE STRING "Maximum path length")
+set(SPP "4" CACHE STRING "Samples per pixel")
 if (SCENE_FILE STREQUAL "")
     message(FATAL_ERROR "Please specify a valid OBJ scene in the SCENE_FILE variable")
 endif()
@@ -82,7 +84,7 @@ if (COLORIZE)
 endif()
 
 add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/main.impala
-                   COMMAND converter ${SCENE_FILE} ${TARGET_OPTION}
+    COMMAND converter ${SCENE_FILE} ${TARGET_OPTION} --max-path-len ${MAX_PATH_LEN} --samples-per-pixel ${SPP}
                    COMMAND ${CMAKE_COMMAND} -E rename ${CMAKE_BINARY_DIR}/main.impala ${CMAKE_CURRENT_SOURCE_DIR}/main.impala
                    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
                    DEPENDS ${SCENE_FILE} converter)

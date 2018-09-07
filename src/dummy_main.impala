@@ -9,4 +9,5 @@ struct Settings {
     height: f32
 }
 
+extern fn get_spp() -> i32 { 1 }
 extern fn render(settings: &Settings, iter: i32) -> () {}
