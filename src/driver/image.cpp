@@ -72,7 +72,7 @@ bool load_png(const FilePath& path, ImageRgba32& img) {
     std::unique_ptr<png_byte[]> row_bytes(new png_byte[img.width * 4]);
     for (size_t y = 0; y < img.height; y++) {
         png_read_row(png_ptr, row_bytes.get(), nullptr);
-        uint8_t* img_row = img.pixels.get() + 4 * img.width * y;
+        uint8_t* img_row = img.pixels.get() + 4 * img.width * (img.height - 1 - y);
         for (size_t x = 0; x < img.width; x++) {
             for (size_t c = 0; c < img.channels; ++c)
                 img_row[x * img.channels + c] = row_bytes[x * 4 + c];
@@ -160,7 +160,7 @@ bool load_jpg(const FilePath& path, ImageRgba32& image) {
     std::unique_ptr<JSAMPLE[]> row(new JSAMPLE[image.width * image.channels]);
     for (size_t y = 0; y < image.height; y++) {
         auto src_ptr = row.get();
-        auto dst_ptr = &image.pixels[y * image.width * 4];
+        auto dst_ptr = &image.pixels[(image.height - 1 - y) * image.width * 4];
         jpeg_read_scanlines(&cinfo, &src_ptr, 1);
         for (size_t x = 0; x < image.width; ++x, src_ptr += image.channels, dst_ptr += 4) {
             for (size_t c = 0; c < image.channels; c++)
