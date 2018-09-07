@@ -1,6 +1,9 @@
-type AtomicAddFn = fn (&mut i32, i32) -> i32;
-
 // Trace function ------------------------------------------------------------------
+
+struct Atomics {
+    add_i32: fn (&mut i32, i32) -> i32,
+    add_f32: fn (&mut f32, f32) -> f32
+}
 
 fn @gpu_get_film_data(dev_id: i32) -> (&mut [f32], i32, i32) {
     let mut film_pixels : &mut [f32];
@@ -25,7 +28,20 @@ fn @gpu_traverse_primary(primary: PrimaryStream, acc: Accelerator, intrinsics: I
     acc.sync();
 }
 
-fn @gpu_traverse_secondary(secondary: SecondaryStream, acc: Accelerator, intrinsics: Intrinsics, min_max: MinMax, scene: Scene, film_pixels: &mut [f32]) -> () {
+fn @gpu_accumulate(atomics: Atomics, film_pixels: &mut [f32], pixel: i32, color: Color, spp: i32) -> () {
+    if spp == 1 {
+        // If there is only one sample in flight, there is no need for atomics
+        film_pixels(pixel * 3 + 0) += color.r;
+        film_pixels(pixel * 3 + 1) += color.g;
+        film_pixels(pixel * 3 + 2) += color.b;
+    } else {
+        atomics.add_f32(&mut film_pixels(pixel * 3 + 0), color.r * (1.0f / (spp as f32)));
+        atomics.add_f32(&mut film_pixels(pixel * 3 + 1), color.g * (1.0f / (spp as f32)));
+        atomics.add_f32(&mut film_pixels(pixel * 3 + 2), color.b * (1.0f / (spp as f32)));
+    }
+}
+
+fn @gpu_traverse_secondary(secondary: SecondaryStream, acc: Accelerator, intrinsics: Intrinsics, atomics: Atomics, min_max: MinMax, scene: Scene, film_pixels: &mut [f32], spp: i32) -> () {
     let block_w = 64;
     let grid  = (round_up(secondary.size, block_w), 1, 1);
     let block = (block_w, 1, 1);
@@ -50,15 +66,18 @@ fn @gpu_traverse_secondary(secondary: SecondaryStream, acc: Accelerator, intrins
             1 /*root*/
         );
         if hit.geom_id < 0 {
-            film_pixels(pixel * 3 + 0) += secondary.color_r(gid);
-            film_pixels(pixel * 3 + 1) += secondary.color_g(gid);
-            film_pixels(pixel * 3 + 2) += secondary.color_b(gid);
+            let color = make_color(
+                secondary.color_r(gid),
+                secondary.color_g(gid),
+                secondary.color_b(gid)
+            );
+            gpu_accumulate(atomics, film_pixels, pixel, color, spp);
         }
     }
     acc.sync();
 }
 
-fn @gpu_shade(acc: Accelerator, scene: Scene, path_tracer: PathTracer, film_pixels: &mut [f32], primary: PrimaryStream, secondary: SecondaryStream, first: i32, last: i32, geom_id: i32) -> () {
+fn @gpu_shade(acc: Accelerator, atomics: Atomics, scene: Scene, path_tracer: PathTracer, film_pixels: &mut [f32], spp: i32, primary: PrimaryStream, secondary: SecondaryStream, first: i32, last: i32, geom_id: i32) -> () {
     let n = last - first;
     let block_w = 64;
     let grid  = (round_up(n, block_w), 1, 1);
@@ -80,9 +99,7 @@ fn @gpu_shade(acc: Accelerator, scene: Scene, path_tracer: PathTracer, film_pixe
 
         for once() {
             @@(path_tracer.on_hit)(ray, hit, &mut state, surf, mat, @ |color| -> ! {
-                film_pixels(pixel * 3 + 0) += color.r;
-                film_pixels(pixel * 3 + 1) += color.g;
-                film_pixels(pixel * 3 + 2) += color.b;
+                gpu_accumulate(atomics, film_pixels, pixel, color, spp);
                 break()
             });
         }
@@ -146,7 +163,7 @@ fn @gpu_sort_primary( primary: PrimaryStream
                     , dev_id: i32
                     , acc: Accelerator
                     , intrinsics: Intrinsics
-                    , atomic_add: AtomicAddFn
+                    , atomics: Atomics
                     , scene: Scene
                     , gpu_tmp:  &mut [i32]
                     , ray_ends: &mut [i32]
@@ -171,7 +188,7 @@ fn @gpu_sort_primary( primary: PrimaryStream
         }
 
         let hit = make_primary_stream_hit_reader(primary, 1)(ray_id, 0);
-        atomic_add(&mut gpu_tmp(hit.geom_id), 1);
+        atomics.add_i32(&mut gpu_tmp(hit.geom_id), 1);
     }
     acc.sync();
 
@@ -193,7 +210,7 @@ fn @gpu_sort_primary( primary: PrimaryStream
             break()
         }
         let geom_id = primary.geom_id(src_id);
-        let dst_id  = atomic_add(&mut gpu_tmp(geom_id), 1);
+        let dst_id  = atomics.add_i32(&mut gpu_tmp(geom_id), 1);
         copy_primary_ray(primary, other_primary, src_id, dst_id);
     }
     acc.sync();
@@ -207,11 +224,12 @@ fn @gpu_generate_rays( primary: PrimaryStream
                      , id: &mut i32
                      , film_width: i32
                      , film_height: i32
+                     , spp: i32
                      ) -> i32 {
     let block_w  = 64;
     let first_ray_id = *id;
     let first_dst_id = primary.size;
-    let num_rays = cpu_intrinsics.min(film_width * film_height - first_ray_id, capacity - first_dst_id);
+    let num_rays = cpu_intrinsics.min(spp * film_width * film_height - first_ray_id, capacity - first_dst_id);
     let film_div = make_fast_div(film_width as u32);
 
     let ray_ids     = primary.rays.id;
@@ -227,12 +245,14 @@ fn @gpu_generate_rays( primary: PrimaryStream
 
         let ray_id = first_ray_id + gid;
         let dst_id = first_dst_id + gid;
-        let y = fast_div(film_div, ray_id as u32) as i32;
-        let x = ray_id - y * film_width;
-        let (ray, state) = @@(path_tracer.on_emit)(x, y, film_width, film_height);
+        let sample = ray_id % spp;
+        let pixel  = ray_id / spp;
+        let y = fast_div(film_div, pixel as u32) as i32;
+        let x = pixel - y * film_width;
+        let (ray, state) = @@(path_tracer.on_emit)(sample, x, y, film_width, film_height);
         write_ray(dst_id, 0, ray);
         write_state(dst_id, 0, state);
-        write_id(dst_id, 0, ray_id);
+        write_id(dst_id, 0, pixel);
     }
     acc.sync();
 
@@ -245,7 +265,7 @@ fn @gpu_compact_primary( primary: PrimaryStream
                        , dev_id: i32
                        , acc: Accelerator
                        , intrinsics: Intrinsics
-                       , atomic_add: AtomicAddFn
+                       , atomics: Atomics
                        , gpu_tmp: &mut [i32]
                        ) -> i32 {
     let block_w = 64;
@@ -262,7 +282,7 @@ fn @gpu_compact_primary( primary: PrimaryStream
             break()
         }
 
-        let dst_id = atomic_add(&mut gpu_tmp(0), 1);
+        let dst_id = atomics.add_i32(&mut gpu_tmp(0), 1);
         copy_primary_ray(primary, other_primary, src_id, dst_id);
     }
     acc.sync();
@@ -278,7 +298,15 @@ fn @gpu_swap_streams(a: &mut PrimaryStream, b: &mut PrimaryStream) -> () {
     *b = tmp;
 }
 
-fn @gpu_streaming_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics, atomic_add: AtomicAddFn, min_max: MinMax, scene: Scene, path_tracer: PathTracer) -> () {
+fn @gpu_streaming_trace( dev_id: i32
+                       , acc: Accelerator
+                       , intrinsics: Intrinsics
+                       , atomics: Atomics
+                       , min_max: MinMax
+                       , scene: Scene
+                       , path_tracer: PathTracer
+                       , spp: i32
+                       ) -> () {
     let (film_pixels, film_width, film_height) = gpu_get_film_data(dev_id);
 
     let capacity = 1024 * 1024;
@@ -293,11 +321,11 @@ fn @gpu_streaming_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics, a
     rodent_gpu_get_tmp_buffer(dev_id, &mut gpu_tmp, 1024);
 
     let mut id = 0;
-    let num_rays = film_width * film_height;
+    let num_rays = spp * film_width * film_height;
     while id < num_rays || primary.size > 0 {
         // Regenerate rays
         if primary.size < capacity && id < num_rays {
-            primary.size = gpu_generate_rays(primary, capacity, acc, intrinsics, path_tracer, &mut id, film_width, film_height);
+            primary.size = gpu_generate_rays(primary, capacity, acc, intrinsics, path_tracer, &mut id, film_width, film_height, spp);
         }
 
         // Traverse primary rays
@@ -305,7 +333,7 @@ fn @gpu_streaming_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics, a
 
         // Sort rays by geometry
         let mut ray_ends : [i32 * 1024];
-        gpu_sort_primary(primary, other_primary, dev_id, acc, intrinsics, atomic_add, scene, gpu_tmp, &mut ray_ends);
+        gpu_sort_primary(primary, other_primary, dev_id, acc, intrinsics, atomics, scene, gpu_tmp, &mut ray_ends);
         gpu_swap_streams(&mut primary, &mut other_primary);
 
         // Shade rays
@@ -315,7 +343,7 @@ fn @gpu_streaming_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics, a
             if first >= last {
                 continue()
             }
-            gpu_shade(acc, scene, path_tracer, film_pixels, primary, secondary, first, last, geom_id);
+            gpu_shade(acc, atomics, scene, path_tracer, film_pixels, spp, primary, secondary, first, last, geom_id);
             first = last;
         }
         primary.size   = first;
@@ -324,16 +352,16 @@ fn @gpu_streaming_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics, a
 
         if first > 0 {
             // Trace secondary rays
-            gpu_traverse_secondary(secondary, acc, intrinsics, min_max, scene, film_pixels);
+            gpu_traverse_secondary(secondary, acc, intrinsics, atomics, min_max, scene, film_pixels, spp);
 
             // Compact primary rays
-            other_primary.size = gpu_compact_primary(primary, other_primary, dev_id, acc, intrinsics, atomic_add, gpu_tmp);
+            other_primary.size = gpu_compact_primary(primary, other_primary, dev_id, acc, intrinsics, atomics, gpu_tmp);
             gpu_swap_streams(&mut primary, &mut other_primary);
         }
     }
 }
 
-fn @gpu_mega_kernel_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics, min_max: MinMax, scene: Scene, path_tracer: PathTracer) -> () {
+fn @gpu_mega_kernel_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics, min_max: MinMax, scene: Scene, path_tracer: PathTracer, spp: i32) -> () {
     let (film_pixels, film_width, film_height) = gpu_get_film_data(dev_id);
 
     let (bx, by, bz) = (8, 8, 1);
@@ -343,22 +371,33 @@ fn @gpu_mega_kernel_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics,
         if x >= film_width || y >= film_height {
             break()
         }
-        let (init_ray, init_state) = @@(path_tracer.on_emit)(x, y, film_width, film_height);
 
-        let mut ray = init_ray;
-        let mut state = init_state;
+        let mut ray;
+        let mut state;
+        let mut done = true;
+        let mut samples = 0;
         let mut final_color = make_color(0.0f, 0.0f, 0.0f);
 
         while true {
+            if done {
+                if samples == spp {
+                    break()
+                }
+                let (init_ray, init_state) = @@(path_tracer.on_emit)(samples, x, y, film_width, film_height);
+                ray = init_ray;
+                state = init_state;
+                samples++;
+            }
+            done = true;
+
             let hit = gpu_traverse_single_helper(intrinsics, min_max, ray, scene.bvh, false /*any_hit*/, 1 /*root*/);
             if hit.prim_id == -1 {
-                break()
+                continue()
             }
 
             let mut shadow_color;
             let mut shadow_ray;
             let mut trace_shadow = false;
-            let mut done = true;
             for i in unroll(0, scene.num_geometries) {
                 if i == scene.num_geometries - 1 || hit.geom_id == i {
                     let geom = scene.geometries(i);
@@ -396,14 +435,12 @@ fn @gpu_mega_kernel_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics,
             if trace_shadow && gpu_traverse_single_helper(intrinsics, min_max, shadow_ray, scene.bvh, true /*any_hit*/, 1 /*root*/).prim_id == -1 {
                 final_color = color_add(final_color, shadow_color);
             }
-
-            if done { break() }
         }
 
         let pixel = 3 * (y * film_width + x);
-        film_pixels(pixel + 0) += final_color.r;
-        film_pixels(pixel + 1) += final_color.g;
-        film_pixels(pixel + 2) += final_color.b;
+        film_pixels(pixel + 0) += final_color.r * (1.0f / (spp as f32));
+        film_pixels(pixel + 1) += final_color.g * (1.0f / (spp as f32));
+        film_pixels(pixel + 2) += final_color.b * (1.0f / (spp as f32));
     }
     acc.sync()
 }
@@ -416,21 +453,22 @@ fn @make_gpu_device( dev_id: i32
                    , min_max: MinMax
                    , load_bvh: fn (&[u8]) -> Bvh
                    , make_buffer: fn (&[i8]) -> DeviceBuffer
-                   , atomic_add: AtomicAddFn
+                   , atomics: Atomics
                    , streaming: bool
                    ) -> Device {
     Device {
         intrinsics: intrinsics,
-        trace: @ |scene, path_tracer| {
+        trace: @ |scene, path_tracer, spp| {
             if streaming {
                 gpu_streaming_trace(
                     dev_id,
                     acc,
                     intrinsics,
-                    atomic_add,
+                    atomics,
                     min_max,
                     scene,
-                    path_tracer
+                    path_tracer,
+                    spp
                 )
             } else {
                 gpu_mega_kernel_trace(
@@ -439,7 +477,8 @@ fn @make_gpu_device( dev_id: i32
                     intrinsics,
                     min_max,
                     scene,
-                    path_tracer
+                    path_tracer,
+                    spp
                 )
             }
         },
@@ -501,7 +540,14 @@ fn @make_nvvm_device(dev: i32) -> Device {
             }
         }
     };
-    let atomic_add = @ |p, i| nvvm_atomic_add_global(p as &mut[1]i32, i);
+    let atomics = Atomics {
+        add_i32: @ |p, i| nvvm_atomic_add_global(p as &mut[1]i32, i),
+        add_f32: @ |p, i| {
+            let mut old: f32;
+            asm("atom.add.f32 $0, [$1], $2;" : "=f"(old) : "l"(p), "f"(i) : "memory");
+            old 
+        }
+    };
     make_gpu_device(
         dev_id,
         nvvm_accelerator(dev),
@@ -509,7 +555,7 @@ fn @make_nvvm_device(dev: i32) -> Device {
         make_nvvm_min_max(),
         load_bvh,
         make_buffer,
-        atomic_add,
+        atomics,
         true /*streaming*/
     )
 }

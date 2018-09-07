@@ -24,11 +24,11 @@ struct BsdfSample {
 
 // Opaque BSDF structure
 struct Bsdf {
-    // Evaluates the reflectance of the material for the given set of directions at the given point on a surface
+    // Evaluates the reflectance of the material for the given pair of directions
     eval: fn (Vec3, Vec3) -> Color,
-    // Evaluates the sampling probability density for a given direction and point on a surface
+    // Evaluates the sampling probability density for a given pair of directions
     pdf: fn (Vec3, Vec3) -> f32,
-    // Samples a direction at the given point on a surface
+    // Samples a direction
     sample: fn (&mut RndState, Vec3, bool) -> BsdfSample,
     // Returns true if the material is purely specular
     is_specular: bool

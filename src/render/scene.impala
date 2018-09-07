@@ -13,7 +13,7 @@ struct Scene {
 struct Device {
     intrinsics: Intrinsics,
 
-    trace: fn (Scene, PathTracer) -> (),
+    trace: fn (Scene, PathTracer, i32) -> (),
     present: fn () -> (),
 
     // General formats

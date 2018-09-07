@@ -1,5 +1,5 @@
 struct PathTracer {
-    on_emit:   fn (i32, i32, i32, i32) -> (Ray, RayState),
+    on_emit:   RayEmitter,
     on_hit:    fn (Ray, Hit, &mut RayState, SurfaceElement, Material, fn (Color) -> !) -> (),
     on_shadow: fn (Ray, Hit, &mut RayState, SurfaceElement, Material, fn (Ray, Color) -> !) -> (),
     on_bounce: fn (Ray, Hit, &mut RayState, SurfaceElement, Material, fn (Ray, RayState) -> !) -> (),
@@ -12,7 +12,7 @@ struct RayState {
     depth:   i32
 }
 
-type Emitter = fn (i32, i32, i32, i32) -> (Ray, RayState);
+type RayEmitter = fn (i32, i32, i32, i32, i32) -> (Ray, RayState);
 
 fn @make_ray_state(rnd: RndState, contrib: Color, mis: f32, depth: i32) -> RayState {
     RayState {
@@ -23,9 +23,10 @@ fn @make_ray_state(rnd: RndState, contrib: Color, mis: f32, depth: i32) -> RaySt
     }
 }
 
-fn @make_camera_emitter(scene: Scene, device: Device, iter: i32) -> Emitter {
-    @ |x, y, width, height| {
+fn @make_camera_emitter(scene: Scene, device: Device, iter: i32) -> RayEmitter {
+    @ |sample, x, y, width, height| {
         let mut hash = fnv_init();
+        hash = fnv_hash(hash, sample as u32);
         hash = fnv_hash(hash, iter as u32);
         hash = fnv_hash(hash, x as u32);
         hash = fnv_hash(hash, y as u32);
@@ -54,11 +55,11 @@ fn @make_debug_renderer() -> Renderer {
             on_bounce: on_bounce
         };
 
-        device.trace(scene, path_tracer);
+        device.trace(scene, path_tracer, 1);
     }
 }
 
-fn @make_path_tracing_renderer(max_path_len: i32) -> Renderer {
+fn @make_path_tracing_renderer(max_path_len: i32, spp: i32)-> Renderer {
     @ |scene, device, iter| {
         let offset = 0.001f;
         let pdf_lightpick = 1.0f / (scene.num_lights as f32);
@@ -155,6 +156,6 @@ fn @make_path_tracing_renderer(max_path_len: i32) -> Renderer {
             on_bounce: on_bounce
         };
 
-        device.trace(scene, path_tracer);
+        device.trace(scene, path_tracer, spp);
     }
 }
