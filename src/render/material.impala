@@ -184,7 +184,7 @@ fn @make_mix_bsdf(mat1: Bsdf, mat2: Bsdf, k: f32) -> Bsdf {
                  k),
         sample: @ |rnd, out_dir, adjoint| {
             let u = randf(rnd);
-            let use_mat1 = u < k;
+            let use_mat1 = u >= k;
             let s = if use_mat1 {
                 mat1.sample(rnd, out_dir, adjoint)
             } else {

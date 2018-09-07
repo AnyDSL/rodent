@@ -676,7 +676,7 @@ static bool convert_obj(const std::string& file_name, Target target, size_t max_
             }
             if (has_specular) {
                 if (mat.map_ks != "") {
-                    os << "        let specular_texture = make_texture(math, make_repeat_border(), make_bilinear_filter(), image_" << make_id(image_names[images[mat.map_kd]]) << ");\n";
+                    os << "        let specular_texture = make_texture(math, make_repeat_border(), make_bilinear_filter(), image_" << make_id(image_names[images[mat.map_ks]]) << ");\n";
                     os << "        let ks = specular_texture(vec4_to_2(surf.attr(0)));\n";
                 } else {
                     os << "        let ks = make_color(" << mat.ks.x << "f, " << mat.ks.y << "f, " << mat.ks.z << "f);\n";
