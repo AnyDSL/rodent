@@ -566,6 +566,9 @@ static bool convert_obj(const std::string& file_name, Target target, size_t max_
     std::vector<float3> light_norms;
     std::vector<float>  light_areas;
     for (size_t i = 0; i < tri_mesh.indices.size(); i += 4) {
+        // Do not leave this array undefined, even if this triangle is not a light
+        light_ids[i / 4] = 0;
+
         auto& mtl_name = obj_file.materials[tri_mesh.indices[i + 3]];
         if (mtl_name == "")
             continue;
@@ -613,7 +616,7 @@ static bool convert_obj(const std::string& file_name, Target target, size_t max_
             }
             os << "    };\n";
         } else {
-            os << "    let lights = @ |_| make_point_light(math, black, black);\n";
+            os << "    let lights = @ |_| make_point_light(math, make_vec3(0.0f, 0.0f, 0.0f), black);\n";
         }
     } else {
         write_buffer("data/light_verts.bin",  pad_buffer(light_verts,  enable_padding, sizeof(float) * 4));

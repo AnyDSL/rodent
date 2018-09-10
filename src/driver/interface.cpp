@@ -145,7 +145,7 @@ struct Interface {
             }
             skip_buffer(is);
             skip_buffer(is);
-        } while (!is.eof());
+        } while (!is.eof() && is);
         error("Invalid BVH file");
     }
 

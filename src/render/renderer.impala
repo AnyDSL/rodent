@@ -79,7 +79,8 @@ fn @make_path_tracing_renderer(max_path_len: i32, spp: i32)-> Renderer {
             }
 
             let rnd = &mut state.rnd;
-            let light_id = randi(rnd) % scene.num_lights;
+            // Note: randi() returns random integers, but we only want positive integers here
+            let light_id = (randi(rnd) & 0x7FFFFFFF) % scene.num_lights;
             let light = @@(scene.lights)(light_id);
             let light_sample = @@(light.sample_direct)(rnd, surf.point);
             let light_dir = vec3_sub(light_sample.pos, surf.point);

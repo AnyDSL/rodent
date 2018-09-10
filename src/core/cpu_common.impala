@@ -103,13 +103,19 @@ fn @cpu_index_of(value: f32, lane: f32) -> i32 {
 
 // Vectorizes an arbitrary range
 fn @vectorized_range(vector_width: i32, a: i32, b: i32, body: fn (i32, i32) -> ()) -> () {
-    let n_vec = round_down(b - a, vector_width);
-    for i in range_step(a, a + n_vec, vector_width) {
-        for j in vectorize(vector_width) {
-            @@body(i + j, vector_width)
+    if vector_width == 1 {
+        for i in range(a, b) {
+            body(i, 1);
         }
-    }
-    for i in range(a + n_vec, b) {
-        @@body(i, 1)
+    } else {
+        let n_vec = round_down(b - a, vector_width);
+        for i in range_step(a, a + n_vec, vector_width) {
+            for j in vectorize(vector_width) {
+                @@body(i + j, vector_width)
+            }
+        }
+        for i in range(a + n_vec, b) {
+            @@body(i, 1)
+        }
     }
 }
