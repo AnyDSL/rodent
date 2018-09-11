@@ -94,12 +94,13 @@ fn @make_path_tracing_renderer(max_path_len: i32, spp: i32)-> Renderer {
 
                 let pdf_e = if light.has_area { mat.bsdf.pdf(in_dir, out_dir) } else { 0.0f };
                 let pdf_l = light_sample.pdf_area * pdf_lightpick;
+                let inv_pdf_l = 1.0f / pdf_l;
 
                 let cos_e = vis * inv_d;
                 let cos_l = light_sample.cos;
 
-                let mis = if light.has_area { 1.0f / (1.0f + pdf_e * cos_l * inv_d2 / pdf_l) } else { 1.0f };
-                let geom_factor = cos_e * cos_l * inv_d2 / pdf_l;
+                let mis = if light.has_area { 1.0f / (1.0f + pdf_e * cos_l * inv_d2 * inv_pdf_l) } else { 1.0f };
+                let geom_factor = cos_e * cos_l * inv_d2 * inv_pdf_l;
 
                 let contrib = color_mul(light_sample.intensity, color_mul(state.contrib, mat.bsdf.eval(in_dir, out_dir)));
                 emit(

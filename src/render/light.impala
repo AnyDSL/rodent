@@ -146,20 +146,7 @@ fn @make_triangle_light(math: Intrinsics, v0: Vec3, v1: Vec3, v2: Vec3, color: C
 
 fn @make_precomputed_triangle_light(math: Intrinsics, v0: Vec3, v1: Vec3, v2: Vec3, n: Vec3, inv_area: f32, color: Color) -> Light {
     let emitter = AreaEmitter {
-        sample: @ |uv|  {
-            let mut u = uv.x;
-            let mut v = uv.y;
-            if (u + v > 1.0f) {
-                u = 1.0f - u;
-                v = 1.0f - v;
-            }
-            let pos = vec3_add(
-                vec3_add(vec3_mulf(v0, 1.0f - v - u),
-                         vec3_mulf(v1, u)),
-                vec3_mulf(v2, v)
-            );
-            (pos, n, inv_area)
-        },
+        sample: @ |uv| (sample_triangle(uv.x, uv.y, v0, v1, v2), n, inv_area),
         normal: @ |_| n,
         pdf: @ |uv| inv_area
     };

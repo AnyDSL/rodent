@@ -45,6 +45,19 @@ fn @make_dir_sample(math: Intrinsics, c: f32, s: f32, phi: f32, pdf: f32) -> Dir
     }
 }
 
+// Samples a point uniformly on a triangle
+fn @sample_triangle(mut u: f32, mut v: f32, v0: Vec3, v1: Vec3, v2: Vec3) -> Vec3 {
+    if (u + v > 1.0f) {
+        u = 1.0f - u;
+        v = 1.0f - v;
+    }
+    vec3_add(
+        vec3_add(vec3_mulf(v0, 1.0f - v - u),
+                 vec3_mulf(v1, u)),
+        vec3_mulf(v2, v)
+    )
+}
+
 // Probability density function for uniform sphere sampling
 fn @uniform_sphere_pdf() -> f32 { 1.0f / (4.0f * flt_pi) }
 
