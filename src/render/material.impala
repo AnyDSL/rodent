@@ -111,21 +111,12 @@ fn @make_phong_bsdf(math: Intrinsics, surf: SurfaceElement, ks: Color, ns: f32) 
             cosine_power_hemisphere_pdf(math, cos, ns)
         },
         sample: @ |rnd, out_dir, _| {
-            let u = randf(rnd);
-            let v = randf(rnd);
-
             let reflect_out = vec3_reflect(out_dir, surf.local.col(2));
-            let sample = sample_cosine_power_hemisphere(math, ns, u, v);
+            let sample = sample_cosine_power_hemisphere(math, ns, randf(rnd), randf(rnd));
             let in_dir = mat3x3_mul(make_orthonormal_mat3x3(reflect_out), sample.dir);
-
-            let cos_r = sample.dir.z;
-            let cos_n = positive_cos(in_dir, surf.local.col(2));
-
-            let color = color_mulf(ks,
-                math.powf(cos_r, ns) *
-                (ns + 2.0f) * (1.0f / (2.0f * flt_pi)));
-
-            make_bsdf_sample(surf, in_dir, sample.pdf, cos_n, color, false)
+            let cos = positive_cos(in_dir, surf.local.col(2));
+            let color = color_mulf(ks, sample.pdf);
+            make_bsdf_sample(surf, in_dir, sample.pdf, cos, color, false)
         },
         is_specular: false
     }
