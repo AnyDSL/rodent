@@ -16,7 +16,7 @@ struct Index {
 };
 
 struct Face {
-    static constexpr int max_indices = 8;
+    static constexpr int max_indices = 32;
     Index indices[max_indices];
     int index_count;
     int material;
