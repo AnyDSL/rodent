@@ -663,7 +663,7 @@ static bool convert_obj(const std::string& file_name, Target target, size_t max_
         if (mat.illum == 5) {
             os << "        let bsdf = make_mirror_bsdf(math, surf, make_color(" << mat.ks.x << "f, " << mat.ks.y << "f, " << mat.ks.z << "f));\n";
         } else if (mat.illum == 7) {
-            os << "        let bsdf = make_glass_bsdf(math, surf, 1.0f, " << mat.ni << "f, make_color(" << mat.tf.x << "f, " << mat.tf.y << "f, " << mat.tf.z << "f));\n";
+            os << "        let bsdf = make_glass_bsdf(math, surf, 1.0f, " << mat.ni << "f, " << "make_color(" << mat.ks.x << "f, " << mat.ks.y << "f, " << mat.ks.z << "f), make_color(" << mat.tf.x << "f, " << mat.tf.y << "f, " << mat.tf.z << "f));\n";
         } else {
             bool has_diffuse  = mat.kd != rgb(0.0f) || mat.map_kd != "";
             bool has_specular = mat.ks != rgb(0.0f) || mat.map_ks != "";

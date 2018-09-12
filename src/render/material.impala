@@ -135,7 +135,7 @@ fn @make_mirror_bsdf(math: Intrinsics, surf: SurfaceElement, ks: Color) -> Bsdf 
 }
 
 // Creates a perfect glass BSDF
-fn @make_glass_bsdf(math: Intrinsics, surf: SurfaceElement, n1: f32, n2: f32, ks: Color) -> Bsdf {
+fn @make_glass_bsdf(math: Intrinsics, surf: SurfaceElement, n1: f32, n2: f32, ks: Color, kt: Color) -> Bsdf {
     Bsdf {
         eval: @ |in_dir, out_dir| black,
         pdf:  @ |in_dir, out_dir| 0.0f,
@@ -147,13 +147,12 @@ fn @make_glass_bsdf(math: Intrinsics, surf: SurfaceElement, n1: f32, n2: f32, ks
 
             if cos2_t > 0.0f {
                 // Refraction
-                let u = randf(rnd);
                 let cos_t = math.sqrtf(cos2_t);
                 let F = fresnel_factor(k, cos_i, cos_t);
-                if (u > F) {
+                if (randf(rnd) > F) {
                     let t = vec3_sub(vec3_mulf(n, k * cos_i - cos_t), vec3_mulf(out_dir, k));
                     let adjoint_term = if adjoint { k * k } else { 1.0f };
-                    return(make_bsdf_sample(surf, t, 1.0f, 1.0f, color_mulf(ks, adjoint_term), true))
+                    return(make_bsdf_sample(surf, t, 1.0f, 1.0f, color_mulf(kt, adjoint_term), true))
                 }
             }
             // Reflection
