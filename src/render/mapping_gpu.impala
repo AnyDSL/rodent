@@ -452,6 +452,7 @@ fn @make_gpu_device( dev_id: i32
                    , intrinsics: Intrinsics
                    , min_max: MinMax
                    , load_bvh: fn (&[u8]) -> Bvh
+                   , read_pixel: fn (&[u32], i32) -> u32
                    , make_buffer: fn (&[i8]) -> DeviceBuffer
                    , atomics: Atomics
                    , streaming: bool
@@ -490,14 +491,16 @@ fn @make_gpu_device( dev_id: i32
             let mut width;
             let mut height;
             rodent_load_png(dev_id, filename, &mut pixel_data, &mut width, &mut height);
-            make_image_rgba32(pixel_data as &[u32], width, height)
+            let (ptr, stride) = (pixel_data, width);
+            make_image_rgba32(@ |x, y| read_pixel(ptr as &[u32], y * stride + x), width, height)
         },
         load_jpg: @ |filename| {
             let mut pixel_data;
             let mut width;
             let mut height;
             rodent_load_jpg(dev_id, filename, &mut pixel_data, &mut width, &mut height);
-            make_image_rgba32(pixel_data as &[u32], width, height)
+            let (ptr, stride) = (pixel_data, width);
+            make_image_rgba32(@ |x, y| read_pixel(ptr as &[u32], y * stride + x), width, height)
         }
     }
 }
@@ -510,6 +513,7 @@ fn @make_nvvm_device(dev: i32) -> Device {
         rodent_load_bvh2_tri1(dev_id, filename, &mut nodes, &mut tris);
         make_nvvm_bvh2_tri1(nodes, tris)
     };
+    let read_pixel = @ |p, i| bitcast[u32](nvvm_ldg_i32(&p(i) as &[1]i32));
     let make_buffer = @ |p| {
         DeviceBuffer {
             load_f32:  @ |i| nvvm_ldg_f32(&((p as &[1][f32])(i))),
@@ -554,6 +558,7 @@ fn @make_nvvm_device(dev: i32) -> Device {
         nvvm_intrinsics,
         make_nvvm_min_max(),
         load_bvh,
+        read_pixel,
         make_buffer,
         atomics,
         true /*streaming*/

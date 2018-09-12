@@ -418,14 +418,14 @@ fn @make_cpu_device(single: bool, min_max: MinMax, vector_width: i32, num_cores:
             let mut width;
             let mut height;
             rodent_load_png(0, filename, &mut pixel_data, &mut width, &mut height);
-            make_image_rgba32(pixel_data as &[u32], width, height)
+            make_image_rgba32(@ |x, y| (pixel_data as &[u32])(y * width + x), width, height)
         },
         load_jpg: @ |filename| {
             let mut pixel_data;
             let mut width;
             let mut height;
             rodent_load_jpg(0, filename, &mut pixel_data, &mut width, &mut height);
-            make_image_rgba32(pixel_data as &[u32], width, height)
+            make_image_rgba32(@ |x, y| (pixel_data as &[u32])(y * width + x), width, height)
         }
     }
 }

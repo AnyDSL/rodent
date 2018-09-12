@@ -21,10 +21,10 @@ fn @make_image(pixels: fn (i32, i32) -> Color, width: i32, height: i32) -> Image
     }
 }
 
-fn @make_image_rgba32(pixels: &[u32], width: i32, height: i32) -> Image {
+fn @make_image_rgba32(pixels: fn (i32, i32) -> u32, width: i32, height: i32) -> Image {
     Image {
         pixels: @ |x, y| {
-            let pixel = pixels(width * y + x);
+            let pixel = pixels(x, y);
             let r = pixel & 0xFFu;
             let g = (pixel >> 8u) & 0xFFu;
             let b = (pixel >> 16u) & 0xFFu;
