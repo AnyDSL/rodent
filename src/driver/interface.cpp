@@ -267,6 +267,7 @@ void rodent_get_film_data(int32_t dev, float** pixels, int32_t* width, int32_t* 
             auto film_size = interface->film_width * interface->film_height * 3;
             auto film_data = reinterpret_cast<float*>(anydsl_alloc(dev, sizeof(float) * film_size));
             device.film_pixels = std::move(anydsl::Array<float>(dev, film_data, film_size));
+            anydsl::copy(interface->host_pixels, device.film_pixels);
         }
         *pixels = device.film_pixels.data();
     } else {
