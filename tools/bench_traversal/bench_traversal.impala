@@ -458,8 +458,9 @@ extern fn cpu_occluded_single_ray1_bvh8_tri4(nodes: &[Node8], tris: &[Tri4], ray
 
 extern fn nvvm_intersect_single_ray1_bvh2_tri1(nodes: &[Node2], tris: &[Tri1], rays: &[Ray1], hits: &mut [Hit1], num_rays: i32) -> () {
     if enable_gpu_bvh2_tri1 {
+        let nvvm_dev = nvvm_accelerator(0);
         gpu_traverse_single(
-            nvvm_accelerator(0),
+            nvvm_dev,
             nvvm_intrinsics,
             make_nvvm_min_max(),
             make_nvvm_bvh2_tri1(nodes, tris),
@@ -469,13 +470,15 @@ extern fn nvvm_intersect_single_ray1_bvh2_tri1(nodes: &[Node2], tris: &[Tri1], r
             num_rays,
             false /*any_hit*/,
         );
+        nvvm_dev.sync()
     } else { variant_not_available("nvvm_intersect_single_ray1_bvh2_tri1"); }
 }
 
 extern fn nvvm_occluded_single_ray1_bvh2_tri1(nodes: &[Node2], tris: &[Tri1], rays: &[Ray1], hits: &mut [Hit1], num_rays: i32) -> () {
     if enable_gpu_bvh2_tri1 {
+        let nvvm_dev = nvvm_accelerator(0);
         gpu_traverse_single(
-            nvvm_accelerator(0),
+            nvvm_dev,
             nvvm_intrinsics,
             make_nvvm_min_max(),
             make_nvvm_bvh2_tri1(nodes, tris),
@@ -485,5 +488,6 @@ extern fn nvvm_occluded_single_ray1_bvh2_tri1(nodes: &[Node2], tris: &[Tri1], ra
             num_rays,
             true /*any_hit*/,
         );
+        nvvm_dev.sync()
     } else { variant_not_available("nvvm_occluded_single_ray1_bvh2_tri1"); }
 }

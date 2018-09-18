@@ -156,9 +156,16 @@ int main(int /*argc*/, char** /*argv*/) {
     uint32_t frames = 0;
     uint32_t iter = 0;
 
-    Camera cam(
+    /*Camera cam(
         float3(0, 1.0, 2.5),
         float3(0, 0, -1),
+        float3(0.0f, 1.0f, 0.0f),
+        fov,
+        float(width) / float(height));*/
+
+    Camera cam(
+        float3(-1.8, 1, -5),
+        float3(-0.1, 0, 1),
         float3(0.0f, 1.0f, 0.0f),
         fov,
         float(width) / float(height));

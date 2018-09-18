@@ -25,7 +25,6 @@ fn @gpu_traverse_primary(primary: PrimaryStream, acc: Accelerator, intrinsics: I
         primary.size /*num_packets*/,
         false /*any_hit*/
     );
-    acc.sync();
 }
 
 fn @gpu_accumulate(atomics: Atomics, film_pixels: &mut [f32], pixel: i32, color: Color, spp: i32) -> () {
@@ -74,7 +73,6 @@ fn @gpu_traverse_secondary(secondary: SecondaryStream, acc: Accelerator, intrins
             gpu_accumulate(atomics, film_pixels, pixel, color, spp);
         }
     }
-    acc.sync();
 }
 
 fn @gpu_shade(acc: Accelerator, atomics: Atomics, scene: Scene, path_tracer: PathTracer, film_pixels: &mut [f32], spp: i32, primary: PrimaryStream, secondary: SecondaryStream, first: i32, last: i32, geom_id: i32) -> () {
@@ -187,8 +185,7 @@ fn @gpu_sort_primary( primary: PrimaryStream
             break()
         }
 
-        let hit = make_primary_stream_hit_reader(primary, 1)(ray_id, 0);
-        atomics.add_i32(&mut gpu_tmp(hit.geom_id), 1);
+        atomics.add_i32(&mut gpu_tmp(primary.geom_id(ray_id)), 1);
     }
     acc.sync();
 

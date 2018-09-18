@@ -100,44 +100,47 @@ fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
         let node = bvh.node(node_ref.node - 1);
 
         let mut mask = 0;
-        let tmp = make_small_stack(bvh.arity);
+        let small_stack = make_small_stack(bvh.arity);
         for k in unroll(0, bvh.arity) @{
             let (t0, t1) = intersect_ray_box(min_max, false, ray, node.bbox(k));
-            let hit = t0 <= t1;
-            mask = mask | select(hit, 1 << k, 0);
-            tmp.write(k, (node.child(k), t0));
+            if t0 <= t1 {
+                mask |= 1 << k;
+                small_stack.write(k, (node.child(k), t0));
+            }
         }
 
-        if mask == 0 { stack.pop(); }
-        else if bvh.arity == 2 {
-            // Special case for N=2
-            let (child1, t1) = tmp.read(0);
-            let (child2, t2) = tmp.read(1);
-            if mask == 3 {
-                let order = select(any_hit || t1 < t2, (child1, child2), (child2, child1));
-                let (first, second) = order;
-                stack.set_top(first, undef());
-                stack.push_after(second, undef());
+        if bvh.arity == 2 {
+            // Binary BVH
+            if mask == 0 {
+                stack.pop();
             } else {
-                stack.set_top(select(mask == 1, child1, child2), undef());
+                let (child0, t0) = small_stack.read(0);
+                let (child1, t1) = small_stack.read(1);
+                if mask == 3 {
+                    let first  = select(t0 < t1, child0, child1);
+                    let second = select(t0 < t1, child1, child0); 
+                    stack.set_top(first, undef());
+                    stack.push_after(second, undef());
+                } else {
+                    stack.set_top(select(mask == 1, child0, child1), undef());
+                }
             }
         } else {
-            // General case - slow
+            // General case -- slower
             stack.pop();
-            let mut tmin = flt_max;
-            for k in unroll(0, bvh.arity) @{
-                if mask & (1 << k) != 0 {
-                    let (child, t) = tmp.read(k);
-                    if any_hit || t < tmin {
-                        // Equivalent to stack.push(child, undef())
-                        // but does not generate allocas for the stack's tmins
-                        let top = stack.top();
-                        stack.set_top(child, undef());
-                        stack.push_after(top.node, undef());
-                    } else {
-                        stack.push_after(child, undef());
+
+            if mask != 0 {
+                let mut tmin = ray.tmax;
+                for k in unroll(0, bvh.arity) {
+                    if mask & (1 << k) != 0 {
+                        let (child, t) = small_stack.read(k);
+                        if any_hit || t < tmin {
+                            stack.push(child, undef());
+                            tmin = t
+                        } else {
+                            stack.push_after(child, undef())
+                        }
                     }
-                    tmin = min_max.fminf(tmin, t);
                 }
             }
         }
