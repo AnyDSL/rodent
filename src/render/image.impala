@@ -6,8 +6,8 @@ struct Image {
 }
 
 struct BorderHandling {
-    lower: fn (Intrinsics, f32) -> f32,
-    upper: fn (Intrinsics, f32) -> f32
+    horz: fn (Intrinsics, f32) -> f32,
+    vert: fn (Intrinsics, f32) -> f32
 }
 
 type Texture = fn (Vec2) -> Color;
@@ -38,17 +38,18 @@ fn @make_image_rgba32(pixels: fn (i32, i32) -> u32, width: i32, height: i32) -> 
 }
 
 fn @make_clamp_border() -> BorderHandling {
+    let clamp = @ |math, x| math.fminf(1.0f, math.fmaxf(0.0f, x));
     BorderHandling {
-        lower: @ |_, _| 0.0f,
-        upper: @ |_, _| 1.0f
+        horz: clamp,
+        vert: clamp
     }
 }
 
 fn @make_repeat_border() -> BorderHandling {
     let repeat = @ |math, x| x - math.floorf(x);
     BorderHandling {
-        lower: repeat,
-        upper: repeat
+        horz: repeat,
+        vert: repeat
     }
 }
 
@@ -83,16 +84,9 @@ fn @make_bilinear_filter() -> ImageFilter {
 }
 
 fn @make_texture(math: Intrinsics, border: BorderHandling, filter: ImageFilter, image: Image) -> Texture {
-    let apply_border = @ |x| {
-        if x < 0.0f {
-            border.lower(math, x)
-        } else if x > 1.0f {
-            border.upper(math, x)
-        } else { x }
-    };
     @ |uv| {
-        let u = apply_border(uv.x);
-        let v = apply_border(uv.y);
+        let u = border.horz(math, uv.x);
+        let v = border.vert(math, uv.y);
         filter(math, image, make_vec2(u, v))
     }
 }

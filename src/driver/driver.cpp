@@ -155,7 +155,7 @@ int main(int /*argc*/, char** /*argv*/) {
     uint64_t tick_counter = 0;
     uint32_t frames = 0;
     uint32_t iter = 0;
-
+    // Cornell box
     /*Camera cam(
         float3(0, 1.0, 2.5),
         float3(0, 0, -1),
@@ -163,12 +163,29 @@ int main(int /*argc*/, char** /*argv*/) {
         fov,
         float(width) / float(height));*/
 
+    // Bathroom duck
     Camera cam(
+        float3(0, 1.0, 1.0),
+        float3(0, 0, -1),
+        float3(0.0f, 1.0f, 0.0f),
+        fov,
+        float(width) / float(height));
+
+    // Living room
+    /*Camera cam(
         float3(-1.8, 1, -5),
         float3(-0.1, 0, 1),
         float3(0.0f, 1.0f, 0.0f),
         fov,
-        float(width) / float(height));
+        float(width) / float(height));*/
+
+    // Salle de bain
+    /*Camera cam(
+        float3(-2.26, 15.62, 35.23),
+        float3(-22.18, -5.32, -97.36),
+        float3(0.0f, 1.0f, 0.0f),
+        fov,
+        float(width) / float(height));*/
 
     while (!done) {
         done = handle_events(iter, cam);

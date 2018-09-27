@@ -74,6 +74,15 @@ inline std::string make_id(const std::string& str) {
     return id;
 }
 
+inline std::string fix_file(const std::string& str) {
+    auto id = str;
+    std::transform(id.begin(), id.end(), id.begin(), [] (char c) {
+        if (c == '\\') return '/';
+        return c;
+    });
+    return id;
+}
+
 inline bool ends_with(const std::string& str, const std::string& ext) {
     return str.rfind(ext) == str.length() - ext.length();
 }
@@ -419,6 +428,111 @@ static void write_bvhn_trim(const obj::TriMesh& tri_mesh) {
     write_buffer(of, tris );
 }
 
+static bool operator == (const obj::Material& a, const obj::Material& b) {
+    return a.ka == b.ka &&
+           a.kd == b.kd &&
+           a.ks == b.ks &&
+           a.ke == b.ke &&
+           a.ns == b.ns &&
+           a.ni == b.ni &&
+           a.tf == b.tf &&
+           // ignored: a.tr == b.tr &&
+           // ignored: a.d == b.d &&
+           a.illum == b.illum &&
+           // ignored: a.map_ka == b.map_ka &&
+           a.map_kd == b.map_kd &&
+           a.map_ks == b.map_ks &&
+           a.map_ke == b.map_ke &&
+           // ignored: a.map_bump == b.map_bump &&
+           // ignored: a.map_d == b.map_d;
+           true;
+}
+
+static void cleanup_obj(obj::File& obj_file, obj::MaterialLib& mtl_lib) {
+    // Create a dummy material
+    auto& dummy_mat = mtl_lib[""];
+    dummy_mat.ka = rgb(0.0f);
+    dummy_mat.kd = rgb(0.0f, 1.0f, 1.0f);
+    dummy_mat.ks = rgb(0.0f);
+    dummy_mat.ke = rgb(0.0f);
+    dummy_mat.ns = 1.0f;
+    dummy_mat.ni = 1.0f;
+    dummy_mat.tf = rgb(0.0f);
+    dummy_mat.tr = 1.0f;
+    dummy_mat.d  = 1.0f;
+    dummy_mat.illum = 2;
+    dummy_mat.map_ka = "";
+    dummy_mat.map_kd = "";
+    dummy_mat.map_ks = "";
+    dummy_mat.map_ke = "";
+    dummy_mat.map_bump = "";
+    dummy_mat.map_d = "";
+
+    // Check that all materials exist
+    for (auto& mtl_name : obj_file.materials) {
+        if (mtl_name != "" && !mtl_lib.count(mtl_name)) {
+            warn("Missing material definition for '", mtl_name, "'. Replaced by dummy material.");
+            mtl_name = "";
+        }
+    }
+
+    // Remap identical materials (avoid duplicates)
+    std::unordered_map<std::string, std::string> mtl_remap;
+    for (size_t i = 0; i < obj_file.materials.size(); ++i) {
+        auto& mtl1_name = obj_file.materials[i];
+        auto& mtl1 = mtl_lib[mtl1_name];
+        if (mtl_remap.count(mtl1_name) != 0)
+            continue;
+        for (size_t j = i + 1; j < obj_file.materials.size(); ++j) {
+            auto& mtl2_name = obj_file.materials[j];
+            auto& mtl2 = mtl_lib[mtl2_name];
+            if (mtl1 == mtl2)
+                mtl_remap.emplace(mtl2_name, mtl1_name);
+        }
+    }
+    // Record unused materials
+    std::unordered_set<std::string> used_mtls;
+    for (auto& obj : obj_file.objects) {
+        for (auto& group : obj.groups) {
+            for (auto& face : group.faces) {
+                auto mtl_name = obj_file.materials[face.material];
+                auto it = mtl_remap.find(mtl_name);
+                if (it != mtl_remap.end())
+                    mtl_name = it->second;
+                used_mtls.emplace(mtl_name);
+            }
+        }
+    }
+
+    // Remap indices/materials
+    if (used_mtls.size() != obj_file.materials.size()) {
+        std::vector<std::string> new_materials = obj_file.materials;
+        new_materials.erase(std::remove_if(new_materials.begin(), new_materials.end(), [&] (auto& mtl_name) {
+            return used_mtls.count(mtl_name) == 0;
+        }), new_materials.end());
+        std::vector<uint32_t> mtl_id_remap;
+        for (auto mtl_name : obj_file.materials) {
+            auto it = mtl_remap.find(mtl_name);
+            if (it != mtl_remap.end())
+                mtl_name = it->second;
+
+            auto new_mtl_index = std::find(new_materials.begin(), new_materials.end(), mtl_name) - new_materials.begin();
+            mtl_id_remap.emplace_back(new_mtl_index);
+        }
+        for (auto& obj : obj_file.objects) {
+            for (auto& group : obj.groups) {
+                for (auto& face : group.faces) {
+                    assert(face.material < mtl_id_remap.size());
+                    face.material = mtl_id_remap[face.material];
+                    assert(face.material < new_materials.size());
+                }
+            }
+        }
+        std::swap(obj_file.materials, new_materials);
+        info("Removed ", new_materials.size() - obj_file.materials.size(), " unused/duplicate material(s)");
+    }
+}
+
 static bool convert_obj(const std::string& file_name, Target target, size_t max_path_len, size_t spp, std::ostream& os) {
     info("Converting OBJ file '", file_name, "'");
     obj::File obj_file;
@@ -436,13 +550,7 @@ static bool convert_obj(const std::string& file_name, Target target, size_t max_
         }
     }
 
-    // Check that all materials exist
-    for (auto& mtl_name : obj_file.materials) {
-        if (mtl_name != "" && !mtl_lib.count(mtl_name)) {
-            warn("Missing material definition for '", mtl_name, "'. Replaced by dummy material.");
-            mtl_name = "";
-        }
-    }
+    cleanup_obj(obj_file, mtl_lib);
 
     std::unordered_map<std::string, size_t> images;
     bool has_map_ke = false;
@@ -454,7 +562,7 @@ static bool convert_obj(const std::string& file_name, Target target, size_t max_
     }
 
     auto tri_mesh = compute_tri_mesh(obj_file, mtl_lib, 0);
-
+    
     // Generate images
     std::vector<std::string> image_names(images.size());
     for (auto& pair : images)
@@ -541,7 +649,7 @@ static bool convert_obj(const std::string& file_name, Target target, size_t max_
     os << "\n    // Images\n"
        << "    let dummy_image = make_image(@ |x, y| make_color(0.0f, 0.0f, 0.0f), 1, 1);\n";
     for (size_t i = 0; i < images.size(); i++) {
-        auto& name = image_names[i];
+        auto name = fix_file(image_names[i]);
         copy_file(path.base_name() + "/" + name, "data/" + name);
         os << "    let image_" << make_id(name) << " = ";
         if (ends_with(name, ".png")) {
@@ -649,13 +757,9 @@ static bool convert_obj(const std::string& file_name, Target target, size_t max_
     // Generate shaders
     info("Generating materials for '", file_name, "'");
     os << "\n    // Shaders\n";
-    os << "    let dummy_shader = @ |ray, hit, surf| make_material(make_diffuse_bsdf(math, surf, pink));\n";
     for (auto& mtl_name : obj_file.materials) {
-        if (mtl_name == "")
-            continue;
         auto it = mtl_lib.find(mtl_name);
-        if (it == mtl_lib.end())
-            continue;
+        assert(it != mtl_lib.end());
 
         auto& mat = it->second;
         bool has_emission = mat.ke != rgb(0.0f) || mat.map_ke != "";
@@ -710,11 +814,15 @@ static bool convert_obj(const std::string& file_name, Target target, size_t max_
 
     os << "\n    // Geometries\n"
        << "    let geometries = @ |i| match i {\n";
-    for (uint32_t mat = 1; mat < num_mats; ++mat) {
-        os << "        " << mat << " => make_tri_mesh_geometry(math, tri_mesh, shader_" << make_id(obj_file.materials[mat]) << "),\n";
+    for (uint32_t mat = 0; mat < num_mats; ++mat) {
+        os << "        ";
+        if (mat != num_mats - 1)
+            os << mat;
+        else
+            os << "_";
+        os << " => make_tri_mesh_geometry(math, tri_mesh, shader_" << make_id(obj_file.materials[mat]) << "),\n";
     }
-    os << "        _ => make_tri_mesh_geometry(math, tri_mesh, dummy_shader)\n"
-       << "    };\n";
+    os << "    };\n";
 
     // Scene
     os << "\n    // Scene\n"

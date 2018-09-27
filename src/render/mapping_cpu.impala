@@ -106,11 +106,6 @@ fn @cpu_compact_primary(primary: PrimaryStream) -> i32 {
 
             cpu_permute_ray_stream(primary.rays, k + j, i + j, perm);
 
-            primary.geom_id(k + j)   = cpu_permute_i32(primary.geom_id(i + j), perm);
-            primary.prim_id(k + j)   = cpu_permute_i32(primary.prim_id(i + j), perm);
-            primary.t(k + j)         = cpu_permute_f32(primary.t(i + j), perm);
-            primary.u(k + j)         = cpu_permute_f32(primary.u(i + j), perm);
-            primary.v(k + j)         = cpu_permute_f32(primary.v(i + j), perm);
             primary.rnd(k + j)       = cpu_permute_u32(primary.rnd(i + j), perm);
             primary.mis(k + j)       = cpu_permute_f32(primary.mis(i + j), perm);
             primary.contrib_r(k + j) = cpu_permute_f32(primary.contrib_r(i + j), perm);
@@ -209,16 +204,16 @@ fn @cpu_trace( scene: Scene
     let (film_pixels, film_width, film_height) = cpu_get_film_data();
 
     fn @accumulate(pixel: i32, color: Color) -> () {
-        film_pixels(pixel * 3 + 0) += color.r * (1.0f / (spp as f32));
-        film_pixels(pixel * 3 + 1) += color.g * (1.0f / (spp as f32));
-        film_pixels(pixel * 3 + 2) += color.b * (1.0f / (spp as f32));
+        let inv = 1.0f / (spp as f32);
+        film_pixels(pixel * 3 + 0) += color.r * inv;
+        film_pixels(pixel * 3 + 1) += color.g * inv;
+        film_pixels(pixel * 3 + 2) += color.b * inv;
     }
-
     for xmin, ymin, xmax, ymax in cpu_parallel_tiles(film_width, film_height, tile_size, tile_size, num_cores) {
         // Get ray streams/states from the CPU driver
         let mut primary   : PrimaryStream;
         let mut secondary : SecondaryStream;
-        let capacity = 1024;
+        let capacity = spp * tile_size * tile_size;
         rodent_cpu_get_primary_stream(&mut primary,     capacity);
         rodent_cpu_get_secondary_stream(&mut secondary, capacity);
 
@@ -358,19 +353,6 @@ fn @cpu_trace( scene: Scene
 
 // CPU device ----------------------------------------------------------------------
 
-fn @make_cpu_buffer(p: &[i8]) -> DeviceBuffer {
-    DeviceBuffer {
-        load_f32:  @ |i| (p as &[f32])(i),
-        load_i32:  @ |i| (p as &[i32])(i),
-        load_vec2: @ |i| { let q = p as &[f32]; make_vec2(q(i * 2 + 0), q(i * 2 + 1)) },
-        load_vec3: @ |i| { let q = p as &[f32]; make_vec3(q(i * 3 + 0), q(i * 3 + 1), q(i * 3 + 2)) },
-        load_vec4: @ |i| { let v = (p as &[simd[f32 * 4]])(i); make_vec4(v(0), v(1), v(2), v(3)) },
-        load_int2: @ |i| { let q = p as &[i32]; (q(i * 2 + 0), q(i * 2 + 1)) },
-        load_int3: @ |i| { let q = p as &[i32]; (q(i * 3 + 0), q(i * 3 + 1), q(i * 3 + 2)) },
-        load_int4: @ |i| { let v = (p as &[simd[i32 * 4]])(i); (v(0), v(1), v(2), v(3)) }
-    }
-}
-
 fn @make_cpu_device(single: bool, min_max: MinMax, vector_width: i32, num_cores: i32, tile_size: i32) -> Device {
     Device {
         intrinsics: cpu_intrinsics,
@@ -431,17 +413,17 @@ fn @make_cpu_device(single: bool, min_max: MinMax, vector_width: i32, num_cores:
 }
 
 fn @make_avx2_device() -> Device {
-    make_cpu_device(true, make_cpu_int_min_max(), 8, 0, 64)
+    make_cpu_device(true, make_cpu_int_min_max(), 8, 0, 32)
 }
 
 fn @make_avx_device() -> Device {
-    make_cpu_device(true, make_cpu_default_min_max(), 8, 0, 64)
+    make_cpu_device(true, make_cpu_default_min_max(), 8, 0, 32)
 }
 
 fn @make_sse42_device() -> Device {
-    make_cpu_device(true, make_cpu_int_min_max(), 4, 0, 64)
+    make_cpu_device(true, make_cpu_int_min_max(), 4, 0, 32)
 }
 
 fn @make_asimd_device() -> Device {
-    make_cpu_device(false, make_cpu_int_min_max(), 4, 0, 64)
+    make_cpu_device(false, make_cpu_int_min_max(), 4, 0, 32)
 }

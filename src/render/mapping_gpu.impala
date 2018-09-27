@@ -133,6 +133,7 @@ fn @copy_primary_ray( primary: PrimaryStream
                     , other_primary: PrimaryStream
                     , src_id: i32
                     , dst_id: i32
+                    , keep_hit: bool
                     ) -> () {
     other_primary.rays.id(dst_id)    = primary.rays.id(src_id);
     other_primary.rays.org_x(dst_id) = primary.rays.org_x(src_id);
@@ -143,11 +144,13 @@ fn @copy_primary_ray( primary: PrimaryStream
     other_primary.rays.dir_z(dst_id) = primary.rays.dir_z(src_id);
     other_primary.rays.tmin(dst_id)  = primary.rays.tmin(src_id);
     other_primary.rays.tmax(dst_id)  = primary.rays.tmax(src_id);
-    other_primary.geom_id(dst_id)    = primary.geom_id(src_id);
-    other_primary.prim_id(dst_id)    = primary.prim_id(src_id);
-    other_primary.t(dst_id)          = primary.t(src_id);
-    other_primary.u(dst_id)          = primary.u(src_id);
-    other_primary.v(dst_id)          = primary.v(src_id);
+    if keep_hit {
+        other_primary.geom_id(dst_id) = primary.geom_id(src_id);
+        other_primary.prim_id(dst_id) = primary.prim_id(src_id);
+        other_primary.t(dst_id)       = primary.t(src_id);
+        other_primary.u(dst_id)       = primary.u(src_id);
+        other_primary.v(dst_id)       = primary.v(src_id);
+    }
     other_primary.rnd(dst_id)        = primary.rnd(src_id);
     other_primary.mis(dst_id)        = primary.mis(src_id);
     other_primary.contrib_r(dst_id)  = primary.contrib_r(src_id);
@@ -208,7 +211,7 @@ fn @gpu_sort_primary( primary: PrimaryStream
         }
         let geom_id = primary.geom_id(src_id);
         let dst_id  = atomics.add_i32(&mut gpu_tmp(geom_id), 1);
-        copy_primary_ray(primary, other_primary, src_id, dst_id);
+        copy_primary_ray(primary, other_primary, src_id, dst_id, true);
     }
     acc.sync();
 }
@@ -267,7 +270,11 @@ fn @gpu_compact_primary( primary: PrimaryStream
                        ) -> i32 {
     let block_w = 64;
 
-    // Fill ray_ends with 0s
+    // reset temporary memory
+    let mut size = 0;
+    runtime_copy(0, &size as &[i8], 0i64, dev_id, gpu_tmp as &[i8], 0i64, sizeof[i32]() as i64);
+
+    // Compact primary rays into another queue
     with work_item in acc.exec((round_up(primary.size, block_w), 1, 1), (block_w, 1, 1)) {
         let src_id = work_item.gidx();
         if src_id >= primary.size {
@@ -280,11 +287,10 @@ fn @gpu_compact_primary( primary: PrimaryStream
         }
 
         let dst_id = atomics.add_i32(&mut gpu_tmp(0), 1);
-        copy_primary_ray(primary, other_primary, src_id, dst_id);
+        copy_primary_ray(primary, other_primary, src_id, dst_id, false);
     }
     acc.sync();
 
-    let mut size = 0;
     runtime_copy(dev_id, gpu_tmp as &[i8], 0i64, 0, &mut size as &[i8], 0i64, sizeof[i32]() as i64);
     size
 }
