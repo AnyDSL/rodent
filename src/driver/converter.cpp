@@ -115,7 +115,7 @@ class BvhNTriMAdapter {
             return ((count - 1) / M + 1) * area;
         }
         static float traversal_cost(float area) {
-            return area * 0.5f;
+            return area * 0.1f;
         }
     };
 
@@ -134,7 +134,7 @@ public:
     {}
 
     void build(const obj::TriMesh& tri_mesh, const std::vector<::Tri>& tris) {
-        builder_.build(tris, NodeWriter(*this), LeafWriter(*this, tris, tri_mesh.indices), M);
+        builder_.build(tris, NodeWriter(*this), LeafWriter(*this, tris, tri_mesh.indices), M / 2);
     }
 
 #ifdef STATISTICS

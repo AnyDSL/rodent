@@ -68,15 +68,15 @@ struct MultiNode {
         if (N == 2)
             return 0;
         else {
-            float min_cost = FLT_MAX;
-            int min_idx = 0;
+            float max_cost = -FLT_MAX;
+            int max_idx = -1;
             for (int i = 0; i < count; i++) {
-                if (!nodes[i].tested && min_cost > nodes[i].cost) {
-                    min_idx = i;
-                    min_cost = nodes[i].cost;
+                if (!nodes[i].tested && (max_idx < 0 || max_cost < nodes[i].cost)) {
+                    max_idx = i;
+                    max_cost = nodes[i].cost;
                 }
             }
-            return min_idx;
+            return max_idx;
         }
     }
 
@@ -152,6 +152,10 @@ public:
         Stack<Node> stack;
         stack.push(initial_refs, tri_count, mesh_bb, -1);
 
+        std::vector<float3> centers(tris.size());
+        for (size_t i = 0; i < tris.size(); ++i)
+            centers[i] = (tris[i].v0 + tris[i].v1 + tris[i].v2) * (1.0f / 3.0f);
+
         while (!stack.is_empty()) {
             MultiNode<Node, N> multi_node(stack.pop());
 
@@ -173,7 +177,7 @@ public:
                 // Try object splits
                 ObjectSplit object_split;
                 for (size_t axis = 0; axis < 3; axis++)
-                    find_object_split(object_split, axis, refs, ref_count);
+                    find_object_split(object_split, centers.data(), axis, refs, ref_count);
 
                 SpatialSplit spatial_split;
                 if (BBox(object_split.left_bb).overlap(object_split.right_bb).half_area() > spatial_threshold) {
@@ -212,7 +216,7 @@ public:
 #endif
                 } else {
                     // Partitioning can be done in-place
-                    apply_object_split(object_split, refs, ref_count);
+                    apply_object_split(object_split, centers.data(), refs, ref_count);
 
                     const size_t right_count = ref_count - object_split.left_count;
                     const size_t left_count = object_split.left_count;
@@ -352,19 +356,19 @@ private:
 #endif
     }
 
-    void sort_refs(size_t axis, Ref* refs, size_t ref_count) {
+    void sort_refs(size_t axis, float3* centers, Ref* refs, size_t ref_count) {
         // Sort the primitives based on their centroids
-        std::sort(refs, refs + ref_count, [axis] (const Ref& a, const Ref& b) {
-            const float ca = a.bb.min[axis] + a.bb.max[axis];
-            const float cb = b.bb.min[axis] + b.bb.max[axis];
+        std::sort(refs, refs + ref_count, [axis, centers] (const Ref& a, const Ref& b) {
+            const float ca = clamp(centers[a.id][axis], a.bb.min[axis], a.bb.max[axis]);
+            const float cb = clamp(centers[b.id][axis], b.bb.min[axis], b.bb.max[axis]);
             return (ca < cb) || (ca == cb && a.id < b.id);
         });
     }
 
-    void find_object_split(ObjectSplit& split, size_t axis, Ref* refs, size_t ref_count) {
+    void find_object_split(ObjectSplit& split, float3* centers, size_t axis, Ref* refs, size_t ref_count) {
         assert(ref_count > 0);
 
-        sort_refs(axis, refs, ref_count);
+        sort_refs(axis, centers, refs, ref_count);
 
         // Sweep from the right and accumulate the bounding boxes
         BBox cur_bb = BBox::empty();
@@ -390,8 +394,8 @@ private:
         assert(split.left_count != 0 && split.left_count != ref_count);
     }
 
-    void apply_object_split(const ObjectSplit& split, Ref* refs, int ref_count) {
-        sort_refs(split.axis, refs, ref_count);
+    void apply_object_split(const ObjectSplit& split, float3* centers, Ref* refs, int ref_count) {
+        if (split.axis != 2) sort_refs(split.axis, centers, refs, ref_count);
     }
 
     size_t spatial_binning(Bin* bins, size_t num_bins, SpatialSplit& split,

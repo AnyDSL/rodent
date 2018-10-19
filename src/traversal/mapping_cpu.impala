@@ -235,7 +235,7 @@ fn @cpu_traverse_single_helper( mut ray: Ray
 
                 // Intersect primitives
                 for j in vectorize(prim.size) {
-                    let (was_hit, prim_hit) = prim.intersect(j, cpu_intrinsics, true /*mask*/, ray);
+                    let (was_hit, prim_hit) = prim.intersect(j, cpu_intrinsics, prim.is_valid(j) /*mask*/, ray);
                     if any_hit {
                         // Early exit mode
                         let mask = rv_ballot(was_hit);
@@ -305,9 +305,12 @@ fn @cpu_traverse_hybrid_helper( mut ray: Ray
     };
 
     while true {
+        let exit = break;
+        let cull = continue;
+
         // Cull nodes and switch to single ray tracing when SIMD utilization is too low
         while true {
-            if unlikely(stack.is_empty()) { return(hit) }
+            if unlikely(stack.is_empty()) { exit() }
             let active = (stack.top().tmin <= ray.tmax) & !terminated;
             let mask = rv_ballot(active);
             if likely(mask != 0) {
@@ -318,7 +321,7 @@ fn @cpu_traverse_hybrid_helper( mut ray: Ray
                         let lane_hit = cpu_traverse_single_helper(lane_ray, lane_octant, min_max, bvh, any_hit, stack.top().node);
                         if lane_hit.prim_id >= 0 {
                             store_hit(&mut hit, lane, lane_hit);
-                            rv_store(&mut ray.tmax, lane, lane_hit.distance);
+                            if !any_hit { rv_store(&mut ray.tmax, lane, lane_hit.distance); }
                         }
                     }
                     if any_hit { terminated = hit.prim_id >= 0; }
@@ -334,24 +337,29 @@ fn @cpu_traverse_hybrid_helper( mut ray: Ray
             let node = bvh.node(stack.pop().node - 1);
 
             // Intersect children
+            let mut pushed = false;
             for i in unroll(0, bvh.arity) {
                 let child_id = node.child(i);
                 if unlikely(child_id == 0) { break() }
 
                 let (tentry, texit) = intersect_ray_box(min_max, false /*ordered*/, ray, node.bbox(i));
-                let was_hit = tentry <= texit;
-                if rv_any(was_hit) {
+                // Special case when integer comparisons are faster than floating point comparisons
+                let miss = if min_max.is_integer { bitcast[i32](texit) < bitcast[i32](tentry)        } else { texit < tentry };
+                let push = if min_max.is_integer { !rv_ballot(miss) & ((1 << vector_width) - 1) != 0 } else { !rv_all(miss)  };
+                if push {
                     // Important: prevent nodes that are not intersected
                     // from being traversed with the single ray kernel
-                    let thit = select(was_hit, tentry, flt_max);
+                    let thit = select(miss, flt_max, tentry);
                     if any_hit || rv_any(stack.top().tmin > thit) {
                         bvh.prefetch(child_id);
                         stack.push(child_id, thit);
                     } else {
                         stack.push_after(child_id, thit);
                     }
+                    pushed = true;
                 }
             }
+            if unlikely(!pushed) { cull() }
         }
 
         if unlikely(is_leaf(stack.top())) {
@@ -369,13 +377,13 @@ fn @cpu_traverse_hybrid_helper( mut ray: Ray
                     }
                     if any_hit {
                         terminated |= was_hit;
-                        if unlikely(rv_all(terminated)) { return(hit) }
+                        if unlikely(rv_all(terminated)) { exit() }
                         active &= !was_hit;
                     }
                 }
 
                 // Sentinel test
-                if prim.is_last { break() }
+                if unlikely(prim.is_last) { break() }
             }
         }
     }
