@@ -452,7 +452,7 @@ TriMesh compute_tri_mesh(const File& obj_file, const MaterialLib& /*mtl_lib*/, s
         tri_mesh.texcoords.resize(vtx_offset + mapping.size());
         tri_mesh.normals.resize(vtx_offset + mapping.size());
 
-        for (int i = 0, n = triangles.size(); i < n; i++) {
+        for (size_t i = 0, n = triangles.size(); i < n; i++) {
             auto& t = triangles[i];
             tri_mesh.indices[idx_offset + i * 4 + 0] = t.v0 + vtx_offset;
             tri_mesh.indices[idx_offset + i * 4 + 1] = t.v1 + vtx_offset;
