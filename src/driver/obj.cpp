@@ -173,28 +173,23 @@ static bool parse_obj(std::istream& stream, obj::File& file) {
         } else if (*ptr == 'f' && std::isspace(ptr[1])) {
             obj::Face f;
 
-            f.index_count = 0;
             f.material = cur_mtl;
 
             bool valid = true;
             ptr += 2;
-            while(f.index_count < obj::Face::max_indices) {
+            while (valid) {
                 obj::Index index;
                 valid = read_index(&ptr, index);
-
-                if (valid) {
-                    f.indices[f.index_count++] = index;
-                } else {
-                    break;
-                }
+                if (valid)
+                    f.indices.push_back(index);
             }
 
-            if (f.index_count < 3) {
+            if (f.indices.size() < 3) {
                 error("Invalid face (line ", cur_line, ").");
                 err_count++;
             } else {
                 // Convert relative indices to absolute
-                for (int i = 0; i < f.index_count; i++) {
+                for (size_t i = 0; i < f.indices.size(); i++) {
                     f.indices[i].v = (f.indices[i].v < 0) ? file.vertices.size()  + f.indices[i].v : f.indices[i].v;
                     f.indices[i].t = (f.indices[i].t < 0) ? file.texcoords.size() + f.indices[i].t : f.indices[i].t;
                     f.indices[i].n = (f.indices[i].n < 0) ? file.normals.size()   + f.indices[i].n : f.indices[i].n;
@@ -202,7 +197,7 @@ static bool parse_obj(std::istream& stream, obj::File& file) {
 
                 // Check if the indices are valid or not
                 valid = true;
-                for (int i = 0; i < f.index_count; i++) {
+                for (size_t i = 0; i < f.indices.size(); i++) {
                     if (f.indices[i].v <= 0 || f.indices[i].t < 0 || f.indices[i].n < 0) {
                         valid = false;
                         break;
@@ -426,7 +421,7 @@ TriMesh compute_tri_mesh(const File& obj_file, const MaterialLib& /*mtl_lib*/, s
         bool has_texcoords = false;
         for (auto& group : obj.groups) {
             for (auto& face : group.faces) {
-                for (int i = 0; i < face.index_count; i++) {
+                for (size_t i = 0; i < face.indices.size(); i++) {
                     auto map = mapping.find(face.indices[i]);
                     if (map == mapping.end()) {
                         has_normals |= (face.indices[i].n != 0);
@@ -439,7 +434,7 @@ TriMesh compute_tri_mesh(const File& obj_file, const MaterialLib& /*mtl_lib*/, s
                 auto v0 = mapping[face.indices[0]];
                 auto prev = mapping[face.indices[1]];
 
-                for (int i = 1; i < face.index_count - 1; i++) {
+                for (size_t i = 1; i < face.indices.size() - 1; i++) {
                     auto next = mapping[face.indices[i + 1]];
                     triangles.emplace_back(v0, prev, next, face.material + mtl_offset);
                     prev = next;

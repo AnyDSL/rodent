@@ -281,7 +281,7 @@ public:
 #endif
 
 private:
-    static constexpr size_t spatial_bins = 64;
+    static constexpr size_t spatial_bins = 96;
     static constexpr size_t binning_passes = 2;
 
     struct Ref {

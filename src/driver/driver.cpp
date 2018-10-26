@@ -120,9 +120,66 @@ static void update_texture(uint32_t* buf, SDL_Texture* texture, size_t width, si
     SDL_UpdateTexture(texture, nullptr, buf, width * sizeof(uint32_t));
 }
 
-int main(int /*argc*/, char** /*argv*/) {
+static inline void check_arg(int argc, char** argv, int arg, int n) {
+    if (arg + n > argc)
+        error("Option '", argv[arg], "' expects ", n, " arguments, got ", argc - arg);
+}
+
+static inline void usage() {
+    std::cout << "Usage: rodent [options]\n"
+              << "Available options:\n"
+              << "   --help            Shows this message\n"
+              << "   --width  pixels   Sets the viewport horizontal dimension (in pixels)\n"
+              << "   --height pixels   Sets the viewport vertical dimension (in pixels)\n"
+              << "   --eye    x y z    Sets the position of the camera\n"
+              << "   --dir    x y z    Sets the direction vector of the camera\n"
+              << "   --up     x y z    Sets the up vector of the camera\n"
+              << "   --fov    degrees  Sets the horizontal field of view (in degrees)" << std::endl;
+}
+
+int main(int argc, char** argv) {
     size_t width  = 1080;
     size_t height = 720;
+    float fov = 60.0f;
+    float3 eye(0.0f), dir(0.0f, 0.0f, 1.0f), up(0.0f, 1.0f, 0.0f);
+
+    for (int i = 1; i < argc; ++i) {
+        if (argv[i][0] == '-') {
+            if (!strcmp(argv[i], "--width")) {
+                check_arg(argc, argv, i, 1);
+                width = strtoul(argv[++i], nullptr, 10);
+            } else if (!strcmp(argv[i], "--height")) {
+                check_arg(argc, argv, i, 1);
+                height = strtoul(argv[++i], nullptr, 10);
+            } else if (!strcmp(argv[i], "--eye")) {
+                check_arg(argc, argv, i, 3);
+                eye.x = strtof(argv[++i], nullptr);
+                eye.y = strtof(argv[++i], nullptr);
+                eye.z = strtof(argv[++i], nullptr);
+            } else if (!strcmp(argv[i], "--dir")) {
+                check_arg(argc, argv, i, 3);
+                dir.x = strtof(argv[++i], nullptr);
+                dir.y = strtof(argv[++i], nullptr);
+                dir.z = strtof(argv[++i], nullptr);
+            } else if (!strcmp(argv[i], "--up")) {
+                check_arg(argc, argv, i, 3);
+                up.x = strtof(argv[++i], nullptr);
+                up.y = strtof(argv[++i], nullptr);
+                up.z = strtof(argv[++i], nullptr);
+            } else if (!strcmp(argv[i], "--fov")) {
+                check_arg(argc, argv, i, 1);
+                fov = strtof(argv[++i], nullptr);
+            } else if (!strcmp(argv[i], "--help")) {
+                usage();
+                return 0;
+            } else {
+                error("Unknown option '", argv[i], "'");
+            }
+            continue;
+        }
+        error("Unexpected argument '", argv[i], "'");
+    }
+    Camera cam(eye, dir, up, fov, (float)width / (float)height);
 
     if (SDL_Init(SDL_INIT_VIDEO) != 0)
         error("Cannot initialize SDL.");
@@ -150,43 +207,10 @@ int main(int /*argc*/, char** /*argv*/) {
     setup_interface(width, height);
 
     auto spp = get_spp();
-    float fov = 60.0f;
     bool done = false;
     uint64_t tick_counter = 0;
     uint32_t frames = 0;
     uint32_t iter = 0;
-    // Cornell box
-    /*Camera cam(
-        float3(0, 1.0, 2.5),
-        float3(0, 0, -1),
-        float3(0.0f, 1.0f, 0.0f),
-        fov,
-        float(width) / float(height));*/
-
-    // Bathroom duck
-    Camera cam(
-        float3(0, 1.0, 1.0),
-        float3(0, 0, -1),
-        float3(0.0f, 1.0f, 0.0f),
-        fov,
-        float(width) / float(height));
-
-    // Living room
-    /*Camera cam(
-        float3(-1.8, 1, -5),
-        float3(-0.1, 0, 1),
-        float3(0.0f, 1.0f, 0.0f),
-        fov,
-        float(width) / float(height));*/
-
-    // Salle de bain
-    /*Camera cam(
-        float3(-2.26, 15.62, 35.23),
-        float3(-22.18, -5.32, -97.36),
-        float3(0.0f, 1.0f, 0.0f),
-        fov,
-        float(width) / float(height));*/
-
     while (!done) {
         done = handle_events(iter, cam);
 

@@ -278,7 +278,7 @@ public:
     {}
 
     void build(const obj::TriMesh& tri_mesh, const std::vector<::Tri>& tris) {
-        builder_.build(tris, NodeWriter(*this), LeafWriter(*this, tris, tri_mesh.indices), 4);
+        builder_.build(tris, NodeWriter(*this), LeafWriter(*this, tris, tri_mesh.indices), 2);
     }
 
 #ifdef STATISTICS
