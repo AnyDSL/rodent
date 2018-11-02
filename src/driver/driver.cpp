@@ -123,7 +123,7 @@ static void update_texture(uint32_t* buf, SDL_Texture* texture, size_t width, si
 }
 
 static inline void check_arg(int argc, char** argv, int arg, int n) {
-    if (arg + n > argc)
+    if (arg + n >= argc)
         error("Option '", argv[arg], "' expects ", n, " arguments, got ", argc - arg);
 }
 
