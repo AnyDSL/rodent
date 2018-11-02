@@ -1,5 +1,7 @@
 #include <memory>
 #include <sstream>
+#include <algorithm>
+
 #include <SDL2/SDL.h>
 
 #include "interface.h"
@@ -134,10 +136,12 @@ static inline void usage() {
               << "   --eye    x y z    Sets the position of the camera\n"
               << "   --dir    x y z    Sets the direction vector of the camera\n"
               << "   --up     x y z    Sets the up vector of the camera\n"
-              << "   --fov    degrees  Sets the horizontal field of view (in degrees)" << std::endl;
+              << "   --fov    degrees  Sets the horizontal field of view (in degrees)\n"
+              << "   --bench           Enables benchmarking mode" << std::endl;
 }
 
 int main(int argc, char** argv) {
+    size_t bench_iter = 0;
     size_t width  = 1080;
     size_t height = 720;
     float fov = 60.0f;
@@ -169,6 +173,9 @@ int main(int argc, char** argv) {
             } else if (!strcmp(argv[i], "--fov")) {
                 check_arg(argc, argv, i, 1);
                 fov = strtof(argv[++i], nullptr);
+            } else if (!strcmp(argv[i], "--bench")) {
+                check_arg(argc, argv, i, 1);
+                bench_iter = strtoul(argv[++i], nullptr, 10);
             } else if (!strcmp(argv[i], "--help")) {
                 usage();
                 return 0;
@@ -211,6 +218,7 @@ int main(int argc, char** argv) {
     uint64_t tick_counter = 0;
     uint32_t frames = 0;
     uint32_t iter = 0;
+    std::vector<double> samples_sec;
     while (!done) {
         done = handle_events(iter, cam);
 
@@ -231,9 +239,15 @@ int main(int argc, char** argv) {
         tick_counter += SDL_GetTicks() - ticks;
 
         frames++;
-        if (frames > 10 || tick_counter >= 5000) {
+        if (frames > 10 || tick_counter >= 2500) {
             std::ostringstream os;
-            os << "Rodent [" << double(frames) * 1000.0 / double(tick_counter) << " FPS, "
+            auto frames_sec = double(frames) * 1000.0 / double(tick_counter);
+            if (bench_iter != 0) {
+                samples_sec.emplace_back(frames_sec * spp * width * height);
+                if (samples_sec.size() == bench_iter)
+                    break;
+            }
+            os << "Rodent [" << frames_sec << " FPS, "
                << iter * spp << " " << "sample" << (iter * spp > 1 ? "s" : "") << "]";
             SDL_SetWindowTitle(window, os.str().c_str());
             frames = 0;
@@ -252,5 +266,14 @@ int main(int argc, char** argv) {
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
+
+    if (bench_iter != 0) {
+        auto inv = 1.0e-6;
+        std::sort(samples_sec.begin(), samples_sec.end());
+        std::cout << "# "
+                  << samples_sec.front() * inv << "/"
+                  << samples_sec[samples_sec.size() / 2] * inv << "/"
+                  << samples_sec.back() * inv << " (min/med/max Msamples/s)" << std::endl;
+    }
     return 0;
 }

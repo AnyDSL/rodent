@@ -30,7 +30,7 @@ static void create_triangles(const obj::File& obj_file, std::vector<Tri>& tris) 
         for (auto& group : object.groups) {
             for (auto& face : group.faces) {
                 auto v0 = obj_file.vertices[face.indices[0].v];
-                for (int i = 0; i < face.index_count - 2; i++) {
+                for (int i = 0; i < face.indices.size() - 2; i++) {
                     auto v1 = obj_file.vertices[face.indices[i + 1].v];
                     auto v2 = obj_file.vertices[face.indices[i + 2].v];
                     tris.emplace_back(float3(v0.x, v0.y, v0.z),

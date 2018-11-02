@@ -1,10 +1,21 @@
 #include <memory>
 #include <fstream>
+#include <cmath>
 
 #include <png.h>
 #include <jpeglib.h>
 
 #include "image.h"
+
+static void gamma_correct(ImageRgba32& img) {
+    for (size_t y = 0; y < img.height; ++y) {
+        for (size_t x = 0; x < img.width; ++x) {
+            auto* pix = &img.pixels[4 * (y * img.width + x)];
+            for (int i = 0; i < 3; ++i)
+                pix[i] = std::pow(pix[i] * (1.0f / 255.0f), 2.2f) * 255.0f;
+        }
+    }
+}
 
 static void read_from_stream(png_structp png_ptr, png_bytep data, png_size_t length) {
     png_voidp a = png_get_io_ptr(png_ptr);
@@ -80,6 +91,7 @@ bool load_png(const FilePath& path, ImageRgba32& img) {
     }
 
     png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
+    gamma_correct(img);
     return true;
 }
 
@@ -170,5 +182,6 @@ bool load_jpg(const FilePath& path, ImageRgba32& image) {
 
     jpeg_finish_decompress(&cinfo);
     jpeg_destroy_decompress(&cinfo);
+    gamma_correct(image);
     return true;
 }

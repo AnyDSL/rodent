@@ -415,8 +415,9 @@ private:
         for (size_t i = 0; i < ref_count; i++) {
             const Ref& ref = refs[i];
 
-            const size_t first_bin = clamp(size_t(inv_size * (ref.bb.min[axis] - axis_min)), size_t(0), num_bins - 1);
-            const size_t last_bin  = clamp(size_t(inv_size * (ref.bb.max[axis] - axis_min)), size_t(0), num_bins - 1);
+            const size_t first_bin = clamp(int(inv_size * (ref.bb.min[axis] - axis_min)), int(0), int(num_bins - 1));
+            const size_t last_bin  = clamp(int(inv_size * (ref.bb.max[axis] - axis_min)), int(0), int(num_bins - 1));
+            assert(first_bin <= last_bin);
 
             BBox cur_bb = ref.bb;
             for (size_t j = first_bin; j < last_bin; j++) {
@@ -448,12 +449,14 @@ private:
             right_count -= bins[i].exit;
             cur_bb.extend(bins[i].bb);
 
-            const float cost = CostFn::leaf_cost(left_count, cur_bb.half_area()) + CostFn::leaf_cost(right_count, right_bbs_[i].half_area());
-            if (cost < split.cost) {
-                split.axis = axis;
-                split.cost = cost;
-                split.position = axis_min + (i + 1) * bin_size;
-                split_index = i;
+            if (left_count != ref_count && right_count != ref_count) {
+                const float cost = CostFn::leaf_cost(left_count, cur_bb.half_area()) + CostFn::leaf_cost(right_count, right_bbs_[i].half_area());
+                if (cost < split.cost) {
+                    split.axis = axis;
+                    split.cost = cost;
+                    split.position = axis_min + (i + 1) * bin_size;
+                    split_index = i;
+                }
             }
         }
 
