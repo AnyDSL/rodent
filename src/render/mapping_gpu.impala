@@ -508,7 +508,7 @@ fn @make_gpu_device( dev_id: i32
     }
 }
 
-fn @make_nvvm_device(dev: i32) -> Device {
+fn @make_nvvm_device(dev: i32, streaming: bool) -> Device {
     let dev_id = runtime_device(1, dev);
     let load_bvh = @ |filename| {
         let mut nodes;
@@ -564,6 +564,6 @@ fn @make_nvvm_device(dev: i32) -> Device {
         read_pixel,
         make_buffer,
         atomics,
-        true /*streaming*/
+        streaming
     )
 }

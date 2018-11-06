@@ -25,7 +25,8 @@ enum class Target : uint32_t {
     AVX = 2,
     SSE42 = 3,
     ASIMD = 4,
-    NVVM = 5
+    NVVM_STREAMING = 5,
+    NVVM_MEGAKERNEL = 6
 };
 
 inline Target cpuid() {
@@ -588,13 +589,14 @@ static bool convert_obj(const std::string& file_name, Target target, size_t max_
     os << "\nextern fn render(settings: &Settings, iter: i32) -> () {\n";
 
     assert(target != Target(0));
-    bool enable_padding = target == Target::NVVM;
+    bool enable_padding = target == Target::NVVM_STREAMING || target == Target::NVVM_MEGAKERNEL;
     switch (target) {
-        case Target::AVX2:  os << "    let device   = make_avx2_device();\n";  break;
-        case Target::AVX:   os << "    let device   = make_avx_device();\n";   break;
-        case Target::SSE42: os << "    let device   = make_sse42_device();\n"; break;
-        case Target::ASIMD: os << "    let device   = make_asimd_device();\n"; break;
-        case Target::NVVM:  os << "    let device   = make_nvvm_device(0);\n";  break;
+        case Target::AVX2:             os << "    let device   = make_avx2_device();\n";         break;
+        case Target::AVX:              os << "    let device   = make_avx_device();\n";          break;
+        case Target::SSE42:            os << "    let device   = make_sse42_device();\n";        break;
+        case Target::ASIMD:            os << "    let device   = make_asimd_device();\n";        break;
+        case Target::NVVM_STREAMING:   os << "    let device   = make_nvvm_device(0, true);\n";  break;
+        case Target::NVVM_MEGAKERNEL:  os << "    let device   = make_nvvm_device(0, false);\n"; break;
         default:
             assert(false);
             break;
@@ -637,7 +639,7 @@ static bool convert_obj(const std::string& file_name, Target target, size_t max_
     // Generate BVHs
     info("Generating BVH for '", file_name, "'");
     std::remove("data/bvh.bin");
-    if (target == Target::NVVM)
+    if (target == Target::NVVM_STREAMING || target == Target::NVVM_MEGAKERNEL)
         write_bvhn_trim<2, 1>(tri_mesh);
     else if (target == Target::ASIMD || target == Target::SSE42)
         write_bvhn_trim<4, 4>(tri_mesh);
@@ -848,7 +850,7 @@ static void usage() {
     std::cout << "converter [options] file\n"
               << "Available options:\n"
               << "    -h     --help                Shows this message\n"
-              << "    -t     --target              Sets the target device (one of: sse42, avx, avx2, asimd, nvvm)\n"
+              << "    -t     --target              Sets the target device (one of: sse42, avx, avx2, asimd, nvvm = nvvm-streaming, nvvm-megakernel)\n"
               << "           --max-path-len        Sets the maximum path length (default: 64)\n"
               << "    -spp   --samples-per-pixel   Sets the number of samples per pixel (default: 4)\n"
               << std::flush;
@@ -887,8 +889,14 @@ int main(int argc, char** argv) {
                     target = Target::AVX2;
                 else if (!strcmp(argv[i], "asimd"))
                     target = Target::ASIMD;
-                else if (!strcmp(argv[i], "nvvm"))
-                    target = Target::NVVM;
+                else if (!strcmp(argv[i], "nvvm") || !strcmp(argv[i], "nvvm-streaming"))
+                    target = Target::NVVM_STREAMING;
+                else if (!strcmp(argv[i], "nvvm-megakernel"))
+                    target = Target::NVVM_MEGAKERNEL;
+                else {
+                    std::cerr << "Unknown target '" << argv[i] << "'. Aborting." << std::endl;
+                    return 1;
+                }
             } else if (!strcmp(argv[i], "-spp") || !strcmp(argv[i], "--samples-per-pixel")) {
                 if (!check_option(i++, argc, argv)) return 1;
                 spp = strtol(argv[i], NULL, 10);
