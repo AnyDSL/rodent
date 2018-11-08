@@ -2,6 +2,7 @@
 
 #include "traversal.h"
 #include "driver/bvh.h"
+#include "driver/obj.h"
 
 class Bvh2Builder {
 public:
@@ -104,7 +105,15 @@ private:
     std::vector<Tri1>& tris_;
 };
 
-int build_bvh2(std::ofstream& out, const std::vector<Tri>& tris) {
+size_t build_bvh2(std::ofstream& out, const obj::TriMesh& tri_mesh) {
+    std::vector<Tri> tris;
+    for (size_t i = 0; i < tri_mesh.indices.size(); i += 4) {
+        auto& v0 = tri_mesh.vertices[tri_mesh.indices[i + 0]];
+        auto& v1 = tri_mesh.vertices[tri_mesh.indices[i + 1]];
+        auto& v2 = tri_mesh.vertices[tri_mesh.indices[i + 2]];
+        tris.emplace_back(v0, v1, v2);
+    }
+
     std::vector<Node2> new_nodes;
     std::vector<Tri1>  new_tris;
     Bvh2Builder builder(new_nodes, new_tris);

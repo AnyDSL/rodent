@@ -4,6 +4,7 @@ add_executable(bvh_extractor
     extract_bvh2.cpp
     ../../src/driver/obj.cpp
     ../../src/driver/obj.h
+    ../../src/driver/embree_bvh.h
     ../../src/driver/bvh.h)
 target_include_directories(bvh_extractor PUBLIC ../common ../../src ${EMBREE_ROOT_DIR}/include ${EMBREE_ROOT_DIR} ${EMBREE_LIBRARY_DIR})
 target_compile_definitions(bvh_extractor PUBLIC ${EMBREE_DEFINITIONS})

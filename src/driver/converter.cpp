@@ -8,6 +8,9 @@
 #include <lz4.h>
 
 #include "bvh.h"
+#ifdef ENABLE_EMBREE_BVH
+#include "embree_bvh.h"
+#endif
 #include "interface.h"
 #include "obj.h"
 #include "buffer.h"
@@ -116,7 +119,7 @@ class BvhNTriMAdapter {
             return ((count - 1) / M + 1) * area;
         }
         static float traversal_cost(float area) {
-            return area * 0.1f;
+            return area * 0.25f * N / M;
         }
     };
 
@@ -260,7 +263,7 @@ class BvhNTriMAdapter<2, 1> {
             return count * area;
         }
         static float traversal_cost(float area) {
-            return area * 1.0f;
+            return area;
         }
     };
 
@@ -402,13 +405,11 @@ static void write_tri_mesh(const obj::TriMesh& tri_mesh, bool enable_padding) {
     write_buffer("data/texcoords.bin",    pad_buffer(tri_mesh.texcoords,    enable_padding, sizeof(float) * 4));
 }
 
-template <size_t N, size_t M>
-static void write_bvhn_trim(const obj::TriMesh& tri_mesh) {
-    using Node = typename BvhNTriM<N, M>::Node;
-    using Tri  = typename BvhNTriM<N, M>::Tri;
 
-    std::vector<Node> nodes;
-    std::vector<Tri>  tris;
+template <size_t N, size_t M>
+static void build_bvh(const obj::TriMesh& tri_mesh,
+                      std::vector<typename BvhNTriM<N, M>::Node>& nodes,
+                      std::vector<typename BvhNTriM<N, M>::Tri>& tris) {
     BvhNTriMAdapter<N, M> adapter(nodes, tris);
     auto num_tris = tri_mesh.indices.size() / 4;
     std::vector<::Tri> in_tris(num_tris);
@@ -416,10 +417,13 @@ static void write_bvhn_trim(const obj::TriMesh& tri_mesh) {
         auto& v0 = tri_mesh.vertices[tri_mesh.indices[i * 4 + 0]];
         auto& v1 = tri_mesh.vertices[tri_mesh.indices[i * 4 + 1]];
         auto& v2 = tri_mesh.vertices[tri_mesh.indices[i * 4 + 2]];
-        in_tris[i] = ::Tri(v0, v1, v2);
+        in_tris[i] = Tri(v0, v1, v2);
     }
     adapter.build(tri_mesh, in_tris);
+}
 
+template <typename Node, typename Tri>
+static void write_bvh(std::vector<Node>& nodes, std::vector<Tri>& tris) {
     std::ofstream of("data/bvh.bin", std::ios::app | std::ios::binary);
     size_t node_size = sizeof(Node);
     size_t tri_size  = sizeof(Tri);
@@ -427,6 +431,7 @@ static void write_bvhn_trim(const obj::TriMesh& tri_mesh) {
     of.write((char*)&tri_size,  sizeof(uint32_t));
     write_buffer(of, nodes);
     write_buffer(of, tris );
+    std::cout << "BVH with " << nodes.size() << " node(s), " << tris.size() << " tri(s)" << std::endl;
 }
 
 static bool operator == (const obj::Material& a, const obj::Material& b) {
@@ -534,7 +539,7 @@ static void cleanup_obj(obj::File& obj_file, obj::MaterialLib& mtl_lib) {
     }
 }
 
-static bool convert_obj(const std::string& file_name, Target target, size_t max_path_len, size_t spp, std::ostream& os) {
+static bool convert_obj(const std::string& file_name, Target target, size_t max_path_len, size_t spp, bool embree_bvh, std::ostream& os) {
     info("Converting OBJ file '", file_name, "'");
     obj::File obj_file;
     obj::MaterialLib mtl_lib;
@@ -639,12 +644,31 @@ static bool convert_obj(const std::string& file_name, Target target, size_t max_
     // Generate BVHs
     info("Generating BVH for '", file_name, "'");
     std::remove("data/bvh.bin");
-    if (target == Target::NVVM_STREAMING || target == Target::NVVM_MEGAKERNEL)
-        write_bvhn_trim<2, 1>(tri_mesh);
-    else if (target == Target::ASIMD || target == Target::SSE42)
-        write_bvhn_trim<4, 4>(tri_mesh);
-    else
-        write_bvhn_trim<8, 4>(tri_mesh);
+    if (target == Target::NVVM_STREAMING || target == Target::NVVM_MEGAKERNEL) {
+        std::vector<typename BvhNTriM<2, 1>::Node> nodes;
+        std::vector<typename BvhNTriM<2, 1>::Tri> tris;
+        build_bvh<2, 1>(tri_mesh, nodes, tris);
+        write_bvh(nodes, tris);
+    } else if (target == Target::ASIMD || target == Target::SSE42) {
+        std::vector<typename BvhNTriM<4, 4>::Node> nodes;
+        std::vector<typename BvhNTriM<4, 4>::Tri> tris;
+#ifdef ENABLE_EMBREE_BVH
+        if (embree_bvh) build_embree_bvh<4>(tri_mesh, nodes, tris);
+        else
+#endif
+        build_bvh<4, 4>(tri_mesh, nodes, tris);
+        write_bvh(nodes, tris);
+    } else {
+        std::vector<typename BvhNTriM<8, 4>::Node> nodes;
+        std::vector<typename BvhNTriM<8, 4>::Tri> tris;
+#ifdef ENABLE_EMBREE_BVH
+        if (embree_bvh) build_embree_bvh<8>(tri_mesh, nodes, tris);
+        else
+#endif
+        build_bvh<8, 4>(tri_mesh, nodes, tris);
+        write_bvh(nodes, tris);
+    }
+
 
     // Generate images
     info("Generating images for '", file_name, "'");
@@ -795,7 +819,11 @@ static bool convert_obj(const std::string& file_name, Target target, size_t max_
             }
             os << "        let bsdf = ";
             if (has_diffuse && has_specular) {
-                os << "make_mix_bsdf(diffuse, specular, color_luminance(ks) / (color_luminance(ks) + color_luminance(kd)));\n";
+                os << "{\n"
+                   << "            let lum_ks = color_luminance(ks);\n"
+                   << "            let lum_kd = color_luminance(kd);\n"
+                   << "            make_mix_bsdf(diffuse, specular, lum_ks / (lum_ks + lum_kd))\n"
+                   << "        };\n";
             } else if (has_diffuse || has_specular) {
                 if (has_specular) os << "specular;\n";
                 else              os << "diffuse;\n";
@@ -853,6 +881,9 @@ static void usage() {
               << "    -t     --target              Sets the target device (one of: sse42, avx, avx2, asimd, nvvm = nvvm-streaming, nvvm-megakernel)\n"
               << "           --max-path-len        Sets the maximum path length (default: 64)\n"
               << "    -spp   --samples-per-pixel   Sets the number of samples per pixel (default: 4)\n"
+#ifdef ENABLE_EMBREE_BVH
+              << "           --embree-bvh          Use Embree to build the BVH (default: disabled)\n"
+#endif
               << std::flush;
 }
 
@@ -874,6 +905,7 @@ int main(int argc, char** argv) {
     size_t spp = 4;
     size_t max_path_len = 64;
     auto target = Target(0);
+    bool embree_bvh = false;
     for (int i = 1; i < argc; ++i) {
         if (argv[i][0] == '-') {
             if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) {
@@ -903,6 +935,10 @@ int main(int argc, char** argv) {
             } else if (!strcmp(argv[i], "--max-path-len")) {
                 if (!check_option(i++, argc, argv)) return 1;
                 max_path_len = strtol(argv[i], NULL, 10);
+#ifdef ENABLE_EMBREE_BVH
+            } else if (!strcmp(argv[i], "--embree-bvh")) {
+                embree_bvh = true;
+#endif
             } else {
                 std::cerr << "Unknown option '" << argv[i] << "'. Aborting." << std::endl;
                 return 1;
@@ -925,7 +961,7 @@ int main(int argc, char** argv) {
     }
 
     std::ofstream of("main.impala");
-    if (!convert_obj(obj_file, target, max_path_len, spp, of))
+    if (!convert_obj(obj_file, target, max_path_len, spp, embree_bvh, of))
         return 1;
     return 0;
 }

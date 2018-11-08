@@ -82,6 +82,11 @@ target_compile_definitions(converter PUBLIC -DCPUINFO_PATH="${CPUINFO_PATH}")
 if (COLORIZE)
     target_compile_definitions(converter PUBLIC -DCOLORIZE)
 endif()
+if (EMBREE_FOUND)
+    target_include_directories(converter PUBLIC ${EMBREE_ROOT_DIR}/include ${EMBREE_ROOT_DIR} ${EMBREE_LIBRARY_DIR})
+    target_link_libraries(converter ${EMBREE_DEPENDENCIES})
+    target_compile_definitions(converter PUBLIC ${EMBREE_DEFINITIONS} -DENABLE_EMBREE_BVH)
+endif()
 
 add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/main.impala
     COMMAND converter ${SCENE_FILE} ${TARGET_OPTION} --max-path-len ${MAX_PATH_LEN} --samples-per-pixel ${SPP}

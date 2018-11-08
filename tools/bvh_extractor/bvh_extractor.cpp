@@ -7,9 +7,9 @@
 #include "driver/file_path.h"
 #include "driver/bvh.h"
 
-int build_bvh8(std::ofstream&, const std::vector<Tri>&);
-int build_bvh4(std::ofstream&, const std::vector<Tri>&);
-int build_bvh2(std::ofstream&, const std::vector<Tri>&);
+int build_bvh8(std::ofstream&, const obj::TriMesh&);
+int build_bvh4(std::ofstream&, const obj::TriMesh&);
+int build_bvh2(std::ofstream&, const obj::TriMesh&);
 
 inline void check_argument(int i, int argc, char** argv) {
     if (i + 1 >= argc) {
@@ -23,23 +23,6 @@ inline void usage() {
                  "Available options:\n"
                  "  -obj     --obj-file        Sets the OBJ file to use\n"
                  "  -o       --output          Sets the output file name\n";
-}
-
-static void create_triangles(const obj::File& obj_file, std::vector<Tri>& tris) {
-    for (auto& object : obj_file.objects) {
-        for (auto& group : object.groups) {
-            for (auto& face : group.faces) {
-                auto v0 = obj_file.vertices[face.indices[0].v];
-                for (int i = 0; i < face.indices.size() - 2; i++) {
-                    auto v1 = obj_file.vertices[face.indices[i + 1].v];
-                    auto v2 = obj_file.vertices[face.indices[i + 2].v];
-                    tris.emplace_back(float3(v0.x, v0.y, v0.z),
-                                      float3(v1.x, v1.y, v1.z),
-                                      float3(v2.x, v2.y, v2.z));
-                }
-            }
-        }
-    }
 }
 
 int main(int argc, char** argv) {
@@ -75,16 +58,23 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    FilePath path(obj_file);
     obj::File obj;
+    obj::MaterialLib mtl_lib;
     if (!load_obj(obj_file, obj)) {
         std::cerr << "Cannot load OBJ file" << std::endl;
         return 1;
     }
+    for (auto lib_name : obj.mtl_libs) {
+        auto mtl_name = path.base_name() + "/" + lib_name;
+        if (!obj::load_mtl(mtl_name, mtl_lib)) {
+            error("Invalid MTL file '", mtl_name, "'");
+            return false;
+        }
+    }
+    obj::TriMesh tri_mesh = compute_tri_mesh(obj, mtl_lib, 0);
 
-    std::vector<Tri> tris;
-    create_triangles(obj, tris);
-
-    std::cout << "Loaded OBJ file with " << tris.size() << " triangle(s)" << std::endl;
+    std::cout << "Loaded OBJ file with " << tri_mesh.indices.size() / 4 << " triangle(s)" << std::endl;
 
     std::ofstream out(out_file, std::ofstream::binary);
     if (!out) {
@@ -95,7 +85,7 @@ int main(int argc, char** argv) {
     uint32_t magic = 0x95CBED1F;
     out.write((char*)&magic, sizeof(uint32_t));
 
-    int bvh8_nodes = build_bvh8(out, tris);
+    int bvh8_nodes = build_bvh8(out, tri_mesh);
     if (!bvh8_nodes) {
         std::cerr << "Cannot build a BVH8 using Embree" << std::endl;
         return 1;
@@ -103,7 +93,7 @@ int main(int argc, char** argv) {
 
     std::cout << "BVH8 successfully built (" << bvh8_nodes << " nodes)" << std::endl;
 
-    int bvh4_nodes = build_bvh4(out, tris);
+    int bvh4_nodes = build_bvh4(out, tri_mesh);
     if (!bvh4_nodes) {
         std::cerr << "Cannot build a BVH4 using Embree" << std::endl;
         return 1;
@@ -111,7 +101,7 @@ int main(int argc, char** argv) {
 
     std::cout << "BVH4 successfully built (" << bvh4_nodes << " nodes)" << std::endl;
 
-    int bvh2_nodes = build_bvh2(out, tris);
+    int bvh2_nodes = build_bvh2(out, tri_mesh);
     if (!bvh4_nodes) {
         std::cerr << "Cannot build a BVH2" << std::endl;
         return 1;

@@ -70,7 +70,7 @@ fn @generate_compaction_lut() -> [Perm * 256] {
 // Misc. ---------------------------------------------------------------------------
 
 // Iterate over the bit that are set in a mask (assumes that mask != 0)
-fn cpu_one_bits(mut mask: i32, body: fn (i32) -> ()) -> () {
+fn cpu_one_bits(mut mask: i32, @body: fn (i32) -> ()) -> () {
     let lane = cpu_ctz32(mask, true);
     @@body(lane);
     mask &= mask - 1;
@@ -80,7 +80,7 @@ fn cpu_one_bits(mut mask: i32, body: fn (i32) -> ()) -> () {
 }
 
 // Performs a horizontal reduction over vector lanes
-fn @cpu_reduce(value: f32, n: i32, op: fn (f32, f32) -> f32) -> f32 {
+fn @(?n) cpu_reduce(value: f32, n: i32, op: fn (f32, f32) -> f32) -> f32 {
     if n >= 2 {
         let m = n / 2;
         cpu_reduce(op(value, rv_shuffle(value, m)), m, op)
