@@ -97,6 +97,11 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/main.impala
 set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/main.impala PROPERTIES GENERATED TRUE)
 
 add_library(driver ${DRIVER_SRCS})
+if (EMBREE_FOUND)
+    target_include_directories(driver PUBLIC ${EMBREE_ROOT_DIR}/include ${EMBREE_ROOT_DIR} ${EMBREE_LIBRARY_DIR})
+    target_link_libraries(driver ${EMBREE_DEPENDENCIES})
+    target_compile_definitions(driver PUBLIC -DENABLE_EMBREE_DEVICE)
+endif()
 
 add_executable(rodent ${RODENT_OBJS})
 target_include_directories(rodent PUBLIC ${PNG_INCLUDE_DIRS} ${JPEG_INCLUDE_DIRS} ${SDL2_INCLUDE_DIRS} ${TBB_INCLUDE_DIRS} ${LZ4_INCLUDE_DIR})

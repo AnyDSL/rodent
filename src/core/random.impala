@@ -90,7 +90,14 @@ fn @sample_cosine_power_hemisphere(math: Intrinsics, k: f32, u: f32, v: f32) -> 
     let c = math.powf(v, 1.0f / (k + 1.0f));
     let s = math.sqrtf(1.0f - c * c);
     let phi = 2.0f * flt_pi * u;
-    make_dir_sample(math, c, s, phi, cosine_power_hemisphere_pdf(math, c, k))
+    // We have:
+    // pow(c, k) = pow(pow(v, 1 / (k + 1)), k)
+    //           = pow(v, k / (k + 1))
+    //           = v * pow(v, -1 / (k + 1))
+    //           = v / c
+    let pow_c_k = if c != 0.0f { v / c } else { 0.0f };
+    let pdf = pow_c_k * (k + 1.0f) * (1.0f / (2.0f * flt_pi));
+    make_dir_sample(math, c, s, phi, pdf)
 }
 
 // Initializer for Bernstein's hash function

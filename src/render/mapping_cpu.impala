@@ -184,6 +184,111 @@ fn @cpu_generate_rays( primary: PrimaryStream
     primary.size + num_rays
 }
 
+fn @cpu_traverse_primary(scene: Scene, min_max: MinMax, primary: &PrimaryStream, single: bool, vector_width: i32) -> () {
+    fn cpu_traverse_primary_specialized(primary: &PrimaryStream) -> () {
+        cpu_traverse_hybrid(
+            min_max,
+            scene.bvh,
+            make_ray_stream_reader(primary.rays, vector_width),
+            make_primary_stream_hit_writer(*primary, vector_width, scene.num_geometries),
+            vector_width /*packet_size*/,
+            primary.size / vector_width + select(primary.size % vector_width != 0, 1, 0),
+            single,
+            false /*any_hit*/
+        );
+    }
+    cpu_traverse_primary_specialized(primary);
+}
+
+fn @cpu_traverse_secondary(scene: Scene, min_max: MinMax, secondary: &SecondaryStream, single: bool, vector_width: i32) -> () {
+    fn cpu_traverse_secondary_specialized(secondary: &SecondaryStream) -> () {
+        cpu_traverse_hybrid(
+            min_max,
+            scene.bvh,
+            make_ray_stream_reader(secondary.rays, vector_width),
+            make_secondary_stream_hit_writer(*secondary, vector_width),
+            vector_width /*packet_size*/,
+            secondary.size / vector_width + select(secondary.size % vector_width != 0, 1, 0),
+            single,
+            true /*any_hit*/
+        );
+    }
+    cpu_traverse_secondary_specialized(secondary);
+}
+
+fn @cpu_shade(geom_id: i32, primary: &PrimaryStream, secondary: &SecondaryStream, scene: Scene, path_tracer: PathTracer, accumulate: fn (i32, Color) -> (), begin: i32, end: i32, vector_width: i32) -> () {
+    fn cpu_shade_specialized(primary: &PrimaryStream, secondary: &SecondaryStream, begin: i32, end: i32) -> () {
+        let read_primary_ray    = make_ray_stream_reader(primary.rays, 1);
+        let read_primary_hit    = make_primary_stream_hit_reader(*primary, 1);
+        let read_primary_state  = make_primary_stream_state_reader(*primary, 1);
+        let write_primary_ray   = make_ray_stream_writer(primary.rays, 1);
+        let write_primary_state = make_primary_stream_state_writer(*primary, 1);
+        let write_secondary_ray = make_ray_stream_writer(secondary.rays, 1);
+
+        for i, vector_width in vectorized_range(vector_width, begin, end) {
+            let ray       = read_primary_ray(i, 0);
+            let hit       = read_primary_hit(i, 0);
+            let mut state = read_primary_state(i, 0);
+            let ray_id    = primary.rays.id(i);
+
+            let geom   = scene.geometries(geom_id);
+            let surf   = geom.surface_element(ray, hit);
+            let mat    = geom.shader(ray, hit, surf);
+
+            // Execute hit point shading, and add the contribution of each lane to the frame buffer
+            let mut hit_color;
+            for once() {
+                @@(path_tracer.on_hit)(ray, hit, &mut state, surf, mat, @ |color| -> ! {
+                    hit_color = color;
+                    break()
+                }, @ || -> ! {
+                    hit_color = make_color(0.0f, 0.0f, 0.0f);
+                    break()
+                })
+            }
+
+            for lane in unroll(0, vector_width) {
+                let j = bitcast[i32](rv_extract(bitcast[f32](ray_id), lane));
+                accumulate(j,
+                    make_color(
+                        rv_extract(hit_color.r, lane),
+                        rv_extract(hit_color.g, lane),
+                        rv_extract(hit_color.b, lane)
+                    )
+                );
+            }
+
+            // Compute shadow rays
+            for once() {
+                @@(path_tracer.on_shadow)(ray, hit, &mut state, surf, mat, @ |ray, color| -> ! {
+                    write_secondary_ray(i, 0, ray);
+                    secondary.color_r(i) = color.r;
+                    secondary.color_g(i) = color.g;
+                    secondary.color_b(i) = color.b;
+                    secondary.rays.id(i) = ray_id;
+                    break()
+                }, @ || -> ! {
+                    secondary.rays.id(i) = -1;
+                    break()
+                })
+            }
+
+            // Sample new rays
+            for once() {
+                @@(path_tracer.on_bounce)(ray, hit, &mut state, surf, mat, @ |new_ray, new_state| -> ! {
+                    write_primary_ray(i, 0, new_ray);
+                    write_primary_state(i, 0, new_state);
+                    break()
+                }, @ || -> ! {
+                    primary.rays.id(i) = -1;
+                    break()
+                })
+            }
+        }
+    }
+    cpu_shade_specialized(primary, secondary, begin, end);
+}
+
 fn @cpu_get_film_data() -> (&mut [f32], i32, i32) {
     let mut film_pixels : &mut [f32];
     let mut film_width  : i32;
@@ -200,6 +305,7 @@ fn @cpu_trace( scene: Scene
              , spp: i32
              , num_cores: i32
              , vector_width: i32
+             , use_embree: bool
              ) -> () {
     let (film_pixels, film_width, film_height) = cpu_get_film_data();
 
@@ -226,16 +332,11 @@ fn @cpu_trace( scene: Scene
             }
 
             // Trace primary rays
-            cpu_traverse_hybrid(
-                min_max,
-                scene.bvh,
-                make_ray_stream_reader(primary.rays, vector_width),
-                make_primary_stream_hit_writer(primary, vector_width, scene.num_geometries),
-                vector_width /*packet_size*/,
-                primary.size / vector_width + select(primary.size % vector_width != 0, 1, 0),
-                single,
-                false /*any_hit*/
-            );
+            if use_embree {
+                rodent_cpu_intersect_primary_embree(primary, scene.num_geometries);
+            } else {
+                cpu_traverse_primary(scene, min_max, primary, single, vector_width);
+            }
 
             // Sort hits by shader id, and filter invalid hits
             let mut ray_begins : [i32 * 1024];
@@ -245,73 +346,8 @@ fn @cpu_trace( scene: Scene
             // Perform (vectorized) shading
             let mut begin = 0;
             for geom_id in unroll(0, scene.num_geometries) {
-                let read_primary_ray    = make_ray_stream_reader(primary.rays, 1);
-                let read_primary_hit    = make_primary_stream_hit_reader(primary, 1);
-                let read_primary_state  = make_primary_stream_state_reader(primary, 1);
-                let write_primary_ray   = make_ray_stream_writer(primary.rays, 1);
-                let write_primary_state = make_primary_stream_state_writer(primary, 1);
-                let write_secondary_ray = make_ray_stream_writer(secondary.rays, 1);
-
                 let end = ray_ends(geom_id);
-                for i, vector_width in vectorized_range(vector_width, begin, end) {
-                    let ray       = read_primary_ray(i, 0);
-                    let hit       = read_primary_hit(i, 0);
-                    let mut state = read_primary_state(i, 0);
-                    let ray_id    = primary.rays.id(i);
-
-                    let geom   = scene.geometries(geom_id);
-                    let surf   = geom.surface_element(ray, hit);
-                    let mat    = geom.shader(ray, hit, surf);
-
-                    // Execute hit point shading, and add the contribution of each lane to the frame buffer
-                    let mut hit_color;
-                    for once() {
-                        @@(path_tracer.on_hit)(ray, hit, &mut state, surf, mat, @ |color| -> ! {
-                            hit_color = color;
-                            break()
-                        }, @ || -> ! {
-                            hit_color = make_color(0.0f, 0.0f, 0.0f);
-                            break()
-                        })
-                    }
-                    for lane in unroll(0, vector_width) {
-                        let j = bitcast[i32](rv_extract(bitcast[f32](ray_id), lane));
-                        accumulate(j,
-                            make_color(
-                                rv_extract(hit_color.r, lane),
-                                rv_extract(hit_color.g, lane),
-                                rv_extract(hit_color.b, lane)
-                            )
-                        );
-                    }
-
-                    // Compute shadow rays
-                    for once() {
-                        @@(path_tracer.on_shadow)(ray, hit, &mut state, surf, mat, @ |ray, color| -> ! {
-                            write_secondary_ray(i, 0, ray);
-                            secondary.color_r(i) = color.r;
-                            secondary.color_g(i) = color.g;
-                            secondary.color_b(i) = color.b;
-                            secondary.rays.id(i) = ray_id;
-                            break()
-                        }, @ || -> ! {
-                            secondary.rays.id(i) = -1;
-                            break()
-                        })
-                    }
-
-                    // Sample new rays
-                    for once() {
-                        @@(path_tracer.on_bounce)(ray, hit, &mut state, surf, mat, @ |new_ray, new_state| -> ! {
-                            write_primary_ray(i, 0, new_ray);
-                            write_primary_state(i, 0, new_state);
-                            break()
-                        }, @ || -> ! {
-                            primary.rays.id(i) = -1;
-                            break()
-                        })
-                    }
-                }
+                cpu_shade(geom_id, primary, secondary, scene, path_tracer, accumulate, begin, end, vector_width);
                 begin = end;
             }
 
@@ -322,16 +358,11 @@ fn @cpu_trace( scene: Scene
             // Compact and trace secondary rays
             secondary.size = cpu_compact_secondary(secondary);
             if likely(secondary.size > 0) {
-                cpu_traverse_hybrid(
-                    min_max,
-                    scene.bvh,
-                    make_ray_stream_reader(secondary.rays, vector_width),
-                    make_secondary_stream_hit_writer(secondary, vector_width),
-                    vector_width /*packet_size*/,
-                    secondary.size / vector_width + select(secondary.size % vector_width != 0, 1, 0),
-                    single,
-                    true /*any_hit*/
-                );
+                if use_embree {
+                    rodent_cpu_intersect_secondary_embree(secondary);
+                } else {
+                    cpu_traverse_secondary(scene, min_max, secondary, single, vector_width);
+                }
             }
 
             // Add the contribution for secondary rays to the frame buffer
@@ -353,7 +384,7 @@ fn @cpu_trace( scene: Scene
 
 // CPU device ----------------------------------------------------------------------
 
-fn @make_cpu_device(single: bool, min_max: MinMax, vector_width: i32, num_cores: i32, tile_size: i32) -> Device {
+fn @make_cpu_device(use_embree: bool, single: bool, min_max: MinMax, vector_width: i32, num_cores: i32, tile_size: i32) -> Device {
     Device {
         intrinsics: cpu_intrinsics,
         trace: @ |scene, path_tracer, spp| {
@@ -365,7 +396,8 @@ fn @make_cpu_device(single: bool, min_max: MinMax, vector_width: i32, num_cores:
                 tile_size,
                 spp,
                 num_cores,
-                vector_width
+                vector_width,
+                use_embree
             )
         },
         present: @ || rodent_present(0),
@@ -412,18 +444,18 @@ fn @make_cpu_device(single: bool, min_max: MinMax, vector_width: i32, num_cores:
     }
 }
 
-fn @make_avx2_device() -> Device {
-    make_cpu_device(true, make_cpu_int_min_max(), 8, 0, 16)
+fn @make_avx2_device(use_embree: bool) -> Device {
+    make_cpu_device(use_embree, true, make_cpu_int_min_max(), 8, 0, 16)
 }
 
 fn @make_avx_device() -> Device {
-    make_cpu_device(true, make_cpu_default_min_max(), 8, 0, 16)
+    make_cpu_device(false, true, make_cpu_default_min_max(), 8, 0, 16)
 }
 
 fn @make_sse42_device() -> Device {
-    make_cpu_device(true, make_cpu_int_min_max(), 4, 0, 16)
+    make_cpu_device(false, true, make_cpu_int_min_max(), 4, 0, 16)
 }
 
 fn @make_asimd_device() -> Device {
-    make_cpu_device(false, make_cpu_int_min_max(), 4, 0, 16)
+    make_cpu_device(false, false, make_cpu_int_min_max(), 4, 0, 16)
 }

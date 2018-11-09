@@ -3,6 +3,7 @@
 
 #include <ostream>
 #include <istream>
+#include <fstream>
 
 #include <lz4.h>
 
@@ -31,7 +32,7 @@ static void read_buffer(std::istream& is, Array& array) {
 
 template <typename Array>
 static void read_buffer(const std::string& file_name, Array& array) {
-    std::ofstream is(file_name, std::ios::binary);
+    std::ifstream is(file_name, std::ios::binary);
     read_buffer(is, array);
 }
 

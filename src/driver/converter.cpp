@@ -25,11 +25,12 @@
 
 enum class Target : uint32_t {
     AVX2 = 1,
-    AVX = 2,
-    SSE42 = 3,
-    ASIMD = 4,
-    NVVM_STREAMING = 5,
-    NVVM_MEGAKERNEL = 6
+    AVX2_EMBREE,
+    AVX,
+    SSE42,
+    ASIMD,
+    NVVM_STREAMING,
+    NVVM_MEGAKERNEL
 };
 
 inline Target cpuid() {
@@ -116,10 +117,10 @@ template <size_t N, size_t M>
 class BvhNTriMAdapter {
     struct CostFn {
         static float leaf_cost(int count, float area) {
-            return ((count - 1) / M + 1) * area;
+            return count * area;
         }
         static float traversal_cost(float area) {
-            return area * 0.25f * N / M;
+            return area;
         }
     };
 
@@ -596,7 +597,8 @@ static bool convert_obj(const std::string& file_name, Target target, size_t max_
     assert(target != Target(0));
     bool enable_padding = target == Target::NVVM_STREAMING || target == Target::NVVM_MEGAKERNEL;
     switch (target) {
-        case Target::AVX2:             os << "    let device   = make_avx2_device();\n";         break;
+        case Target::AVX2:             os << "    let device   = make_avx2_device(false);\n";    break;
+        case Target::AVX2_EMBREE:      os << "    let device   = make_avx2_device(true);\n";     break;
         case Target::AVX:              os << "    let device   = make_avx_device();\n";          break;
         case Target::SSE42:            os << "    let device   = make_sse42_device();\n";        break;
         case Target::ASIMD:            os << "    let device   = make_asimd_device();\n";        break;
@@ -878,7 +880,7 @@ static void usage() {
     std::cout << "converter [options] file\n"
               << "Available options:\n"
               << "    -h     --help                Shows this message\n"
-              << "    -t     --target              Sets the target device (one of: sse42, avx, avx2, asimd, nvvm = nvvm-streaming, nvvm-megakernel)\n"
+              << "    -t     --target              Sets the target device (one of: sse42, avx, avx2, avx2-embree, asimd, nvvm = nvvm-streaming, nvvm-megakernel)\n"
               << "           --max-path-len        Sets the maximum path length (default: 64)\n"
               << "    -spp   --samples-per-pixel   Sets the number of samples per pixel (default: 4)\n"
 #ifdef ENABLE_EMBREE_BVH
@@ -919,6 +921,8 @@ int main(int argc, char** argv) {
                     target = Target::AVX;
                 else if (!strcmp(argv[i], "avx2"))
                     target = Target::AVX2;
+                else if (!strcmp(argv[i], "avx2-embree"))
+                    target = Target::AVX2_EMBREE;
                 else if (!strcmp(argv[i], "asimd"))
                     target = Target::ASIMD;
                 else if (!strcmp(argv[i], "nvvm") || !strcmp(argv[i], "nvvm-streaming"))
