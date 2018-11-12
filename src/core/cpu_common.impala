@@ -1,6 +1,7 @@
 // Vectorizer intrinsics  ----------------------------------------------------------
 
 extern "C" {
+    fn rv_mask() -> bool;
     fn rv_any(bool) -> bool;
     fn rv_all(bool) -> bool;
     fn rv_ballot(bool) -> i32;

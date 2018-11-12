@@ -104,7 +104,7 @@ fn @make_phong_bsdf(math: Intrinsics, surf: SurfaceElement, ks: Color, ns: f32) 
     Bsdf {
         eval: @ |in_dir, out_dir| {
             let cos = positive_cos(in_dir, vec3_reflect(out_dir, surf.local.col(2)));
-            color_mulf(ks, math.powf(cos, ns) * (ns + 2.0f) * (1.0f / (2.0f * flt_pi)))
+            color_mulf(ks, fastpow/*math.powf*/(cos, ns) * (ns + 2.0f) * (1.0f / (2.0f * flt_pi)))
         },
         pdf: @ |in_dir, out_dir| {
             let cos = positive_cos(in_dir, vec3_reflect(out_dir, surf.local.col(2)));
