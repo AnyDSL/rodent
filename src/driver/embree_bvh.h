@@ -43,7 +43,7 @@ template <size_t M, typename NodeRef, typename BvhTri>
 void extract_bvh_leaf(const obj::TriMesh& tri_mesh, NodeRef leaf, std::vector<BvhTri>& new_tris) {
     using namespace embree;
 
-    size_t num; 
+    size_t num;
     auto tris = (const Triangle4*)leaf.leaf(num);
 
     BvhTri new_tri;
