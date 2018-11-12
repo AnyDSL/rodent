@@ -63,7 +63,7 @@ anydsl_runtime_wrap(RODENT_OBJS
     NAME "rodent"
     CLANG_FLAGS ${CLANG_FLAGS}
     IMPALA_FLAGS --log-level info
-    FILES ${RODENT_SRCS} main.impala)
+    FILES ${RODENT_SRCS} ${CMAKE_CURRENT_BINARY_DIR}/main.impala)
 
 anydsl_runtime_wrap(DISCARD_TMP_OBJS
     NAME "interface"
@@ -88,13 +88,12 @@ if (EMBREE_FOUND)
     target_compile_definitions(converter PUBLIC ${EMBREE_DEFINITIONS} -DENABLE_EMBREE_BVH)
 endif()
 
-add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/main.impala
+add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/main.impala
     COMMAND converter ${SCENE_FILE} ${TARGET_OPTION} --max-path-len ${MAX_PATH_LEN} --samples-per-pixel ${SPP}
-                   COMMAND ${CMAKE_COMMAND} -E rename ${CMAKE_BINARY_DIR}/main.impala ${CMAKE_CURRENT_SOURCE_DIR}/main.impala
-                   WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-                   DEPENDS ${SCENE_FILE} converter)
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    DEPENDS ${SCENE_FILE} converter)
 
-set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/main.impala PROPERTIES GENERATED TRUE)
+set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/main.impala PROPERTIES GENERATED TRUE)
 
 add_library(driver ${DRIVER_SRCS})
 if (EMBREE_FOUND)
