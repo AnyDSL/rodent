@@ -1,8 +1,10 @@
 // Trace function ------------------------------------------------------------------
 
 struct Atomics {
-    add_i32: fn (&mut i32, i32) -> i32,
-    add_f32: fn (&mut f32, f32) -> f32
+    add_global_i32: fn (&mut i32, i32) -> i32,
+    add_global_f32: fn (&mut f32, f32) -> f32,
+    add_shared_i32: fn (&mut [3]i32, i32) -> i32,
+    add_shared_f32: fn (&mut [3]f32, f32) -> f32
 }
 
 fn @gpu_get_film_data(dev_id: i32) -> (&mut [f32], i32, i32) {
@@ -34,9 +36,9 @@ fn @gpu_accumulate(atomics: Atomics, film_pixels: &mut [f32], pixel: i32, color:
         film_pixels(pixel * 3 + 1) += color.g;
         film_pixels(pixel * 3 + 2) += color.b;
     } else {
-        atomics.add_f32(&mut film_pixels(pixel * 3 + 0), color.r * (1.0f / (spp as f32)));
-        atomics.add_f32(&mut film_pixels(pixel * 3 + 1), color.g * (1.0f / (spp as f32)));
-        atomics.add_f32(&mut film_pixels(pixel * 3 + 2), color.b * (1.0f / (spp as f32)));
+        atomics.add_global_f32(&mut film_pixels(pixel * 3 + 0), color.r * (1.0f / (spp as f32)));
+        atomics.add_global_f32(&mut film_pixels(pixel * 3 + 1), color.g * (1.0f / (spp as f32)));
+        atomics.add_global_f32(&mut film_pixels(pixel * 3 + 2), color.b * (1.0f / (spp as f32)));
     }
 }
 
@@ -188,7 +190,7 @@ fn @gpu_sort_primary( primary: PrimaryStream
             break()
         }
 
-        atomics.add_i32(&mut gpu_tmp(primary.geom_id(ray_id)), 1);
+        atomics.add_global_i32(&mut gpu_tmp(primary.geom_id(ray_id)), 1);
     }
     acc.sync();
 
@@ -210,7 +212,7 @@ fn @gpu_sort_primary( primary: PrimaryStream
             break()
         }
         let geom_id = primary.geom_id(src_id);
-        let dst_id  = atomics.add_i32(&mut gpu_tmp(geom_id), 1);
+        let dst_id  = atomics.add_global_i32(&mut gpu_tmp(geom_id), 1);
         copy_primary_ray(primary, other_primary, src_id, dst_id, true);
     }
     acc.sync();
@@ -286,7 +288,7 @@ fn @gpu_compact_primary( primary: PrimaryStream
             break()
         }
 
-        let dst_id = atomics.add_i32(&mut gpu_tmp(0), 1);
+        let dst_id = atomics.add_global_i32(&mut gpu_tmp(0), 1);
         copy_primary_ray(primary, other_primary, src_id, dst_id, false);
     }
     acc.sync();
@@ -364,32 +366,52 @@ fn @gpu_streaming_trace( dev_id: i32
     }
 }
 
-fn @gpu_mega_kernel_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics, min_max: MinMax, scene: Scene, path_tracer: PathTracer, spp: i32) -> () {
+fn @gpu_mega_kernel_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics, atomics: Atomics, min_max: MinMax, scene: Scene, path_tracer: PathTracer, spp: i32) -> () {
     let (film_pixels, film_width, film_height) = gpu_get_film_data(dev_id);
 
-    let (bx, by, bz) = (8, 8, 1);
+    let (bx, by, bz) = (16, 8, 1);
     let (gx, gy, gz) = (round_up(film_width, bx), round_up(film_height, by), bz);
     with work_item in acc.exec((gx, gy, gz), (bx, by, bz)) {
-        let (x, y) = (work_item.gidx(), work_item.gidy());
-        if x >= film_width || y >= film_height {
-            break()
+        let tile_x = work_item.bidx() * bx;
+        let tile_y = work_item.bidy() * by;
+        let tile_w = intrinsics.min(film_width  - tile_x, bx);
+        let tile_h = intrinsics.min(film_height - tile_y, by);
+        let tile_div = make_fast_div(tile_w as u32);
+        let ray_count = tile_w * tile_h * spp;
+        let counter = &mut reserve_shared[i32](1)(0);
+        if work_item.tidx() == 0 {
+            *counter = 0
         }
+        // Ensure consistent view of the counter
+        acc.barrier();
 
         let mut ray;
         let mut state;
+        let mut final_color;
         let mut done = true;
-        let mut samples = 0;
-        let mut final_color = make_color(0.0f, 0.0f, 0.0f);
+        let mut pixel = -1;
 
         while true {
             if done {
-                if samples == spp {
-                    break()
+                if pixel >= 0 {
+                    atomics.add_global_f32(&mut film_pixels(pixel + 0), final_color.r * (1.0f / (spp as f32)));
+                    atomics.add_global_f32(&mut film_pixels(pixel + 1), final_color.g * (1.0f / (spp as f32)));
+                    atomics.add_global_f32(&mut film_pixels(pixel + 2), final_color.b * (1.0f / (spp as f32)));
                 }
-                let (init_ray, init_state) = @@(path_tracer.on_emit)(samples, x, y, film_width, film_height);
-                ray = init_ray;
+
+                let id = atomics.add_shared_i32(counter, 1);
+                if id >= ray_count { break() }
+                let ray_id    = id / spp;
+                let sample_id = id % spp;
+                let in_tile_y = fast_div(tile_div, ray_id as u32) as i32;
+                let in_tile_x = ray_id - in_tile_y * tile_w;
+                let x = tile_x + in_tile_x;
+                let y = tile_y + in_tile_y;
+                let (init_ray, init_state) = @@(path_tracer.on_emit)(sample_id, x, y, film_width, film_height);
+                final_color = make_color(0.0f, 0.0f, 0.0f);
+                pixel = 3 * (y * film_width + x);
+                ray   = init_ray;
                 state = init_state;
-                samples++;
             }
             done = true;
 
@@ -439,11 +461,6 @@ fn @gpu_mega_kernel_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics,
                 final_color = color_add(final_color, shadow_color);
             }
         }
-
-        let pixel = 3 * (y * film_width + x);
-        film_pixels(pixel + 0) += final_color.r * (1.0f / (spp as f32));
-        film_pixels(pixel + 1) += final_color.g * (1.0f / (spp as f32));
-        film_pixels(pixel + 2) += final_color.b * (1.0f / (spp as f32));
     }
     acc.sync()
 }
@@ -479,6 +496,7 @@ fn @make_gpu_device( dev_id: i32
                     dev_id,
                     acc,
                     intrinsics,
+                    atomics,
                     min_max,
                     scene,
                     path_tracer,
@@ -548,11 +566,17 @@ fn @make_nvvm_device(dev: i32, streaming: bool) -> Device {
         }
     };
     let atomics = Atomics {
-        add_i32: @ |p, i| nvvm_atomic_add_global(p as &mut[1]i32, i),
-        add_f32: @ |p, i| {
+        add_global_i32: @ |p, i| nvvm_atomic_add_global(p as &mut[1]i32, i),
+        add_global_f32: @ |p, i| {
             let mut old: f32;
-            asm("atom.add.f32 $0, [$1], $2;" : "=f"(old) : "l"(p), "f"(i) : "memory");
-            old 
+            asm("atom.global.add.f32 $0, [$1], $2;" : "=f"(old) : "l"(p), "f"(i) : "memory");
+            old
+        },
+        add_shared_i32: @ |p, i| nvvm_atomic_add_shared(p, i),
+        add_shared_f32: @ |p, i| {
+            let mut old: f32;
+            asm("atom.shared.add.f32 $0, [$1], $2;" : "=f"(old) : "l"(p), "f"(i) : "memory");
+            old
         }
     };
     make_gpu_device(

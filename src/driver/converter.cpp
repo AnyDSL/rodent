@@ -432,7 +432,7 @@ static void write_bvh(std::vector<Node>& nodes, std::vector<Tri>& tris) {
     of.write((char*)&tri_size,  sizeof(uint32_t));
     write_buffer(of, nodes);
     write_buffer(of, tris );
-    std::cout << "BVH with " << nodes.size() << " node(s), " << tris.size() << " tri(s)" << std::endl;
+    info("BVH with ", nodes.size(), " node(s), ", tris.size(), " tri(s)");
 }
 
 static bool operator == (const obj::Material& a, const obj::Material& b) {
