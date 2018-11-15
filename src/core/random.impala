@@ -95,7 +95,7 @@ fn @sample_cosine_power_hemisphere(math: Intrinsics, k: f32, u: f32, v: f32) -> 
     //           = pow(v, k / (k + 1))
     //           = v * pow(v, -1 / (k + 1))
     //           = v / c
-    let pow_c_k = if c != 0.0f { v / c } else { 0.0f };
+    let pow_c_k = select(c != 0.0f, v / c, 0.0f);
     let pdf = pow_c_k * (k + 1.0f) * (1.0f / (2.0f * flt_pi));
     make_dir_sample(math, c, s, phi, pdf)
 }

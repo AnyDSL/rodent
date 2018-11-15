@@ -5,8 +5,6 @@
 #include <cstring>
 #include <limits>
 
-#include <lz4.h>
-
 #include "bvh.h"
 #ifdef ENABLE_EMBREE_BVH
 #include "embree_bvh.h"
