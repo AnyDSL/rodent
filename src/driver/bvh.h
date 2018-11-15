@@ -252,9 +252,9 @@ public:
 
                 for (int i = 0; i < multi_node.count; i++) {
                     multi_node.nodes[i].parent = parent * N + i;
-                    if (multi_node.nodes[i].tested || stack.size() >= stack.capacity() - 1) {
+                    if (multi_node.nodes[i].tested || stack.size() >= stack.capacity() - 1)
                         make_leaf(multi_node.nodes[i], write_leaf);
-                    } else
+                    else
                         stack.push(multi_node.nodes[i]);
                 }
             }

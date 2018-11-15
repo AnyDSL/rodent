@@ -40,7 +40,7 @@ fn @fast_div(fd: FastDiv, i: u32) -> u32 {
 // http://www.machinedlearnings.com/2011/06/fast-approximate-logarithm-exponential.html
 
 fn @fastlog2(x: f32) -> f32 {
-    let vx : u32 = bitcast[u32](x);
+    let vx = bitcast[u32](x);
     let mx = (vx & 0x007FFFFFu) | 0x3f000000u;
     let y = (vx as f32) * 1.1920928955078125e-7f;
     let z = bitcast[f32](mx);
@@ -57,12 +57,7 @@ fn @fastpow2(p: f32) -> f32 {
 }
 
 fn @fastpow(x: f32, p: f32) -> f32 {
-    // Prevent incorrect values from getting in (RV bug)
-    // The problem also exists for other transcendental functions,
-    // but most of the performance hit comes from the power function.
-    let x_ = select(rv_mask(), x, 1.0f);
-    let p_ = select(rv_mask(), p, 1.0f);
-    fastpow2(p_ * fastlog2(x_))
+    fastpow2(p * fastlog2(x))
 }
 
 // Likely/unlikely -----------------------------------------------------------------
