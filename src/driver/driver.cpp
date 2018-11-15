@@ -8,6 +8,9 @@
 #include "float3.h"
 #include "common.h"
 
+// On x86, set flush-to-zero mode
+#include <x86intrin.h>
+
 static constexpr float pi = 3.14159265359f;
 
 struct Camera {
@@ -212,6 +215,11 @@ int main(int argc, char** argv) {
     std::unique_ptr<uint32_t> buf(new uint32_t[width * height]);
 
     setup_interface(width, height);
+
+    // Force flush to zero mode for denormals
+#if defined(__x86_64__) || defined(__amd64__) || defined(_M_X64)
+    _mm_setcsr(_mm_getcsr() | (_MM_FLUSH_ZERO_ON | _MM_DENORMALS_ZERO_ON));
+#endif
 
     auto spp = get_spp();
     bool done = false;
