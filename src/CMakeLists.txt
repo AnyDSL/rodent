@@ -1,6 +1,6 @@
 set(CPUINFO_PATH "/proc/cpuinfo" CACHE STRING "Path to the CPU info file on the system")
 set(TARGET_DEVICE "" CACHE STRING "Target device for the converter tool. Must be one of: sse42, avx, avx2, asimd, nvvm")
-set(SCENE_FILE "" CACHE FILEPATH "Absolute path to an OBJ scene")
+set(SCENE_FILE "${PROJECT_SOURCE_DIR}/testing/cornell_box.obj" CACHE FILEPATH "Absolute path to an OBJ scene")
 set(MAX_PATH_LEN "64" CACHE STRING "Maximum path length")
 set(SPP "4" CACHE STRING "Samples per pixel")
 if (SCENE_FILE STREQUAL "")
