@@ -1,6 +1,7 @@
 #include <memory>
 #include <sstream>
 #include <algorithm>
+#include <string>
 #include <cstring>
 #include <chrono>
 
@@ -11,6 +12,7 @@
 #include "interface.h"
 #include "float3.h"
 #include "common.h"
+#include "image.h"
 
 // On x86, set flush-to-zero mode
 #include <x86intrin.h>
@@ -131,6 +133,32 @@ static void update_texture(uint32_t* buf, SDL_Texture* texture, size_t width, si
 }
 #endif
 
+static void save_image(const std::string& out_file, size_t width, size_t height, uint32_t iter) {
+    ImageRgba32 img;
+    img.width = width;
+    img.height = height;
+    img.pixels.reset(new uint8_t[width * height * 4]);
+
+    auto film = get_pixels();
+    auto inv_iter = 1.0f / iter;
+    auto inv_gamma = 1.0f / 2.2f;
+    for (size_t y = 0; y < height; ++y) {
+        for (size_t x = 0; x < width; ++x) {
+            auto r = film[(y * width + x) * 3 + 0];
+            auto g = film[(y * width + x) * 3 + 1];
+            auto b = film[(y * width + x) * 3 + 2];
+
+            img.pixels[4 * (y * width + x) + 0] = clamp(pow(r * inv_iter, inv_gamma), 0.0f, 1.0f) * 255.0f;
+            img.pixels[4 * (y * width + x) + 1] = clamp(pow(g * inv_iter, inv_gamma), 0.0f, 1.0f) * 255.0f;
+            img.pixels[4 * (y * width + x) + 2] = clamp(pow(b * inv_iter, inv_gamma), 0.0f, 1.0f) * 255.0f;
+            img.pixels[4 * (y * width + x) + 3] = 255;
+        }
+    }
+
+    if (!save_png(out_file, img))
+        error("Failed to save PNG file '", out_file, "'");
+}
+
 static inline void check_arg(int argc, char** argv, int arg, int n) {
     if (arg + n >= argc)
         error("Option '", argv[arg], "' expects ", n, " arguments, got ", argc - arg);
@@ -139,17 +167,19 @@ static inline void check_arg(int argc, char** argv, int arg, int n) {
 static inline void usage() {
     std::cout << "Usage: rodent [options]\n"
               << "Available options:\n"
-              << "   --help            Shows this message\n"
-              << "   --width  pixels   Sets the viewport horizontal dimension (in pixels)\n"
-              << "   --height pixels   Sets the viewport vertical dimension (in pixels)\n"
-              << "   --eye    x y z    Sets the position of the camera\n"
-              << "   --dir    x y z    Sets the direction vector of the camera\n"
-              << "   --up     x y z    Sets the up vector of the camera\n"
-              << "   --fov    degrees  Sets the horizontal field of view (in degrees)\n"
-              << "   --bench           Enables benchmarking mode" << std::endl;
+              << "   --help              Shows this message\n"
+              << "   --width  pixels     Sets the viewport horizontal dimension (in pixels)\n"
+              << "   --height pixels     Sets the viewport vertical dimension (in pixels)\n"
+              << "   --eye    x y z      Sets the position of the camera\n"
+              << "   --dir    x y z      Sets the direction vector of the camera\n"
+              << "   --up     x y z      Sets the up vector of the camera\n"
+              << "   --fov    degrees    Sets the horizontal field of view (in degrees)\n"
+              << "   --bench             Enables benchmarking mode\n"
+              << "   -o       image.png  Writes the output image to a file" << std::endl;
 }
 
 int main(int argc, char** argv) {
+    std::string out_file;
     size_t bench_iter = 0;
     size_t width  = 1080;
     size_t height = 720;
@@ -185,6 +215,9 @@ int main(int argc, char** argv) {
             } else if (!strcmp(argv[i], "--bench")) {
                 check_arg(argc, argv, i, 1);
                 bench_iter = strtoul(argv[++i], nullptr, 10);
+            } else if (!strcmp(argv[i], "-o")) {
+                check_arg(argc, argv, i, 1);
+                out_file = argv[++i];
             } else if (!strcmp(argv[i], "--help")) {
                 usage();
                 return 0;
@@ -287,14 +320,19 @@ int main(int argc, char** argv) {
 #endif
     }
 
-    cleanup_interface();
-
 #ifndef DISABLE_GUI
     SDL_DestroyTexture(texture);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
 #endif
+
+    if (out_file != "") {
+        save_image(out_file, width, height, iter);
+        info("Image saved to '", out_file, "'");
+    }
+
+    cleanup_interface();
 
     if (bench_iter != 0) {
         auto inv = 1.0e-6;

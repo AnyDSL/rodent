@@ -54,7 +54,6 @@ bool load_png(const FilePath& path, ImageRgba32& img) {
 
     img.width    = png_get_image_width(png_ptr, info_ptr);
     img.height   = png_get_image_height(png_ptr, info_ptr);
-    img.channels = 4;
 
     png_uint_32 color_type = png_get_color_type(png_ptr, info_ptr);
     png_uint_32 bit_depth  = png_get_bit_depth(png_ptr, info_ptr);
@@ -79,19 +78,71 @@ bool load_png(const FilePath& path, ImageRgba32& img) {
     else
         png_set_filler(png_ptr, 0xFF, PNG_FILLER_AFTER);
 
-    img.pixels.reset(new uint8_t[img.channels * img.width * img.height]);
+    img.pixels.reset(new uint8_t[4 * img.width * img.height]);
     std::unique_ptr<png_byte[]> row_bytes(new png_byte[img.width * 4]);
     for (size_t y = 0; y < img.height; y++) {
         png_read_row(png_ptr, row_bytes.get(), nullptr);
         uint8_t* img_row = img.pixels.get() + 4 * img.width * (img.height - 1 - y);
         for (size_t x = 0; x < img.width; x++) {
-            for (size_t c = 0; c < img.channels; ++c)
-                img_row[x * img.channels + c] = row_bytes[x * 4 + c];
+            for (size_t c = 0; c < 4; ++c)
+                img_row[x * 4 + c] = row_bytes[x * 4 + c];
         }
     }
 
     png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
     gamma_correct(img);
+    return true;
+}
+
+static void png_write_to_stream(png_structp png_ptr, png_bytep data, png_size_t length) {
+    png_voidp a = png_get_io_ptr(png_ptr);
+    ((std::ostream*)a)->write((const char*)data, length);
+}
+
+static void png_flush_stream(png_structp) {
+    // Nothing to do
+}
+
+bool save_png(const FilePath& path, const ImageRgba32& img) {
+    std::ofstream file(path, std::ofstream::binary);
+    if (!file)
+        return false;
+
+    png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
+    if (!png_ptr)
+        return false;
+
+    png_infop info_ptr = png_create_info_struct(png_ptr);
+    if (!info_ptr) {
+        png_destroy_read_struct(&png_ptr, nullptr, nullptr);
+        return false;
+    }
+
+    std::unique_ptr<uint8_t[]> row_bytes(new uint8_t[img.width * 4]);
+    if (setjmp(png_jmpbuf(png_ptr))) {
+        png_destroy_write_struct(&png_ptr, &info_ptr);
+        return false;
+    }
+
+    png_set_write_fn(png_ptr, &file, png_write_to_stream, png_flush_stream);
+
+    png_set_IHDR(png_ptr, info_ptr, img.width, img.height,
+                 8, PNG_COLOR_TYPE_RGBA, PNG_INTERLACE_NONE,
+                 PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
+
+    png_write_info(png_ptr, info_ptr);
+
+    for (size_t y = 0; y < img.height; y++) {
+        const uint8_t* img_row = img.pixels.get() + img.width * 4 * y;
+        for (size_t x = 0; x < img.width; x++) {
+            for (size_t c = 0; c < 4; ++c)
+                row_bytes[x * 4 + c] = img_row[x * 4 + c];
+        }
+        png_write_row(png_ptr, row_bytes.get());
+    }
+
+    png_write_end(png_ptr, info_ptr);
+    png_destroy_write_struct(&png_ptr, &info_ptr);
     return true;
 }
 
@@ -167,15 +218,15 @@ bool load_jpg(const FilePath& path, ImageRgba32& image) {
     auto image_size = image.width * image.height * 4;
     image.pixels.reset(new uint8_t[image_size]);
     std::fill(image.pixels.get(), image.pixels.get() + image_size, 0);
-    image.channels = cinfo.output_components;
+    auto channels = cinfo.output_components;
 
-    std::unique_ptr<JSAMPLE[]> row(new JSAMPLE[image.width * image.channels]);
+    std::unique_ptr<JSAMPLE[]> row(new JSAMPLE[image.width * channels]);
     for (size_t y = 0; y < image.height; y++) {
         auto src_ptr = row.get();
         auto dst_ptr = &image.pixels[(image.height - 1 - y) * image.width * 4];
         jpeg_read_scanlines(&cinfo, &src_ptr, 1);
-        for (size_t x = 0; x < image.width; ++x, src_ptr += image.channels, dst_ptr += 4) {
-            for (size_t c = 0; c < image.channels; c++)
+        for (size_t x = 0; x < image.width; ++x, src_ptr += channels, dst_ptr += 4) {
+            for (size_t c = 0; c < channels; c++)
                 dst_ptr[c] = src_ptr[c];
         }
     }

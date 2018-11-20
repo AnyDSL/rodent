@@ -34,7 +34,6 @@ struct RayStream {
 }
 
 struct PrimaryStream {
-    size: i32,
     rays: RayStream,
     geom_id: &mut [i32],
     prim_id: &mut [i32],
@@ -46,16 +45,17 @@ struct PrimaryStream {
     contrib_r: &mut [f32],
     contrib_g: &mut [f32],
     contrib_b: &mut [f32],
-    depth: &mut [i32]
+    depth: &mut [i32],
+    size: i32 // Size at the end to avoid padding issues
 }
 
 struct SecondaryStream {
-    size: i32,
     rays: RayStream,
     prim_id: &mut [i32],
     color_r: &mut [f32],
     color_g: &mut [f32],
-    color_b: &mut [f32]
+    color_b: &mut [f32],
+    size: i32 // Size at the end to avoid padding issues
 }
 
 fn @make_ray_stream_reader(rays: RayStream, vector_width: i32) -> fn (i32, i32) -> Ray {
