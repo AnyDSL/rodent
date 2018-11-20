@@ -241,7 +241,7 @@ fn @gpu_generate_rays( primary: PrimaryStream
 
     with work_item in acc.exec((round_up(num_rays, block_w), 1, 1), (block_w, 1, 1)) {
         let gid = work_item.gidx();
-        if gid > num_rays {
+        if gid >= num_rays {
             break()
         }
 
