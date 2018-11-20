@@ -132,13 +132,6 @@ fn @make_cpu_int_min_max() -> MinMax {
     make_min_max(fminf, fmaxf, true)
 }
 
-// Floating point min/max, works on every ISA, but might not be optimal
-fn @make_cpu_default_min_max() -> MinMax {
-    let fminf = @ |x, y| select(x < y, x, y);
-    let fmaxf = @ |x, y| select(x > y, x, y);
-    make_min_max(fminf, fmaxf, false)
-}
-
 // Traversal kernels ---------------------------------------------------------------
 
 // Traverses a BVH with a single ray.

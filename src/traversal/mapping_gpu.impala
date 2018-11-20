@@ -15,14 +15,18 @@ struct Tri1 {
     prim_id: i32
 }
 
-fn @make_nvvm_bvh2_tri1(nodes: &[Node2], tris: &[Tri1]) -> Bvh {
+fn @make_gpu_bvh2_tri1(nodes: &[Node2], tris: &[Tri1], is_nvvm: bool) -> Bvh {
+    // Use texture cache when generating code with NVVM
+    let load4_f32 = @ |p, i| if is_nvvm { nvvm_ldg4_f32(&p(i)) } else { p(i) };
+    let load4_i32 = @ |p, i| if is_nvvm { nvvm_ldg4_i32(&p(i)) } else { p(i) };
+
     Bvh {
         node: @ |j| {
             let simd_ptr = &nodes(j) as &[1][simd[f32 * 4]];
-            let bb0 = nvvm_ldg4_f32(&simd_ptr(0));
-            let bb1 = nvvm_ldg4_f32(&simd_ptr(1));
-            let bb2 = nvvm_ldg4_f32(&simd_ptr(2));
-            let children = nvvm_ldg4_i32(&simd_ptr(3) as &[1]simd[i32 * 4]);
+            let bb0 = load4_f32(simd_ptr, 0);
+            let bb1 = load4_f32(simd_ptr, 1);
+            let bb2 = load4_f32(simd_ptr, 2);
+            let children = load4_i32(simd_ptr as &[1][simd[i32 * 4]], 3);
 
             Node {
                 bbox: @ |i| {
@@ -40,9 +44,9 @@ fn @make_nvvm_bvh2_tri1(nodes: &[Node2], tris: &[Tri1]) -> Bvh {
         },
         prim: @ |j| {
             let simd_ptr = &tris(j) as &[1][simd[f32 * 4]];
-            let tri0 = nvvm_ldg4_f32(&simd_ptr(0));
-            let tri1 = nvvm_ldg4_f32(&simd_ptr(1));
-            let tri2 = nvvm_ldg4_f32(&simd_ptr(2));
+            let tri0 = load4_f32(simd_ptr, 0);
+            let tri1 = load4_f32(simd_ptr, 1);
+            let tri2 = load4_f32(simd_ptr, 2);
             let prim_id = bitcast[i32](tri2(3));
             let geom_id = bitcast[i32](tri1(3));
             Prim {
@@ -78,6 +82,10 @@ fn @make_nvvm_min_max() -> MinMax {
         fmaxminf: @ |a, b, c| bitcast[f32](nvvm_maxmin(bitcast[i32](a), bitcast[i32](b), bitcast[i32](c))),
         is_integer: true
     }
+}
+
+fn @make_amdgpu_min_max() -> MinMax {
+    make_min_max(ocml_fminf, ocml_fmaxf, true)
 }
 
 // Traversal kernel  ---------------------------------------------------------------

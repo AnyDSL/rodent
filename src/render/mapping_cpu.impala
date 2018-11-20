@@ -449,7 +449,7 @@ fn @make_avx2_device(use_embree: bool) -> Device {
 }
 
 fn @make_avx_device() -> Device {
-    make_cpu_device(false, true, make_cpu_default_min_max(), 8, 0, 16)
+    make_cpu_device(false, true, make_default_min_max(), 8, 0, 16)
 }
 
 fn @make_sse42_device() -> Device {

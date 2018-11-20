@@ -539,7 +539,7 @@ fn @make_nvvm_device(dev: i32, streaming: bool) -> Device {
         let mut nodes;
         let mut tris;
         rodent_load_bvh2_tri1(dev_id, filename, &mut nodes, &mut tris);
-        make_nvvm_bvh2_tri1(nodes, tris)
+        make_gpu_bvh2_tri1(nodes, tris, true)
     };
     let read_pixel = @ |p, i| bitcast[u32](nvvm_ldg_i32(&p(i) as &[1]i32));
     let make_buffer = @ |p| {
@@ -591,6 +591,80 @@ fn @make_nvvm_device(dev: i32, streaming: bool) -> Device {
         nvvm_accelerator(dev),
         nvvm_intrinsics,
         make_nvvm_min_max(),
+        load_bvh,
+        read_pixel,
+        make_buffer,
+        atomics,
+        streaming
+    )
+}
+
+fn @make_amdgpu_device(dev: i32, streaming: bool) -> Device {
+    let dev_id = runtime_device(3, dev);
+    let load_bvh = @ |filename| {
+        let mut nodes;
+        let mut tris;
+        rodent_load_bvh2_tri1(dev_id, filename, &mut nodes, &mut tris);
+        make_gpu_bvh2_tri1(nodes, tris, false)
+    };
+    let read_pixel = @ |p, i| p(i);
+    let make_buffer = @ |p| {
+        DeviceBuffer {
+            load_f32:  @ |i| (p as &[1][f32])(i),
+            load_i32:  @ |i| (p as &[1][i32])(i),
+            load_vec2: @ |i| {
+                let v = (p as &[1][simd[f32 * 4]])(i);
+                make_vec2(v(0), v(1))
+            },
+            load_vec3: @ |i| {
+                let v = (p as &[1][simd[f32 * 4]])(i);
+                make_vec3(v(0), v(1), v(2))
+            },
+            load_vec4: @ |i| {
+                let v = (p as &[1][simd[f32 * 4]])(i);
+                make_vec4(v(0), v(1), v(2), v(3))
+            },
+            load_int2: @ |i| {
+                let v = (p as &[1][simd[i32 * 4]])(i);
+                (v(0), v(1))
+            },
+            load_int3: @ |i| {
+                let v = (p as &[1][simd[i32 * 4]])(i);
+                (v(0), v(1), v(2))
+            },
+            load_int4: @ |i| {
+                let v = (p as &[1][simd[i32 * 4]])(i);
+                (v(0), v(1), v(2), v(3))
+            }
+        }
+    };
+    let atomics = Atomics {
+        add_global_i32: @ |p, i| amdgcn_atomic_add_global(p as &mut[1]i32, i),
+        add_global_f32: @ |p, i| {
+            let mut assumed = *p;
+            while true {
+                let (old, success) = amdgcn_atomic_cmpxchg_global(p as &mut [1]i32, bitcast[i32](assumed), bitcast[i32](i + assumed));
+                assumed = bitcast[f32](old);
+                if success { break() }
+            }
+            assumed
+        },
+        add_shared_i32: @ |p, i| amdgcn_atomic_add_shared(p, i),
+        add_shared_f32: @ |p, i| {
+            let mut assumed = *p;
+            while true {
+                let (old, success) = amdgcn_atomic_cmpxchg_shared(p as &mut [3]i32, bitcast[i32](assumed), bitcast[i32](i + assumed));
+                assumed = bitcast[f32](old);
+                if success { break() }
+            }
+            assumed
+        }
+    };
+    make_gpu_device(
+        dev_id,
+        amdgpu_accelerator(dev),
+        amdgpu_intrinsics,
+        make_amdgpu_min_max(),
         load_bvh,
         read_pixel,
         make_buffer,
