@@ -4,6 +4,7 @@
 #include <string>
 #include <cstring>
 #include <chrono>
+#include <cmath>
 
 #ifndef DISABLE_GUI
 #include <SDL2/SDL.h>
@@ -124,9 +125,9 @@ static void update_texture(uint32_t* buf, SDL_Texture* texture, size_t width, si
             auto b = film[(y * width + x) * 3 + 2];
 
             buf[y * width + x] =
-                (uint32_t(clamp(pow(r * inv_iter, inv_gamma), 0.0f, 1.0f) * 255.0f) << 16) |
-                (uint32_t(clamp(pow(g * inv_iter, inv_gamma), 0.0f, 1.0f) * 255.0f) << 8)  |
-                 uint32_t(clamp(pow(b * inv_iter, inv_gamma), 0.0f, 1.0f) * 255.0f);
+                (uint32_t(clamp(std::pow(r * inv_iter, inv_gamma), 0.0f, 1.0f) * 255.0f) << 16) |
+                (uint32_t(clamp(std::pow(g * inv_iter, inv_gamma), 0.0f, 1.0f) * 255.0f) << 8)  |
+                 uint32_t(clamp(std::pow(b * inv_iter, inv_gamma), 0.0f, 1.0f) * 255.0f);
         }
     }
     SDL_UpdateTexture(texture, nullptr, buf, width * sizeof(uint32_t));
@@ -148,9 +149,9 @@ static void save_image(const std::string& out_file, size_t width, size_t height,
             auto g = film[(y * width + x) * 3 + 1];
             auto b = film[(y * width + x) * 3 + 2];
 
-            img.pixels[4 * (y * width + x) + 0] = clamp(pow(r * inv_iter, inv_gamma), 0.0f, 1.0f) * 255.0f;
-            img.pixels[4 * (y * width + x) + 1] = clamp(pow(g * inv_iter, inv_gamma), 0.0f, 1.0f) * 255.0f;
-            img.pixels[4 * (y * width + x) + 2] = clamp(pow(b * inv_iter, inv_gamma), 0.0f, 1.0f) * 255.0f;
+            img.pixels[4 * (y * width + x) + 0] = clamp(std::pow(r * inv_iter, inv_gamma), 0.0f, 1.0f) * 255.0f;
+            img.pixels[4 * (y * width + x) + 1] = clamp(std::pow(g * inv_iter, inv_gamma), 0.0f, 1.0f) * 255.0f;
+            img.pixels[4 * (y * width + x) + 2] = clamp(std::pow(b * inv_iter, inv_gamma), 0.0f, 1.0f) * 255.0f;
             img.pixels[4 * (y * width + x) + 3] = 255;
         }
     }
