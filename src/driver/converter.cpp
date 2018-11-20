@@ -28,7 +28,9 @@ enum class Target : uint32_t {
     SSE42,
     ASIMD,
     NVVM_STREAMING,
-    NVVM_MEGAKERNEL
+    NVVM_MEGAKERNEL,
+    AMDGPU_STREAMING,
+    AMDGPU_MEGAKERNEL
 };
 
 inline Target cpuid() {
@@ -593,15 +595,20 @@ static bool convert_obj(const std::string& file_name, Target target, size_t max_
     os << "\nextern fn render(settings: &Settings, iter: i32) -> () {\n";
 
     assert(target != Target(0));
-    bool enable_padding = target == Target::NVVM_STREAMING || target == Target::NVVM_MEGAKERNEL;
+    bool enable_padding = target == Target::NVVM_STREAMING   ||
+                          target == Target::NVVM_MEGAKERNEL  ||
+                          target == Target::AMDGPU_STREAMING ||
+                          target == Target::AMDGPU_MEGAKERNEL;
     switch (target) {
-        case Target::AVX2:             os << "    let device   = make_avx2_device(false);\n";    break;
-        case Target::AVX2_EMBREE:      os << "    let device   = make_avx2_device(true);\n";     break;
-        case Target::AVX:              os << "    let device   = make_avx_device();\n";          break;
-        case Target::SSE42:            os << "    let device   = make_sse42_device();\n";        break;
-        case Target::ASIMD:            os << "    let device   = make_asimd_device();\n";        break;
-        case Target::NVVM_STREAMING:   os << "    let device   = make_nvvm_device(0, true);\n";  break;
-        case Target::NVVM_MEGAKERNEL:  os << "    let device   = make_nvvm_device(0, false);\n"; break;
+        case Target::AVX2:              os << "    let device   = make_avx2_device(false);\n";      break;
+        case Target::AVX2_EMBREE:       os << "    let device   = make_avx2_device(true);\n";       break;
+        case Target::AVX:               os << "    let device   = make_avx_device();\n";            break;
+        case Target::SSE42:             os << "    let device   = make_sse42_device();\n";          break;
+        case Target::ASIMD:             os << "    let device   = make_asimd_device();\n";          break;
+        case Target::NVVM_STREAMING:    os << "    let device   = make_nvvm_device(0, true);\n";    break;
+        case Target::NVVM_MEGAKERNEL:   os << "    let device   = make_nvvm_device(0, false);\n";   break;
+        case Target::AMDGPU_STREAMING:  os << "    let device   = make_amdgpu_device(0, true);\n";  break;
+        case Target::AMDGPU_MEGAKERNEL: os << "    let device   = make_amdgpu_device(0, false);\n"; break;
         default:
             assert(false);
             break;
@@ -878,12 +885,16 @@ static void usage() {
     std::cout << "converter [options] file\n"
               << "Available options:\n"
               << "    -h     --help                Shows this message\n"
-              << "    -t     --target              Sets the target device (one of: sse42, avx, avx2, avx2-embree, asimd, nvvm = nvvm-streaming, nvvm-megakernel)\n"
+              << "    -t     --target              Sets the target device (default: autodetect CPU)\n"
               << "           --max-path-len        Sets the maximum path length (default: 64)\n"
               << "    -spp   --samples-per-pixel   Sets the number of samples per pixel (default: 4)\n"
 #ifdef ENABLE_EMBREE_BVH
               << "           --embree-bvh          Use Embree to build the BVH (default: disabled)\n"
 #endif
+              << "Available devices:\n"
+              << "    sse42, avx, avx2, avx2-embree, asimd,\n"
+              << "    nvvm = nvvm-streaming, nvvm-megakernel,\n"
+              << "    amdgpu = amdgpu-streaming, amdgpu-megakernel\n"
               << std::flush;
 }
 
@@ -927,6 +938,10 @@ int main(int argc, char** argv) {
                     target = Target::NVVM_STREAMING;
                 else if (!strcmp(argv[i], "nvvm-megakernel"))
                     target = Target::NVVM_MEGAKERNEL;
+                else if (!strcmp(argv[i], "amdgpu") || !strcmp(argv[i], "amdgpu-streaming"))
+                    target = Target::AMDGPU_STREAMING;
+                else if (!strcmp(argv[i], "amdgpu-megakernel"))
+                    target = Target::AMDGPU_MEGAKERNEL;
                 else {
                     std::cerr << "Unknown target '" << argv[i] << "'. Aborting." << std::endl;
                     return 1;
