@@ -111,6 +111,8 @@ endif()
 if (NOT DISABLE_GUI)
     target_include_directories(driver PUBLIC ${SDL2_INCLUDE_DIRS})
     target_link_libraries(driver ${SDL2_LIBRARY})
+else()
+    target_compile_definitions(driver PUBLIC -DDISABLE_GUI)
 endif()
 
 add_executable(rodent ${RODENT_OBJS})
