@@ -6,7 +6,6 @@ src/driver/interface.h
 *.slo
 *.lo
 *.o
-*.obj
 
 # Configuration file
 *.conf
