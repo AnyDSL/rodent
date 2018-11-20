@@ -540,7 +540,7 @@ static void cleanup_obj(obj::File& obj_file, obj::MaterialLib& mtl_lib) {
     }
 }
 
-static bool convert_obj(const std::string& file_name, Target target, size_t max_path_len, size_t spp, bool embree_bvh, std::ostream& os) {
+static bool convert_obj(const std::string& file_name, Target target, size_t dev, size_t max_path_len, size_t spp, bool embree_bvh, std::ostream& os) {
     info("Converting OBJ file '", file_name, "'");
     obj::File obj_file;
     obj::MaterialLib mtl_lib;
@@ -600,15 +600,15 @@ static bool convert_obj(const std::string& file_name, Target target, size_t max_
                           target == Target::AMDGPU_STREAMING ||
                           target == Target::AMDGPU_MEGAKERNEL;
     switch (target) {
-        case Target::AVX2:              os << "    let device   = make_avx2_device(false);\n";      break;
-        case Target::AVX2_EMBREE:       os << "    let device   = make_avx2_device(true);\n";       break;
-        case Target::AVX:               os << "    let device   = make_avx_device();\n";            break;
-        case Target::SSE42:             os << "    let device   = make_sse42_device();\n";          break;
-        case Target::ASIMD:             os << "    let device   = make_asimd_device();\n";          break;
-        case Target::NVVM_STREAMING:    os << "    let device   = make_nvvm_device(0, true);\n";    break;
-        case Target::NVVM_MEGAKERNEL:   os << "    let device   = make_nvvm_device(0, false);\n";   break;
-        case Target::AMDGPU_STREAMING:  os << "    let device   = make_amdgpu_device(0, true);\n";  break;
-        case Target::AMDGPU_MEGAKERNEL: os << "    let device   = make_amdgpu_device(0, false);\n"; break;
+        case Target::AVX2:              os << "    let device   = make_avx2_device(false);\n";                 break;
+        case Target::AVX2_EMBREE:       os << "    let device   = make_avx2_device(true);\n";                  break;
+        case Target::AVX:               os << "    let device   = make_avx_device();\n";                       break;
+        case Target::SSE42:             os << "    let device   = make_sse42_device();\n";                     break;
+        case Target::ASIMD:             os << "    let device   = make_asimd_device();\n";                     break;
+        case Target::NVVM_STREAMING:    os << "    let device   = make_nvvm_device(" << dev <<", true);\n";    break;
+        case Target::NVVM_MEGAKERNEL:   os << "    let device   = make_nvvm_device(" << dev <<", false);\n";   break;
+        case Target::AMDGPU_STREAMING:  os << "    let device   = make_amdgpu_device(" << dev <<", true);\n";  break;
+        case Target::AMDGPU_MEGAKERNEL: os << "    let device   = make_amdgpu_device(" << dev <<", false);\n"; break;
         default:
             assert(false);
             break;
@@ -651,7 +651,8 @@ static bool convert_obj(const std::string& file_name, Target target, size_t max_
     // Generate BVHs
     info("Generating BVH for '", file_name, "'");
     std::remove("data/bvh.bin");
-    if (target == Target::NVVM_STREAMING || target == Target::NVVM_MEGAKERNEL) {
+    if (target == Target::NVVM_STREAMING   || target == Target::NVVM_MEGAKERNEL ||
+        target == Target::AMDGPU_STREAMING || target == Target::AMDGPU_MEGAKERNEL) {
         std::vector<typename BvhNTriM<2, 1>::Node> nodes;
         std::vector<typename BvhNTriM<2, 1>::Tri> tris;
         build_bvh<2, 1>(tri_mesh, nodes, tris);
@@ -885,13 +886,14 @@ static void usage() {
     std::cout << "converter [options] file\n"
               << "Available options:\n"
               << "    -h     --help                Shows this message\n"
-              << "    -t     --target              Sets the target device (default: autodetect CPU)\n"
+              << "    -t     --target              Sets the target platform (default: autodetect CPU)\n"
+              << "    -d     --device              Sets the device to use on the selected platform (default: 0)\n"
               << "           --max-path-len        Sets the maximum path length (default: 64)\n"
               << "    -spp   --samples-per-pixel   Sets the number of samples per pixel (default: 4)\n"
 #ifdef ENABLE_EMBREE_BVH
               << "           --embree-bvh          Use Embree to build the BVH (default: disabled)\n"
 #endif
-              << "Available devices:\n"
+              << "Available target:\n"
               << "    sse42, avx, avx2, avx2-embree, asimd,\n"
               << "    nvvm = nvvm-streaming, nvvm-megakernel,\n"
               << "    amdgpu = amdgpu-streaming, amdgpu-megakernel\n"
@@ -913,6 +915,7 @@ int main(int argc, char** argv) {
     }
 
     std::string obj_file;
+    size_t dev = 0;
     size_t spp = 4;
     size_t max_path_len = 64;
     auto target = Target(0);
@@ -946,6 +949,9 @@ int main(int argc, char** argv) {
                     std::cerr << "Unknown target '" << argv[i] << "'. Aborting." << std::endl;
                     return 1;
                 }
+            } else if (!strcmp(argv[i], "-d") || !strcmp(argv[i], "--device")) {
+                if (!check_option(i++, argc, argv)) return 1;
+                dev = strtoul(argv[i], NULL, 10);
             } else if (!strcmp(argv[i], "-spp") || !strcmp(argv[i], "--samples-per-pixel")) {
                 if (!check_option(i++, argc, argv)) return 1;
                 spp = strtol(argv[i], NULL, 10);
@@ -969,6 +975,11 @@ int main(int argc, char** argv) {
         }
     }
 
+    if (obj_file == "") {
+        std::cerr << "Please specify an OBJ file to convert. Aborting." << std::endl;
+        return 1;
+    }
+
     if (target == Target(0)) {
         target = cpuid();
         if (target == Target(0)) {
@@ -978,7 +989,7 @@ int main(int argc, char** argv) {
     }
 
     std::ofstream of("main.impala");
-    if (!convert_obj(obj_file, target, max_path_len, spp, embree_bvh, of))
+    if (!convert_obj(obj_file, target, dev, max_path_len, spp, embree_bvh, of))
         return 1;
     return 0;
 }

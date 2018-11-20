@@ -1,8 +1,12 @@
 #include <memory>
 #include <sstream>
 #include <algorithm>
+#include <cstring>
+#include <chrono>
 
+#ifndef DISABLE_GUI
 #include <SDL2/SDL.h>
+#endif
 
 #include "interface.h"
 #include "float3.h"
@@ -48,6 +52,7 @@ float* get_pixels();
 void clear_pixels();
 void cleanup_interface();
 
+#ifndef DISABLE_GUI
 static bool handle_events(uint32_t& iter, Camera& cam) {
     static bool camera_on = false;
     static bool arrows[4] = { false, false, false, false };
@@ -124,6 +129,7 @@ static void update_texture(uint32_t* buf, SDL_Texture* texture, size_t width, si
     }
     SDL_UpdateTexture(texture, nullptr, buf, width * sizeof(uint32_t));
 }
+#endif
 
 static inline void check_arg(int argc, char** argv, int arg, int n) {
     if (arg + n >= argc)
@@ -191,6 +197,13 @@ int main(int argc, char** argv) {
     }
     Camera cam(eye, dir, up, fov, (float)width / (float)height);
 
+#ifdef DISABLE_GUI
+    info("Running in console-only mode (compiled with -DDISABLE_GUI).");
+    if (bench_iter == 0) {
+        warn("Benchmark iterations no set. Defaulting to 1.");
+        bench_iter = 1;
+    }
+#else
     if (SDL_Init(SDL_INIT_VIDEO) != 0)
         error("Cannot initialize SDL.");
 
@@ -213,6 +226,7 @@ int main(int argc, char** argv) {
         error("Cannot create texture");
 
     std::unique_ptr<uint32_t> buf(new uint32_t[width * height]);
+#endif
 
     setup_interface(width, height);
 
@@ -228,8 +242,9 @@ int main(int argc, char** argv) {
     uint32_t iter = 0;
     std::vector<double> samples_sec;
     while (!done) {
+#ifndef DISABLE_GUI
         done = handle_events(iter, cam);
-
+#endif
         if (iter == 0)
             clear_pixels();
 
@@ -242,46 +257,52 @@ int main(int argc, char** argv) {
             cam.h
         };
 
-        auto ticks = SDL_GetTicks();
+        auto tick = std::chrono::high_resolution_clock::now();
         render(&settings, iter++);
-        tick_counter += SDL_GetTicks() - ticks;
+        tick_counter += std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - tick).count();
 
         frames++;
         if (frames > 10 || tick_counter >= 2500) {
-            std::ostringstream os;
             auto frames_sec = double(frames) * 1000.0 / double(tick_counter);
             if (bench_iter != 0) {
                 samples_sec.emplace_back(frames_sec * spp * width * height);
                 if (samples_sec.size() == bench_iter)
                     break;
             }
+#ifndef DISABLE_GUI
+            std::ostringstream os;
             os << "Rodent [" << frames_sec << " FPS, "
                << iter * spp << " " << "sample" << (iter * spp > 1 ? "s" : "") << "]";
             SDL_SetWindowTitle(window, os.str().c_str());
+#endif
             frames = 0;
             tick_counter = 0;
         }
 
+#ifndef DISABLE_GUI
         update_texture(buf.get(), texture, width, height, iter);
         SDL_RenderClear(renderer);
         SDL_RenderCopy(renderer, texture, nullptr, nullptr);
         SDL_RenderPresent(renderer);
+#endif
     }
 
     cleanup_interface();
 
+#ifndef DISABLE_GUI
     SDL_DestroyTexture(texture);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
+#endif
 
     if (bench_iter != 0) {
         auto inv = 1.0e-6;
         std::sort(samples_sec.begin(), samples_sec.end());
-        std::cout << "# "
-                  << samples_sec.front() * inv << "/"
-                  << samples_sec[samples_sec.size() / 2] * inv << "/"
-                  << samples_sec.back() * inv << " (min/med/max Msamples/s)" << std::endl;
+        info("# ", samples_sec.front() * inv,
+             "/", samples_sec[samples_sec.size() / 2] * inv,
+             "/", samples_sec.back() * inv,
+             " (min/med/max Msamples/s)");
     }
     return 0;
 }

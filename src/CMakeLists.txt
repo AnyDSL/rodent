@@ -1,15 +1,19 @@
 set(CPUINFO_PATH "/proc/cpuinfo" CACHE STRING "Path to the CPU info file on the system")
-set(TARGET_DEVICE "" CACHE STRING "Target device for the converter tool. Must be one of: sse42, avx, avx2, asimd, nvvm")
+set(TARGET_PLATFORM "" CACHE STRING "Target platform for the converter tool. Leave empty to autodetect CPU. Use converter --help to list possible platforms.")
+set(TARGET_DEVICE "" CACHE STRING "Target device on the selected platform. Leave empty to use the default.")
 set(SCENE_FILE "${PROJECT_SOURCE_DIR}/testing/cornell_box.obj" CACHE FILEPATH "Absolute path to an OBJ scene")
 set(MAX_PATH_LEN "64" CACHE STRING "Maximum path length")
+set(DISABLE_GUI OFF CACHE BOOLEAN "Set to true to disable GUI")
 set(SPP "4" CACHE STRING "Samples per pixel")
 if (SCENE_FILE STREQUAL "")
     message(FATAL_ERROR "Please specify a valid OBJ scene in the SCENE_FILE variable")
 endif()
+set(TARGET_OPTION "")
+if (NOT TARGET_PLATFORM STREQUAL "")
+    set(TARGET_OPTION "--target" "${TARGET_PLATFORM}")
+endif()
 if (NOT TARGET_DEVICE STREQUAL "")
-    set(TARGET_OPTION "--target" "${TARGET_DEVICE}")
-else()
-    set(TARGET_OPTION "")
+    set(TARGET_OPTION ${TARGET_OPTION} "--device" "${TARGET_DEVICE}")
 endif()
 
 set(RODENT_SRCS
@@ -70,7 +74,9 @@ anydsl_runtime_wrap(DISCARD_TMP_OBJS
     FILES ${RODENT_SRCS} dummy_main.impala
     INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/driver/interface)
 
-find_package(SDL2 REQUIRED)
+if (NOT DISABLE_GUI)
+    find_package(SDL2 REQUIRED)
+endif()
 find_package(PNG REQUIRED)
 find_package(JPEG REQUIRED)
 find_package(TBB REQUIRED)
@@ -90,18 +96,22 @@ endif()
 
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/main.impala
     COMMAND converter ${SCENE_FILE} ${TARGET_OPTION} --max-path-len ${MAX_PATH_LEN} --samples-per-pixel ${SPP}
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    COMMAND ${CMAKE_COMMAND} -E rename ${CMAKE_BINARY_DIR}/main.impala ${CMAKE_CURRENT_BINARY_DIR}/main.impala
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     DEPENDS ${SCENE_FILE} converter)
 
 set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/main.impala PROPERTIES GENERATED TRUE)
 
 add_library(driver ${DRIVER_SRCS})
 if (EMBREE_FOUND)
-    target_include_directories(driver PUBLIC ${EMBREE_ROOT_DIR}/include ${EMBREE_ROOT_DIR} ${EMBREE_LIBRARY_DIR})
+    target_include_directories(driver PUBLIC ${EMBREE_ROOT_DIR}/include ${EMBREE_ROOT_DIR} ${EMBREE_LIBRARY_DIR} ${PNG_INCLUDE_DIRS} ${JPEG_INCLUDE_DIRS} ${TBB_INCLUDE_DIRS} ${LZ4_INCLUDE_DIR})
     target_link_libraries(driver ${EMBREE_DEPENDENCIES})
     target_compile_definitions(driver PUBLIC -DENABLE_EMBREE_DEVICE)
 endif()
+if (NOT DISABLE_GUI)
+    target_include_directories(driver PUBLIC ${SDL2_INCLUDE_DIRS})
+    target_link_libraries(driver ${SDL2_LIBRARY})
+endif()
 
 add_executable(rodent ${RODENT_OBJS})
-target_include_directories(rodent PUBLIC ${PNG_INCLUDE_DIRS} ${JPEG_INCLUDE_DIRS} ${SDL2_INCLUDE_DIRS} ${TBB_INCLUDE_DIRS} ${LZ4_INCLUDE_DIR})
-target_link_libraries(rodent driver ${AnyDSL_runtime_LIBRARIES} ${PNG_LIBRARIES} ${JPEG_LIBRARIES} ${SDL2_LIBRARY} ${TBB_LIBRARIES} ${LZ4_LIBRARY})
+target_link_libraries(rodent driver ${AnyDSL_runtime_LIBRARIES} ${PNG_LIBRARIES} ${JPEG_LIBRARIES} ${TBB_LIBRARIES} ${LZ4_LIBRARY})
