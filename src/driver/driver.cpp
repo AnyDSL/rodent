@@ -271,7 +271,7 @@ int main(int argc, char** argv) {
 
     auto spp = get_spp();
     bool done = false;
-    uint64_t tick_counter = 0;
+    uint64_t timing = 0;
     uint32_t frames = 0;
     uint32_t iter = 0;
     std::vector<double> samples_sec;
@@ -291,18 +291,20 @@ int main(int argc, char** argv) {
             cam.h
         };
 
-        auto tick = std::chrono::high_resolution_clock::now();
+        auto ticks = std::chrono::high_resolution_clock::now();
         render(&settings, iter++);
-        tick_counter += std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - tick).count();
+        auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - ticks).count();
+
+        if (bench_iter != 0) {
+            samples_sec.emplace_back(1000.0 * double(spp * width * height) / double(elapsed_ms));
+            if (samples_sec.size() == bench_iter)
+                break;
+        }
 
         frames++;
-        if (frames > 10 || tick_counter >= 2500) {
-            auto frames_sec = double(frames) * 1000.0 / double(tick_counter);
-            if (bench_iter != 0) {
-                samples_sec.emplace_back(frames_sec * spp * width * height);
-                if (samples_sec.size() == bench_iter)
-                    break;
-            }
+        timing += elapsed_ms;
+        if (frames > 10 || timing >= 2500) {
+            auto frames_sec = double(frames) * 1000.0 / double(timing);
 #ifndef DISABLE_GUI
             std::ostringstream os;
             os << "Rodent [" << frames_sec << " FPS, "
@@ -310,7 +312,7 @@ int main(int argc, char** argv) {
             SDL_SetWindowTitle(window, os.str().c_str());
 #endif
             frames = 0;
-            tick_counter = 0;
+            timing = 0;
         }
 
 #ifndef DISABLE_GUI
