@@ -414,7 +414,7 @@ fn @gpu_mega_kernel_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics,
                 let y = tile_y + in_tile_y;
                 let (init_ray, init_state) = @@(path_tracer.on_emit)(sample_id, x, y, film_width, film_height);
                 final_color = make_color(0.0f, 0.0f, 0.0f);
-                pixel = 3 * (y * film_width + x);
+                pixel = y * film_width + x;
                 ray   = init_ray;
                 state = init_state;
             }
