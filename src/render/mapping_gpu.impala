@@ -30,15 +30,17 @@ fn @gpu_traverse_primary(primary: PrimaryStream, acc: Accelerator, intrinsics: I
 }
 
 fn @gpu_accumulate(atomics: Atomics, film_pixels: &mut [f32], pixel: i32, color: Color, spp: i32) -> () {
-    if spp == 1 {
+    let ptr = &film_pixels(pixel * 3) as &mut [f32];
+    if ?spp && spp == 1 {
         // If there is only one sample in flight, there is no need for atomics
-        film_pixels(pixel * 3 + 0) += color.r;
-        film_pixels(pixel * 3 + 1) += color.g;
-        film_pixels(pixel * 3 + 2) += color.b;
+        ptr(0) += color.r;
+        ptr(1) += color.g;
+        ptr(2) += color.b;
     } else {
-        atomics.add_global_f32(&mut film_pixels(pixel * 3 + 0), color.r * (1.0f / (spp as f32)));
-        atomics.add_global_f32(&mut film_pixels(pixel * 3 + 1), color.g * (1.0f / (spp as f32)));
-        atomics.add_global_f32(&mut film_pixels(pixel * 3 + 2), color.b * (1.0f / (spp as f32)));
+        let inv = 1.0f / (spp as f32);
+        atomics.add_global_f32(&mut ptr(0), color.r * inv);
+        atomics.add_global_f32(&mut ptr(1), color.g * inv);
+        atomics.add_global_f32(&mut ptr(2), color.b * inv);
     }
 }
 
@@ -395,13 +397,14 @@ fn @gpu_mega_kernel_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics,
         let mut ray;
         let mut state;
         let mut final_color;
-        let mut done = true;
         let mut pixel = -1;
 
+        let pixel_mask = 0x7FFFFFFF;
+
         while true {
-            if done {
-                if pixel >= 0 {
-                    gpu_accumulate(atomics, film_pixels, pixel, final_color, spp);
+            if pixel < 0 {
+                if pixel != -1 {
+                    gpu_accumulate(atomics, film_pixels, pixel & pixel_mask, final_color, spp);
                 }
 
                 let id = atomics.add_shared_i32(counter, 1);
@@ -418,7 +421,7 @@ fn @gpu_mega_kernel_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics,
                 ray   = init_ray;
                 state = init_state;
             }
-            done = true;
+            pixel |= !pixel_mask;
 
             let hit = gpu_traverse_single_helper(intrinsics, min_max, ray, scene.bvh, false /*any_hit*/, 1 /*root*/);
             if hit.prim_id == -1 {
@@ -454,7 +457,7 @@ fn @gpu_mega_kernel_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics,
                         @@(path_tracer.on_bounce)(ray, hit, &mut state, surf, mat, @ |new_ray, new_state| -> ! {
                             ray   = new_ray;
                             state = new_state;
-                            done  = false;
+                            pixel &= pixel_mask;
                             break()
                         });
                     }
