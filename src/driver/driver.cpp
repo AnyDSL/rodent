@@ -175,7 +175,7 @@ static inline void usage() {
               << "   --dir    x y z      Sets the direction vector of the camera\n"
               << "   --up     x y z      Sets the up vector of the camera\n"
               << "   --fov    degrees    Sets the horizontal field of view (in degrees)\n"
-              << "   --bench             Enables benchmarking mode\n"
+              << "   --bench  iterations Enables benchmarking mode and sets the number of iterations\n"
               << "   -o       image.png  Writes the output image to a file" << std::endl;
 }
 
