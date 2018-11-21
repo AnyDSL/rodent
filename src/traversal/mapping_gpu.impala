@@ -85,7 +85,7 @@ fn @make_nvvm_min_max() -> MinMax {
 }
 
 fn @make_amdgpu_min_max() -> MinMax {
-    make_min_max(ocml_fminf, ocml_fmaxf, true)
+    make_min_max(ocml_fminf, ocml_fmaxf, false)
 }
 
 // Traversal kernel  ---------------------------------------------------------------
