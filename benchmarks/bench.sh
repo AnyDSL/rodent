@@ -20,12 +20,12 @@ STAIRCASE_SCENE=$SCENES_DIR/wooden_staircase/wooden_staircase.obj
 # The compiler may need a large stack space
 ulimit -s 65536
 
-mkdir -p living_room && cd living_room && cmake ../../.. -DEMBREE_ROOT_DIR=${EMBREE_ROOT_DIR} -DAnyDSL_runtime_DIR=${ANYDSL_RUNTIME_DIR} -DCMAKE_BUILD_TYPE=Release -DMAX_PATH_LEN=20 -DSPP=4 -DTARGET_DEVICE=$1 -DSCENE_FILE=${LIVING_ROOM_SCENE} && cmake --build . --target rodent &
-mkdir -p bathroom && cd bathroom && cmake ../../.. -DEMBREE_ROOT_DIR=${EMBREE_ROOT_DIR} -DAnyDSL_runtime_DIR=${ANYDSL_RUNTIME_DIR} -DCMAKE_BUILD_TYPE=Release -DMAX_PATH_LEN=20 -DSPP=4 -DTARGET_DEVICE=$1 -DSCENE_FILE=${BATHROOM_SCENE} && cmake --build . --target rodent &
-mkdir -p bedroom && cd bedroom && cmake ../../.. -DEMBREE_ROOT_DIR=${EMBREE_ROOT_DIR} -DAnyDSL_runtime_DIR=${ANYDSL_RUNTIME_DIR} -DCMAKE_BUILD_TYPE=Release -DMAX_PATH_LEN=20 -DSPP=4 -DTARGET_DEVICE=$1 -DSCENE_FILE=${BEDROOM_SCENE} && cmake --build . --target rodent &
-mkdir -p dining_room && cd dining_room && cmake ../../.. -DEMBREE_ROOT_DIR=${EMBREE_ROOT_DIR} -DAnyDSL_runtime_DIR=${ANYDSL_RUNTIME_DIR} -DCMAKE_BUILD_TYPE=Release -DMAX_PATH_LEN=20 -DSPP=4 -DTARGET_DEVICE=$1 -DSCENE_FILE=${DINING_ROOM_SCENE} && cmake --build . --target rodent &
-mkdir -p kitchen && cd kitchen && cmake ../../.. -DEMBREE_ROOT_DIR=${EMBREE_ROOT_DIR} -DAnyDSL_runtime_DIR=${ANYDSL_RUNTIME_DIR} -DCMAKE_BUILD_TYPE=Release -DMAX_PATH_LEN=20 -DSPP=4 -DTARGET_DEVICE=$1 -DSCENE_FILE=${KITCHEN_SCENE} && cmake --build . --target rodent &
-mkdir -p staircase && cd staircase && cmake ../../.. -DEMBREE_ROOT_DIR=${EMBREE_ROOT_DIR} -DAnyDSL_runtime_DIR=${ANYDSL_RUNTIME_DIR} -DCMAKE_BUILD_TYPE=Release -DMAX_PATH_LEN=20 -DSPP=4 -DTARGET_DEVICE=$1 -DSCENE_FILE=${STAIRCASE_SCENE} && cmake --build . --target rodent &
+mkdir -p living_room && cd living_room && cmake ../../.. -DEMBREE_ROOT_DIR=${EMBREE_ROOT_DIR} -DAnyDSL_runtime_DIR=${ANYDSL_RUNTIME_DIR} -DCMAKE_BUILD_TYPE=Release -DMAX_PATH_LEN=20 -DSPP=4 -DTARGET_DEVICE=$1 -DSCENE_FILE=${LIVING_ROOM_SCENE} -DDISABLE_GUI=ON && cmake --build . --target rodent &
+mkdir -p bathroom && cd bathroom && cmake ../../.. -DEMBREE_ROOT_DIR=${EMBREE_ROOT_DIR} -DAnyDSL_runtime_DIR=${ANYDSL_RUNTIME_DIR} -DCMAKE_BUILD_TYPE=Release -DMAX_PATH_LEN=20 -DSPP=4 -DTARGET_DEVICE=$1 -DSCENE_FILE=${BATHROOM_SCENE} -DDISABLE_GUI=ON && cmake --build . --target rodent &
+mkdir -p bedroom && cd bedroom && cmake ../../.. -DEMBREE_ROOT_DIR=${EMBREE_ROOT_DIR} -DAnyDSL_runtime_DIR=${ANYDSL_RUNTIME_DIR} -DCMAKE_BUILD_TYPE=Release -DMAX_PATH_LEN=20 -DSPP=4 -DTARGET_DEVICE=$1 -DSCENE_FILE=${BEDROOM_SCENE} -DDISABLE_GUI=ON && cmake --build . --target rodent &
+mkdir -p dining_room && cd dining_room && cmake ../../.. -DEMBREE_ROOT_DIR=${EMBREE_ROOT_DIR} -DAnyDSL_runtime_DIR=${ANYDSL_RUNTIME_DIR} -DCMAKE_BUILD_TYPE=Release -DMAX_PATH_LEN=20 -DSPP=4 -DTARGET_DEVICE=$1 -DSCENE_FILE=${DINING_ROOM_SCENE} -DDISABLE_GUI=ON && cmake --build . --target rodent &
+mkdir -p kitchen && cd kitchen && cmake ../../.. -DEMBREE_ROOT_DIR=${EMBREE_ROOT_DIR} -DAnyDSL_runtime_DIR=${ANYDSL_RUNTIME_DIR} -DCMAKE_BUILD_TYPE=Release -DMAX_PATH_LEN=20 -DSPP=4 -DTARGET_DEVICE=$1 -DSCENE_FILE=${KITCHEN_SCENE} -DDISABLE_GUI=ON && cmake --build . --target rodent &
+mkdir -p staircase && cd staircase && cmake ../../.. -DEMBREE_ROOT_DIR=${EMBREE_ROOT_DIR} -DAnyDSL_runtime_DIR=${ANYDSL_RUNTIME_DIR} -DCMAKE_BUILD_TYPE=Release -DMAX_PATH_LEN=20 -DSPP=4 -DTARGET_DEVICE=$1 -DSCENE_FILE=${STAIRCASE_SCENE} -DDISABLE_GUI=ON && cmake --build . --target rodent &
 # Wait for all tasks to finish before benchmarking
 wait
 
