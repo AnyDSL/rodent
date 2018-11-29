@@ -91,7 +91,7 @@ fn @prodsign(x: f32, y: f32) -> f32 {
 
 fn @safe_rcp(x: f32) -> f32 {
     let min_rcp = 1e-8f;
-    if select(x > 0.0f, x, -x) < min_rcp { prodsign(min_rcp, x) } else { 1.0f / x }
+    if select(x > 0.0f, x, -x) < min_rcp { prodsign(flt_max, x) } else { 1.0f / x }
 }
 
 fn @round_up(n: i32, d: i32) -> i32 {

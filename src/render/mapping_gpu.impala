@@ -377,8 +377,8 @@ fn @gpu_mega_kernel_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics,
     let expected_tile_h = 1 << (log2_tile_size / 2);
 
     let (bx, by, bz) = (16, 8, 1);
-    let gx = bx * (film_width  + expected_tile_w - 1) / expected_tile_w;
-    let gy = by * (film_height + expected_tile_h - 1) / expected_tile_h;
+    let gx = bx * ((film_width  + expected_tile_w - 1) / expected_tile_w);
+    let gy = by * ((film_height + expected_tile_h - 1) / expected_tile_h);
     let gz = 1;
     with work_item in acc.exec((gx, gy, gz), (bx, by, bz)) {
         let tile_x = work_item.bidx() * expected_tile_w;
