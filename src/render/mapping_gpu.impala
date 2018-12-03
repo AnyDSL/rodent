@@ -372,19 +372,19 @@ fn @gpu_mega_kernel_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics,
     let (film_pixels, film_width, film_height) = gpu_get_film_data(dev_id);
 
     // Make tiles of 2^10 = 1024 total samples
-    let log2_tile_size = 10 - ilog2(spp);
-    let expected_tile_w = 1 << (log2_tile_size / 2);
-    let expected_tile_h = 1 << (log2_tile_size / 2);
+    let mut log2_tile_size = (10 - ilog2(spp)) / 2;
+    if log2_tile_size < 0 { log2_tile_size = 0 }
+    let tile_size = 1 << log2_tile_size;
 
-    let (bx, by, bz) = (16, 8, 1);
-    let gx = bx * ((film_width  + expected_tile_w - 1) / expected_tile_w);
-    let gy = by * ((film_height + expected_tile_h - 1) / expected_tile_h);
+    let (bx, by, bz) = (8, 8, 1);
+    let gx = bx * ((film_width  + tile_size - 1) >> log2_tile_size);
+    let gy = by * ((film_height + tile_size - 1) >> log2_tile_size);
     let gz = 1;
     with work_item in acc.exec((gx, gy, gz), (bx, by, bz)) {
-        let tile_x = work_item.bidx() * expected_tile_w;
-        let tile_y = work_item.bidy() * expected_tile_h;
-        let tile_w = intrinsics.min(film_width  - tile_x, expected_tile_w);
-        let tile_h = intrinsics.min(film_height - tile_y, expected_tile_h);
+        let tile_x = work_item.bidx() * tile_size;
+        let tile_y = work_item.bidy() * tile_size;
+        let tile_w = intrinsics.min(film_width  - tile_x, tile_size);
+        let tile_h = intrinsics.min(film_height - tile_y, tile_size);
         let tile_div = make_fast_div(tile_w as u32);
         let ray_count = tile_w * tile_h * spp;
         let counter = &mut reserve_shared[i32](1)(0);

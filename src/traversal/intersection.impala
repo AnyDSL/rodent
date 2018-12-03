@@ -125,17 +125,6 @@ fn @make_bbox(min: Vec3, max: Vec3) -> BBox {
     }
 }
 
-fn @clip_ray(ray: Ray, tmin: f32, tmax: f32) -> Ray {
-    Ray {
-        org: ray.org,
-        dir: ray.dir,
-        inv_dir: ray.inv_dir,
-        inv_org: ray.inv_org,
-        tmin: tmin,
-        tmax: tmax
-    }
-}
-
 fn @ray_octant(ray: Ray) -> RayOctant {
     select(ray.dir.x > 0.0f, 1, 0) |
     select(ray.dir.y > 0.0f, 2, 0) |
