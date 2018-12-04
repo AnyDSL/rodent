@@ -17,6 +17,11 @@ DINING_ROOM_SCENE=$SCENES_DIR/dining_room/dining_room.obj
 KITCHEN_SCENE=$SCENES_DIR/kitchen/kitchen.obj
 STAIRCASE_SCENE=$SCENES_DIR/wooden_staircase/wooden_staircase.obj
 
+# Enable more NVPTX opts
+if [ "$2" == "nvvm-megakernel" -o "$2" == "nvvm-streaming" -o "$2" == "nvvm" ]; then
+    export ANYDSL_LLVM_ARGS="-nvptx-f32ftz -nvptx-prec-divf32=0 -nvptx-prec-sqrtf32=0 -nvptx-sched4reg"
+fi
+
 # The compiler may need a large stack space
 ulimit -s 65536
 
@@ -29,26 +34,28 @@ mkdir -p staircase && cd staircase && cmake ../../.. -DEMBREE_ROOT_DIR=${EMBREE_
 # Wait for all tasks to finish before benchmarking
 wait
 
+echo "Benchmarking device $1 on platform $2"
+
 cd living_room
-bin/rodent --bench 10 --eye -1.8 1 -5 --dir -0.1 0 1 --up 0 1 0 --fov 60 --width 1920 --height 1088 2> /dev/null | sed -n 's/#/Living Room/p'
+bin/rodent --bench 10 --eye -1.8 1 -5 --dir -0.1 0 1 --up 0 1 0 --fov 60 --width 1920 --height 1088 -o render.png 2> /dev/null | sed -n 's/#/Living Room/p'
 cd ..
 
 cd bathroom
-bin/rodent --bench 10 --eye -2.26 15.62 35.23 --dir -22.18 -5.32 -97.36 --up 0 1 0 --fov 60 --width 1920 --height 1088 2> /dev/null | sed -n 's/#/Bathroom/p'
+bin/rodent --bench 10 --eye -2.26 15.62 35.23 --dir -22.18 -5.32 -97.36 --up 0 1 0 --fov 60 --width 1920 --height 1088 -o render.png 2> /dev/null | sed -n 's/#/Bathroom/p'
 cd ..
 
 cd bedroom
-bin/rodent --bench 10 --eye 3.5 1 3.5 --dir -1 0 -1 --up 0 1 0 --fov 60 --width 1920 --height 1088 2> /dev/null | sed -n 's/#/Bedroom/p'
+bin/rodent --bench 10 --eye 3.5 1 3.5 --dir -1 0 -1 --up 0 1 0 --fov 60 --width 1920 --height 1088 -o render.png 2> /dev/null | sed -n 's/#/Bedroom/p'
 cd ..
 
 cd dining_room
-bin/rodent --bench 10 --eye -4 1.3 0.0 --dir 1 -0.1 0 --up 0 1 0 --fov 48 --width 1920 --height 1088 2> /dev/null | sed -n 's/#/Dining Room/p'
+bin/rodent --bench 10 --eye -4 1.3 0.0 --dir 1 -0.1 0 --up 0 1 0 --fov 48 --width 1920 --height 1088 -o render.png 2> /dev/null | sed -n 's/#/Dining Room/p'
 cd ..
 
 cd kitchen
-bin/rodent --bench 10 --eye 0.5 1.6 3 --dir -0.4 -0.05 -1 --up 0 1 0 --fov 60 --width 1920 --height 1088 2> /dev/null | sed -n 's/#/Kitchen/p'
+bin/rodent --bench 10 --eye 0.5 1.6 3 --dir -0.4 -0.05 -1 --up 0 1 0 --fov 60 --width 1920 --height 1088 -o render.png 2> /dev/null | sed -n 's/#/Kitchen/p'
 cd ..
 
 cd staircase
-bin/rodent --bench 10 --eye 0 1.6 4.5 --dir 0 0 -1 --up 0 1 0 --fov 38 --height 1280 --width 720 2> /dev/null | sed -n 's/#/Staircase/p'
+bin/rodent --bench 10 --eye 0 1.6 4.5 --dir 0 0 -1 --up 0 1 0 --fov 38 --height 1280 --width 720 -o render.png 2> /dev/null | sed -n 's/#/Staircase/p'
 cd ..
