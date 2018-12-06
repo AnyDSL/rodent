@@ -554,7 +554,7 @@ static size_t cleanup_obj(obj::File& obj_file, obj::MaterialLib& mtl_lib) {
     return num_complex;
 }
 
-static bool convert_obj(const std::string& file_name, Target target, size_t dev, size_t max_path_len, size_t spp, bool embree_bvh, std::ostream& os) {
+static bool convert_obj(const std::string& file_name, Target target, size_t dev, size_t max_path_len, size_t spp, bool embree_bvh, bool fusion, std::ostream& os) {
     info("Converting OBJ file '", file_name, "'");
     obj::File obj_file;
     obj::MaterialLib mtl_lib;
@@ -615,15 +615,15 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
                           target == Target::AMDGPU_STREAMING ||
                           target == Target::AMDGPU_MEGAKERNEL;
     switch (target) {
-        case Target::AVX2:              os << "    let device   = make_avx2_device(false);\n";                 num_complex = num_mats; break;
-        case Target::AVX2_EMBREE:       os << "    let device   = make_avx2_device(true);\n";                  num_complex = num_mats; break;
-        case Target::AVX:               os << "    let device   = make_avx_device();\n";                       num_complex = num_mats; break;
-        case Target::SSE42:             os << "    let device   = make_sse42_device();\n";                     num_complex = num_mats; break;
-        case Target::ASIMD:             os << "    let device   = make_asimd_device();\n";                     num_complex = num_mats; break;
-        case Target::NVVM_STREAMING:    os << "    let device   = make_nvvm_device(" << dev <<", true);\n";    num_complex = num_mats; break;
-        case Target::NVVM_MEGAKERNEL:   os << "    let device   = make_nvvm_device(" << dev <<", false);\n";   break; // Apply shader fusion for simple shaders
-        case Target::AMDGPU_STREAMING:  os << "    let device   = make_amdgpu_device(" << dev <<", true);\n";  num_complex = num_mats; break;
-        case Target::AMDGPU_MEGAKERNEL: os << "    let device   = make_amdgpu_device(" << dev <<", false);\n"; break; // Idem.
+        case Target::AVX2:              os << "    let device   = make_avx2_device(false);\n";                 break;
+        case Target::AVX2_EMBREE:       os << "    let device   = make_avx2_device(true);\n";                  break;
+        case Target::AVX:               os << "    let device   = make_avx_device();\n";                       break;
+        case Target::SSE42:             os << "    let device   = make_sse42_device();\n";                     break;
+        case Target::ASIMD:             os << "    let device   = make_asimd_device();\n";                     break;
+        case Target::NVVM_STREAMING:    os << "    let device   = make_nvvm_device(" << dev <<", true);\n";    break;
+        case Target::NVVM_MEGAKERNEL:   os << "    let device   = make_nvvm_device(" << dev <<", false);\n";   break;
+        case Target::AMDGPU_STREAMING:  os << "    let device   = make_amdgpu_device(" << dev <<", true);\n";  break;
+        case Target::AMDGPU_MEGAKERNEL: os << "    let device   = make_amdgpu_device(" << dev <<", false);\n"; break;
         default:
             assert(false);
             break;
@@ -662,6 +662,7 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
        << "    let bvh = device.load_bvh(\"data/bvh.bin\");\n";
 
     // Simplify materials if necessary
+    num_complex = fusion ? num_complex : num_mats;
     bool has_simple = num_complex < num_mats;
     if (has_simple) {
         info("Simple materials will be fused");
@@ -952,6 +953,7 @@ static void usage() {
               << "    -d     --device              Sets the device to use on the selected platform (default: 0)\n"
               << "           --max-path-len        Sets the maximum path length (default: 64)\n"
               << "    -spp   --samples-per-pixel   Sets the number of samples per pixel (default: 4)\n"
+              << "           --fusion              Enables megakernel shader fusion (default: disabled)\n"
 #ifdef ENABLE_EMBREE_BVH
               << "           --embree-bvh          Use Embree to build the BVH (default: disabled)\n"
 #endif
@@ -982,6 +984,7 @@ int main(int argc, char** argv) {
     size_t max_path_len = 64;
     auto target = Target(0);
     bool embree_bvh = false;
+    bool fusion = false;
     for (int i = 1; i < argc; ++i) {
         if (argv[i][0] == '-') {
             if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) {
@@ -1020,6 +1023,8 @@ int main(int argc, char** argv) {
             } else if (!strcmp(argv[i], "--max-path-len")) {
                 if (!check_option(i++, argc, argv)) return 1;
                 max_path_len = strtol(argv[i], NULL, 10);
+            } else if (!strcmp(argv[i], "--fusion")) {
+                fusion = true;
 #ifdef ENABLE_EMBREE_BVH
             } else if (!strcmp(argv[i], "--embree-bvh")) {
                 embree_bvh = true;
@@ -1037,6 +1042,11 @@ int main(int argc, char** argv) {
         }
     }
 
+    if (fusion && target != Target::NVVM_MEGAKERNEL && target != Target::AMDGPU_MEGAKERNEL) {
+        std::cerr << "Fusion is only available for megakernel targets. Aborting." << std::endl;
+        return 1;
+    }
+
     if (obj_file == "") {
         std::cerr << "Please specify an OBJ file to convert. Aborting." << std::endl;
         return 1;
@@ -1051,7 +1061,7 @@ int main(int argc, char** argv) {
     }
 
     std::ofstream of("main.impala");
-    if (!convert_obj(obj_file, target, dev, max_path_len, spp, embree_bvh, of))
+    if (!convert_obj(obj_file, target, dev, max_path_len, spp, embree_bvh, fusion, of))
         return 1;
     return 0;
 }

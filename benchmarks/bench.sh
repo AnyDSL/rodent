@@ -9,6 +9,9 @@ cd renderers
 # Number of benchmarking iterations
 ITER=20
 
+# Set to OFF to disable fusion for megakernel mappings (will be slower)
+FUSION=ON
+
 # Paths to Embree and the AnyDSL runtime
 ANYDSL_RUNTIME_DIR=$ANYDSL_DIR/runtime/build/share/anydsl/cmake
 
@@ -20,7 +23,7 @@ DINING_ROOM_SCENE=$SCENES_DIR/dining_room/dining_room.obj
 KITCHEN_SCENE=$SCENES_DIR/kitchen/kitchen.obj
 STAIRCASE_SCENE=$SCENES_DIR/wooden_staircase/wooden_staircase.obj
 
-# Enable more NVPTX opts
+# Enable more NVPTX opts (currently disabled because these options are detrimental to perf.)
 #if [ "$2" == "nvvm-megakernel" -o "$2" == "nvvm-streaming" -o "$2" == "nvvm" ]; then
 #    export ANYDSL_LLVM_ARGS="-nvptx-f32ftz -nvptx-prec-divf32=0 -nvptx-prec-sqrtf32=0 -nvptx-sched4reg"
 #fi
@@ -32,12 +35,12 @@ echo "Benchmarking device $1 on platform $2"
 
 echo "Building..."
 
-mkdir -p living_room && cd living_room && cmake ../../.. -DEMBREE_ROOT_DIR=${EMBREE_ROOT_DIR} -DAnyDSL_runtime_DIR=${ANYDSL_RUNTIME_DIR} -DCMAKE_BUILD_TYPE=Release -DMAX_PATH_LEN=20 -DSPP=4 -DTARGET_DEVICE=$1 -DTARGET_PLATFORM=$2 -DSCENE_FILE=${LIVING_ROOM_SCENE} -DDISABLE_GUI=ON && cmake --build . --target rodent &
-mkdir -p bathroom && cd bathroom && cmake ../../.. -DEMBREE_ROOT_DIR=${EMBREE_ROOT_DIR} -DAnyDSL_runtime_DIR=${ANYDSL_RUNTIME_DIR} -DCMAKE_BUILD_TYPE=Release -DMAX_PATH_LEN=20 -DSPP=4 -DTARGET_DEVICE=$1 -DTARGET_PLATFORM=$2 -DSCENE_FILE=${BATHROOM_SCENE} -DDISABLE_GUI=ON && cmake --build . --target rodent &
-mkdir -p bedroom && cd bedroom && cmake ../../.. -DEMBREE_ROOT_DIR=${EMBREE_ROOT_DIR} -DAnyDSL_runtime_DIR=${ANYDSL_RUNTIME_DIR} -DCMAKE_BUILD_TYPE=Release -DMAX_PATH_LEN=20 -DSPP=4 -DTARGET_DEVICE=$1 -DTARGET_PLATFORM=$2 -DSCENE_FILE=${BEDROOM_SCENE} -DDISABLE_GUI=ON && cmake --build . --target rodent &
-mkdir -p dining_room && cd dining_room && cmake ../../.. -DEMBREE_ROOT_DIR=${EMBREE_ROOT_DIR} -DAnyDSL_runtime_DIR=${ANYDSL_RUNTIME_DIR} -DCMAKE_BUILD_TYPE=Release -DMAX_PATH_LEN=20 -DSPP=4 -DTARGET_DEVICE=$1 -DTARGET_PLATFORM=$2 -DSCENE_FILE=${DINING_ROOM_SCENE} -DDISABLE_GUI=ON && cmake --build . --target rodent &
-mkdir -p kitchen && cd kitchen && cmake ../../.. -DEMBREE_ROOT_DIR=${EMBREE_ROOT_DIR} -DAnyDSL_runtime_DIR=${ANYDSL_RUNTIME_DIR} -DCMAKE_BUILD_TYPE=Release -DMAX_PATH_LEN=20 -DSPP=4 -DTARGET_DEVICE=$1 -DTARGET_PLATFORM=$2 -DSCENE_FILE=${KITCHEN_SCENE} -DDISABLE_GUI=ON && cmake --build . --target rodent &
-mkdir -p staircase && cd staircase && cmake ../../.. -DEMBREE_ROOT_DIR=${EMBREE_ROOT_DIR} -DAnyDSL_runtime_DIR=${ANYDSL_RUNTIME_DIR} -DCMAKE_BUILD_TYPE=Release -DMAX_PATH_LEN=20 -DSPP=4 -DTARGET_DEVICE=$1 -DTARGET_PLATFORM=$2 -DSCENE_FILE=${STAIRCASE_SCENE} -DDISABLE_GUI=ON && cmake --build . --target rodent &
+mkdir -p living_room && cd living_room && cmake ../../.. -DEMBREE_ROOT_DIR=${EMBREE_ROOT_DIR} -DAnyDSL_runtime_DIR=${ANYDSL_RUNTIME_DIR} -DCMAKE_BUILD_TYPE=Release -DMAX_PATH_LEN=20 -DSPP=4 -DTARGET_DEVICE=$1 -DTARGET_PLATFORM=$2 -DSCENE_FILE=${LIVING_ROOM_SCENE} -DDISABLE_GUI=ON -DMEGAKERNEL_FUSION=$FUSION && cmake --build . --target rodent &
+mkdir -p bathroom && cd bathroom && cmake ../../.. -DEMBREE_ROOT_DIR=${EMBREE_ROOT_DIR} -DAnyDSL_runtime_DIR=${ANYDSL_RUNTIME_DIR} -DCMAKE_BUILD_TYPE=Release -DMAX_PATH_LEN=20 -DSPP=4 -DTARGET_DEVICE=$1 -DTARGET_PLATFORM=$2 -DSCENE_FILE=${BATHROOM_SCENE} -DDISABLE_GUI=ON -DMEGAKERNEL_FUSION=$FUSION && cmake --build . --target rodent &
+mkdir -p bedroom && cd bedroom && cmake ../../.. -DEMBREE_ROOT_DIR=${EMBREE_ROOT_DIR} -DAnyDSL_runtime_DIR=${ANYDSL_RUNTIME_DIR} -DCMAKE_BUILD_TYPE=Release -DMAX_PATH_LEN=20 -DSPP=4 -DTARGET_DEVICE=$1 -DTARGET_PLATFORM=$2 -DSCENE_FILE=${BEDROOM_SCENE} -DDISABLE_GUI=ON -DMEGAKERNEL_FUSION=$FUSION && cmake --build . --target rodent &
+mkdir -p dining_room && cd dining_room && cmake ../../.. -DEMBREE_ROOT_DIR=${EMBREE_ROOT_DIR} -DAnyDSL_runtime_DIR=${ANYDSL_RUNTIME_DIR} -DCMAKE_BUILD_TYPE=Release -DMAX_PATH_LEN=20 -DSPP=4 -DTARGET_DEVICE=$1 -DTARGET_PLATFORM=$2 -DSCENE_FILE=${DINING_ROOM_SCENE} -DDISABLE_GUI=ON -DMEGAKERNEL_FUSION=$FUSION && cmake --build . --target rodent &
+mkdir -p kitchen && cd kitchen && cmake ../../.. -DEMBREE_ROOT_DIR=${EMBREE_ROOT_DIR} -DAnyDSL_runtime_DIR=${ANYDSL_RUNTIME_DIR} -DCMAKE_BUILD_TYPE=Release -DMAX_PATH_LEN=20 -DSPP=4 -DTARGET_DEVICE=$1 -DTARGET_PLATFORM=$2 -DSCENE_FILE=${KITCHEN_SCENE} -DDISABLE_GUI=ON -DMEGAKERNEL_FUSION=$FUSION && cmake --build . --target rodent &
+mkdir -p staircase && cd staircase && cmake ../../.. -DEMBREE_ROOT_DIR=${EMBREE_ROOT_DIR} -DAnyDSL_runtime_DIR=${ANYDSL_RUNTIME_DIR} -DCMAKE_BUILD_TYPE=Release -DMAX_PATH_LEN=20 -DSPP=4 -DTARGET_DEVICE=$1 -DTARGET_PLATFORM=$2 -DSCENE_FILE=${STAIRCASE_SCENE} -DDISABLE_GUI=ON -DMEGAKERNEL_FUSION=$FUSION && cmake --build . --target rodent &
 # Wait for all tasks to finish before benchmarking
 wait
 

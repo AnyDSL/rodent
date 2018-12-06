@@ -2,18 +2,22 @@ set(CPUINFO_PATH "/proc/cpuinfo" CACHE STRING "Path to the CPU info file on the 
 set(TARGET_PLATFORM "" CACHE STRING "Target platform for the converter tool. Leave empty to autodetect CPU. Use converter --help to list possible platforms.")
 set(TARGET_DEVICE "" CACHE STRING "Target device on the selected platform. Leave empty to use the default.")
 set(SCENE_FILE "${PROJECT_SOURCE_DIR}/testing/cornell_box.obj" CACHE FILEPATH "Absolute path to an OBJ scene")
+set(MEGAKERNEL_FUSION ON CACHE BOOLEAN "Set to true to enable simple shader fusion for megakernel mappings")
 set(MAX_PATH_LEN "64" CACHE STRING "Maximum path length")
 set(DISABLE_GUI OFF CACHE BOOLEAN "Set to true to disable GUI")
 set(SPP "4" CACHE STRING "Samples per pixel")
 if (SCENE_FILE STREQUAL "")
     message(FATAL_ERROR "Please specify a valid OBJ scene in the SCENE_FILE variable")
 endif()
-set(TARGET_OPTION "")
+set(CONVERTER_OPTIONS "")
 if (NOT TARGET_PLATFORM STREQUAL "")
-    set(TARGET_OPTION "--target" "${TARGET_PLATFORM}")
+    set(CONVERTER_OPTIONS "--target" "${TARGET_PLATFORM}")
 endif()
 if (NOT TARGET_DEVICE STREQUAL "")
-    set(TARGET_OPTION ${TARGET_OPTION} "--device" "${TARGET_DEVICE}")
+    set(CONVERTER_OPTIONS ${CONVERTER_OPTIONS} "--device" "${TARGET_DEVICE}")
+    if (MEGAKERNEL_FUSION AND (TARGET_PLATFORM STREQUAL "nvvm-megakernel" OR TARGET_PLATFORM STREQUAL "amdgpu-megakernel"))
+        set(CONVERTER_OPTIONS ${CONVERTER_OPTIONS} "--fusion")
+    endif()
 endif()
 
 set(RODENT_SRCS
@@ -95,7 +99,7 @@ if (EMBREE_FOUND)
 endif()
 
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/main.impala
-    COMMAND converter ${SCENE_FILE} ${TARGET_OPTION} --max-path-len ${MAX_PATH_LEN} --samples-per-pixel ${SPP}
+    COMMAND converter ${SCENE_FILE} ${CONVERTER_OPTIONS} --max-path-len ${MAX_PATH_LEN} --samples-per-pixel ${SPP}
     COMMAND ${CMAKE_COMMAND} -E rename ${CMAKE_BINARY_DIR}/main.impala ${CMAKE_CURRENT_BINARY_DIR}/main.impala
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     DEPENDS ${SCENE_FILE} converter)
