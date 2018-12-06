@@ -455,7 +455,14 @@ static bool operator == (const obj::Material& a, const obj::Material& b) {
            true;
 }
 
-static void cleanup_obj(obj::File& obj_file, obj::MaterialLib& mtl_lib) {
+inline bool is_simple(const obj::Material& mat) {
+    return mat.illum != 5 && mat.illum != 7 &&              // Must be diffuse
+           mat.ke == rgb(0.0f) && mat.map_ke == "" &&       // Must not be emitting
+           mat.map_kd == "" && mat.map_ks == "" &&          // Must not contain any texture
+           (mat.kd != rgb(0.0f) || mat.ks != rgb(0.0f));    // Must not be completely black
+}
+
+static size_t cleanup_obj(obj::File& obj_file, obj::MaterialLib& mtl_lib) {
     // Create a dummy material
     auto& dummy_mat = mtl_lib[""];
     dummy_mat.ka = rgb(0.0f);
@@ -512,11 +519,16 @@ static void cleanup_obj(obj::File& obj_file, obj::MaterialLib& mtl_lib) {
     }
 
     // Remap indices/materials
+    size_t num_complex = obj_file.materials.size();
     if (used_mtls.size() != obj_file.materials.size()) {
         std::vector<std::string> new_materials = obj_file.materials;
         new_materials.erase(std::remove_if(new_materials.begin(), new_materials.end(), [&] (auto& mtl_name) {
             return used_mtls.count(mtl_name) == 0;
         }), new_materials.end());
+        // Put simple materials at the end
+        num_complex = std::partition(new_materials.begin(), new_materials.end(), [&] (auto& mtl_name) {
+            return !is_simple(mtl_lib[mtl_name]);
+        }) - new_materials.begin();
         std::vector<uint32_t> mtl_id_remap;
         for (auto mtl_name : obj_file.materials) {
             auto it = mtl_remap.find(mtl_name);
@@ -537,7 +549,9 @@ static void cleanup_obj(obj::File& obj_file, obj::MaterialLib& mtl_lib) {
         }
         std::swap(obj_file.materials, new_materials);
         info("Removed ", new_materials.size() - obj_file.materials.size(), " unused/duplicate material(s)");
+        info("The scene has ", num_complex, " complex material(s), and ", new_materials.size() - num_complex, " simple material(s)");
     }
+    return num_complex;
 }
 
 static bool convert_obj(const std::string& file_name, Target target, size_t dev, size_t max_path_len, size_t spp, bool embree_bvh, std::ostream& os) {
@@ -557,7 +571,8 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
         }
     }
 
-    cleanup_obj(obj_file, mtl_lib);
+    size_t num_complex = cleanup_obj(obj_file, mtl_lib);
+    size_t num_mats = obj_file.materials.size();
 
     std::unordered_map<std::string, size_t> images;
     bool has_map_ke = false;
@@ -600,15 +615,15 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
                           target == Target::AMDGPU_STREAMING ||
                           target == Target::AMDGPU_MEGAKERNEL;
     switch (target) {
-        case Target::AVX2:              os << "    let device   = make_avx2_device(false);\n";                 break;
-        case Target::AVX2_EMBREE:       os << "    let device   = make_avx2_device(true);\n";                  break;
-        case Target::AVX:               os << "    let device   = make_avx_device();\n";                       break;
-        case Target::SSE42:             os << "    let device   = make_sse42_device();\n";                     break;
-        case Target::ASIMD:             os << "    let device   = make_asimd_device();\n";                     break;
-        case Target::NVVM_STREAMING:    os << "    let device   = make_nvvm_device(" << dev <<", true);\n";    break;
-        case Target::NVVM_MEGAKERNEL:   os << "    let device   = make_nvvm_device(" << dev <<", false);\n";   break;
-        case Target::AMDGPU_STREAMING:  os << "    let device   = make_amdgpu_device(" << dev <<", true);\n";  break;
-        case Target::AMDGPU_MEGAKERNEL: os << "    let device   = make_amdgpu_device(" << dev <<", false);\n"; break;
+        case Target::AVX2:              os << "    let device   = make_avx2_device(false);\n";                 num_complex = num_mats; break;
+        case Target::AVX2_EMBREE:       os << "    let device   = make_avx2_device(true);\n";                  num_complex = num_mats; break;
+        case Target::AVX:               os << "    let device   = make_avx_device();\n";                       num_complex = num_mats; break;
+        case Target::SSE42:             os << "    let device   = make_sse42_device();\n";                     num_complex = num_mats; break;
+        case Target::ASIMD:             os << "    let device   = make_asimd_device();\n";                     num_complex = num_mats; break;
+        case Target::NVVM_STREAMING:    os << "    let device   = make_nvvm_device(" << dev <<", true);\n";    num_complex = num_mats; break;
+        case Target::NVVM_MEGAKERNEL:   os << "    let device   = make_nvvm_device(" << dev <<", false);\n";   break; // Apply shader fusion for simple shaders
+        case Target::AMDGPU_STREAMING:  os << "    let device   = make_amdgpu_device(" << dev <<", true);\n";  num_complex = num_mats; break;
+        case Target::AMDGPU_MEGAKERNEL: os << "    let device   = make_amdgpu_device(" << dev <<", false);\n"; break; // Idem.
         default:
             assert(false);
             break;
@@ -645,6 +660,34 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
        << "        num_tris:     " << tri_mesh.indices.size() / 4 << "\n"
        << "    };\n"
        << "    let bvh = device.load_bvh(\"data/bvh.bin\");\n";
+
+    // Simplify materials if necessary
+    bool has_simple = num_complex < num_mats;
+    if (has_simple) {
+        info("Simple materials will be fused");
+        size_t num_tris = tri_mesh.indices.size() / 4;
+        std::vector<rgb> simple_kd(num_tris);
+        std::vector<rgb> simple_ks(num_tris);
+        std::vector<float> simple_ns(num_tris);
+        for (size_t i = 0, j = 0; i < tri_mesh.indices.size(); i += 4, j++) {
+            auto& geom_id = tri_mesh.indices[i + 3];
+            if (geom_id >= num_complex) {
+                auto& mat = mtl_lib[obj_file.materials[geom_id]];
+                assert(is_simple(mat));
+                simple_kd[j] = mat.kd;
+                simple_ks[j] = mat.ks;
+                simple_ns[j] = mat.ns;
+                geom_id = num_complex;
+            } else {
+                simple_kd[j] = rgb(0.1f, 0.05f, 0.01f);
+                simple_ks[j] = rgb(0.1f, 0.05f, 0.01f);
+                simple_ns[j] = 1.0f;
+            }
+        }
+        write_buffer("data/simple_kd.bin", pad_buffer(simple_kd, enable_padding, sizeof(float) * 4));
+        write_buffer("data/simple_ks.bin", pad_buffer(simple_ks, enable_padding, sizeof(float) * 4));
+        write_buffer("data/simple_ns.bin", simple_ns);
+    }
 
     write_tri_mesh(tri_mesh, enable_padding);
 
@@ -770,7 +813,6 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
            << "    let light_norms = device.load_buffer(\"data/light_norms.bin\");\n"
            << "    let light_colors = device.load_buffer(\"data/light_colors.bin\");\n"
            << "    let lights = @ |i| {\n"
-           << "        let color = light_colors.load_vec3(i);\n"
            << "        make_precomputed_triangle_light(\n"
            << "            math,\n"
            << "            light_verts.load_vec3(i * 3 + 0),\n"
@@ -778,7 +820,7 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
            << "            light_verts.load_vec3(i * 3 + 2),\n"
            << "            light_norms.load_vec3(i),\n"
            << "            light_areas.load_f32(i),\n"
-           << "            make_color(color.x, color.y, color.z)\n"
+           << "            vec3_to_color(light_colors.load_vec3(i))\n"
            << "        )\n"
            << "    };\n";
     }
@@ -796,8 +838,12 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
         assert(it != mtl_lib.end());
 
         auto& mat = it->second;
+        // Stop at the first simple material (they have been moved to the end of the array)
+        if (has_simple && is_simple(mat))
+            break;
+
         bool has_emission = mat.ke != rgb(0.0f) || mat.map_ke != "";
-        os << "    let shader_" << make_id(mtl_name) << " = @ |ray, hit, surf| {\n";
+        os << "    let shader_" << make_id(mtl_name) << " : Shader = @ |ray, hit, surf| {\n";
         if (mat.illum == 5) {
             os << "        let bsdf = make_mirror_bsdf(math, surf, make_color(" << mat.ks.x << "f, " << mat.ks.y << "f, " << mat.ks.z << "f));\n";
         } else if (mat.illum == 7) {
@@ -847,25 +893,41 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
         os << "    };\n";
     }
 
-    // Generate geometries
-    size_t num_mats = obj_file.materials.size();
+    if (has_simple) {
+        os << "\n    // Simple materials data\n"
+           << "    let simple_kd = device.load_buffer(\"data/simple_kd.bin\");\n"
+           << "    let simple_ks = device.load_buffer(\"data/simple_ks.bin\");\n"
+           << "    let simple_ns = device.load_buffer(\"data/simple_ns.bin\");\n";
+    }
 
+    // Generate geometries
     os << "\n    // Geometries\n"
        << "    let geometries = @ |i| match i {\n";
-    for (uint32_t mat = 0; mat < num_mats; ++mat) {
+    for (uint32_t mat = 0; mat < num_complex; ++mat) {
         os << "        ";
-        if (mat != num_mats - 1)
+        if (mat != num_complex - 1 || has_simple)
             os << mat;
         else
             os << "_";
         os << " => make_tri_mesh_geometry(math, tri_mesh, shader_" << make_id(obj_file.materials[mat]) << "),\n";
     }
+    if (has_simple)
+        os << "        _ => make_tri_mesh_geometry(math, tri_mesh, @ |ray, hit, surf| {\n"
+           << "            let kd = vec3_to_color(simple_kd.load_vec3(hit.prim_id));\n"
+           << "            let ks = vec3_to_color(simple_ks.load_vec3(hit.prim_id));\n"
+           << "            let ns = simple_ns.load_f32(hit.prim_id);\n"
+           << "            let diffuse = make_diffuse_bsdf(math, surf, kd);\n"
+           << "            let specular = make_phong_bsdf(math, surf, ks, ns);\n"
+           << "            let lum_ks = color_luminance(ks);\n"
+           << "            let lum_kd = color_luminance(kd);\n"
+           << "            make_material(make_mix_bsdf(diffuse, specular, lum_ks / (lum_ks + lum_kd)))\n"
+           << "        })\n";
     os << "    };\n";
 
     // Scene
     os << "\n    // Scene\n"
        << "    let scene = Scene {\n"
-       << "        num_geometries: " << num_mats << ",\n"
+       << "        num_geometries: " << std::min(num_complex + 1, num_mats) << ",\n"
        << "        num_lights:     " << num_lights << ",\n"
        << "        geometries:     @ |i| geometries(i),\n"
        << "        lights:         @ |i| lights(i),\n"

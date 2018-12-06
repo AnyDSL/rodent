@@ -7,6 +7,7 @@
 #include <chrono>
 #include <iostream>
 #include <limits>
+#include <stack>
 
 #include "common.h"
 #include "float4.h"
@@ -94,31 +95,6 @@ struct MultiNode {
     }
 };
 
-template <typename T, int N = 128>
-struct Stack {
-    static constexpr int capacity() { return N; }
-
-    T elems[N];
-    int top;
-
-    Stack() : top(-1) {}
-
-    template <typename... Args>
-    void push(Args... args) {
-        assert(!is_full());
-        elems[++top] = T(args...);
-    }
-
-    T pop() {
-        assert(!is_empty());
-        return elems[top--];
-    }
-
-    bool is_empty() const { return top < 0; }
-    bool is_full() const { return top >= N - 1; }
-    int size() const { return top + 1; }
-};
-
 /// Builds a SBVH (Spatial split BVH), given the set of triangles and the alpha parameter
 /// that controls when to do a spatial split. The tree is built in depth-first order.
 /// See  Stich et al., "Spatial Splits in Bounding Volume Hierarchies", 2009
@@ -149,15 +125,16 @@ public:
 
         const float spatial_threshold = mesh_bb.half_area() * alpha;
 
-        Stack<Node> stack;
-        stack.push(initial_refs, tri_count, mesh_bb, -1);
+        std::stack<Node> stack;
+        stack.emplace(initial_refs, tri_count, mesh_bb, -1);
 
         std::vector<float3> centers(tris.size());
         for (size_t i = 0; i < tris.size(); ++i)
             centers[i] = (tris[i].v0 + tris[i].v1 + tris[i].v2) * (1.0f / 3.0f);
 
-        while (!stack.is_empty()) {
-            MultiNode<Node, N> multi_node(stack.pop());
+        while (!stack.empty()) {
+            MultiNode<Node, N> multi_node(stack.top());
+            stack.pop();
 
             // Iterate over the available split candidates in the multi-node
             while (!multi_node.is_full() && multi_node.node_available()) {
@@ -252,7 +229,7 @@ public:
 
                 for (int i = 0; i < multi_node.count; i++) {
                     multi_node.nodes[i].parent = parent * N + i;
-                    if (multi_node.nodes[i].tested || stack.size() >= stack.capacity() - 1)
+                    if (multi_node.nodes[i].tested)
                         make_leaf(multi_node.nodes[i], write_leaf);
                     else
                         stack.push(multi_node.nodes[i]);

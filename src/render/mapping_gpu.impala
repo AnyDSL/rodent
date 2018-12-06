@@ -402,7 +402,7 @@ fn @gpu_mega_kernel_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics,
         let pixel_mask = 0x7FFFFFFF;
 
         while true {
-            if pixel < 0 {
+            if unlikely(pixel < 0) {
                 if pixel != -1 {
                     gpu_accumulate(atomics, film_pixels, pixel & pixel_mask, final_color, spp);
                 }
