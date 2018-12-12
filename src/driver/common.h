@@ -6,23 +6,6 @@
 #include <cstdint>
 #include <random>
 
-#include <immintrin.h>
-
-// Parallel bits deposit. Optimized for BMI2 instruction set.
-inline uint32_t pdep(uint32_t val, uint32_t mask) {
-#ifdef __BMI2__
-    return _pdep_u32(val, mask);
-#else
-    uint32_t res = 0;
-    for (uint32_t bb = 1; mask; bb += bb) {
-        if (val & bb)
-            res |= mask & -mask;
-        mask &= mask - 1;
-    }
-    return res;
-#endif
-}
-
 // Round to the integer above the division.
 inline uint32_t round_up(uint32_t val, uint32_t div) {
     auto mod = val % div;

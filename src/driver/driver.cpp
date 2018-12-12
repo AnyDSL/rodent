@@ -15,8 +15,10 @@
 #include "common.h"
 #include "image.h"
 
+#if defined(__x86_64__) || defined(__amd64__) || defined(_M_X64)
 // On x86, set flush-to-zero mode
 #include <x86intrin.h>
+#endif
 
 static constexpr float pi = 3.14159265359f;
 

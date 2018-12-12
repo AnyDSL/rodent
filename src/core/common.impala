@@ -2,7 +2,7 @@
 
 static flt_eps = 1.1920928955e-07f;
 static flt_max = 3.4028234664e+38f;
-static flt_min = 1.1754943508e-38f;
+static flt_min = 1.1754943509e-38f;
 static flt_inf = 1.0f / 0.0f;
 static flt_pi = 3.14159265359f;
 static flt_sqrt2 = 1.41421356237f;
