@@ -22,7 +22,8 @@
 #endif
 
 enum class Target : uint32_t {
-    AVX2 = 1,
+    GENERIC = 0,
+    AVX2,
     AVX2_EMBREE,
     AVX,
     SSE42,
@@ -30,7 +31,8 @@ enum class Target : uint32_t {
     NVVM_STREAMING,
     NVVM_MEGAKERNEL,
     AMDGPU_STREAMING,
-    AMDGPU_MEGAKERNEL
+    AMDGPU_MEGAKERNEL,
+    INVALID
 };
 
 inline Target cpuid() {
@@ -52,7 +54,7 @@ inline Target cpuid() {
     if (detected.count("avx"))    return Target::AVX;
     if (detected.count("sse4_2")) return Target::SSE42;
     if (detected.count("asimd"))  return Target::ASIMD;
-    return Target(0);
+    return Target::GENERIC;
 }
 
 void copy_file(const std::string& src, const std::string& dst) {
@@ -615,6 +617,7 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
                           target == Target::AMDGPU_STREAMING ||
                           target == Target::AMDGPU_MEGAKERNEL;
     switch (target) {
+        case Target::GENERIC:           os << "    let device   = make_cpu_default_device();\n";               break;
         case Target::AVX2:              os << "    let device   = make_avx2_device(false);\n";                 break;
         case Target::AVX2_EMBREE:       os << "    let device   = make_avx2_device(true);\n";                  break;
         case Target::AVX:               os << "    let device   = make_avx_device();\n";                       break;
@@ -701,7 +704,7 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
         std::vector<typename BvhNTriM<2, 1>::Tri> tris;
         build_bvh<2, 1>(tri_mesh, nodes, tris);
         write_bvh(nodes, tris);
-    } else if (target == Target::ASIMD || target == Target::SSE42) {
+    } else if (target == Target::GENERIC || target == Target::ASIMD || target == Target::SSE42) {
         std::vector<typename BvhNTriM<4, 4>::Node> nodes;
         std::vector<typename BvhNTriM<4, 4>::Tri> tris;
 #ifdef ENABLE_EMBREE_BVH
@@ -958,7 +961,7 @@ static void usage() {
               << "           --embree-bvh          Use Embree to build the BVH (default: disabled)\n"
 #endif
               << "Available target:\n"
-              << "    sse42, avx, avx2, avx2-embree, asimd,\n"
+              << "    generic, sse42, avx, avx2, avx2-embree, asimd,\n"
               << "    nvvm = nvvm-streaming, nvvm-megakernel,\n"
               << "    amdgpu = amdgpu-streaming, amdgpu-megakernel\n"
               << std::flush;
@@ -982,7 +985,7 @@ int main(int argc, char** argv) {
     size_t dev = 0;
     size_t spp = 4;
     size_t max_path_len = 64;
-    auto target = Target(0);
+    auto target = Target::INVALID;
     bool embree_bvh = false;
     bool fusion = false;
     for (int i = 1; i < argc; ++i) {
@@ -1010,6 +1013,8 @@ int main(int argc, char** argv) {
                     target = Target::AMDGPU_STREAMING;
                 else if (!strcmp(argv[i], "amdgpu-megakernel"))
                     target = Target::AMDGPU_MEGAKERNEL;
+                else if (!strcmp(argv[i], "generic"))
+                    target = Target::GENERIC;
                 else {
                     std::cerr << "Unknown target '" << argv[i] << "'. Aborting." << std::endl;
                     return 1;
@@ -1052,12 +1057,10 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    if (target == Target(0)) {
+    if (target == Target::INVALID) {
         target = cpuid();
-        if (target == Target(0)) {
-            std::cerr << "No vector instruction set detected. Aborting." << std::endl;
-            return 1;
-        }
+        if (target == Target::GENERIC)
+            warn("No vector instruction set detected. Select the target platform manually to improve performance.");
     }
 
     std::ofstream of("main.impala");

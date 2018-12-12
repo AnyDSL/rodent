@@ -413,16 +413,16 @@ fn @make_cpu_device(use_embree: bool, single: bool, min_max: MinMax, vector_widt
             }
         },
         load_bvh: @ |filename| {
-            if vector_width == 4 {
-                let mut nodes;
-                let mut tris;
-                rodent_load_bvh4_tri4(0, filename, &mut nodes, &mut tris);
-                make_cpu_bvh4_tri4(nodes, tris)
-            } else {
+            if vector_width == 8 {
                 let mut nodes;
                 let mut tris;
                 rodent_load_bvh8_tri4(0, filename, &mut nodes, &mut tris);
                 make_cpu_bvh8_tri4(nodes, tris)
+            } else {
+                let mut nodes;
+                let mut tris;
+                rodent_load_bvh4_tri4(0, filename, &mut nodes, &mut tris);
+                make_cpu_bvh4_tri4(nodes, tris)
             }
         },
         load_png: @ |filename| {
@@ -456,4 +456,8 @@ fn @make_sse42_device() -> Device {
 
 fn @make_asimd_device() -> Device {
     make_cpu_device(false, false, make_cpu_int_min_max(), 4, 0, 16)
+}
+
+fn @make_cpu_default_device() -> Device {
+    make_cpu_device(false, false, make_default_min_max(), 1, 0, 16)
 }
