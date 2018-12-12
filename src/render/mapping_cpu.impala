@@ -80,66 +80,58 @@ extern fn cpu_sort_primary(primary: &PrimaryStream, ray_begins: &mut [i32], ray_
     ray_ends(num_geometries - 1)
 }
 
-fn @cpu_permute_ray_stream(rays: RayStream, i: i32, j: i32, perm: Perm) -> () {
-    rays.org_x(i) = cpu_permute_f32(rays.org_x(j), perm);
-    rays.org_y(i) = cpu_permute_f32(rays.org_y(j), perm);
-    rays.org_z(i) = cpu_permute_f32(rays.org_z(j), perm);
-    rays.dir_x(i) = cpu_permute_f32(rays.dir_x(j), perm);
-    rays.dir_y(i) = cpu_permute_f32(rays.dir_y(j), perm);
-    rays.dir_z(i) = cpu_permute_f32(rays.dir_z(j), perm);
-    rays.tmin(i)  = cpu_permute_f32(rays.tmin(j), perm);
-    rays.tmax(i)  = cpu_permute_f32(rays.tmax(j), perm);
+fn @cpu_compact_ray_stream(rays: RayStream, i: i32, j: i32, mask: bool) -> () {
+    rays.org_x(i) = rv_compact(rays.org_x(j), mask);
+    rays.org_y(i) = rv_compact(rays.org_y(j), mask);
+    rays.org_z(i) = rv_compact(rays.org_z(j), mask);
+    rays.dir_x(i) = rv_compact(rays.dir_x(j), mask);
+    rays.dir_y(i) = rv_compact(rays.dir_y(j), mask);
+    rays.dir_z(i) = rv_compact(rays.dir_z(j), mask);
+    rays.tmin(i)  = rv_compact(rays.tmin(j), mask);
+    rays.tmax(i)  = rv_compact(rays.tmax(j), mask);
 }
 
 extern fn cpu_compact_primary(primary: &PrimaryStream) -> i32 {
-    let lut = generate_compaction_lut();
     let mut k = 0;
     for i in range_step(0, primary.size, 8) {
-        let d = primary.size - i;
-        let valid_mask = if d < 8 { (1 << d) - 1 } else { -1 };
         for j in vectorize(8) {
             let id = primary.rays.id(i + j);
-            let mask = rv_ballot(id >= 0) & valid_mask;
-            let perm = lut(mask);
+            let mask = (id >= 0) & (i + j < primary.size);
 
-            primary.rays.id(k + j) = cpu_permute_i32(id, perm);
+            primary.rays.id(k + j) = bitcast[i32](rv_compact(bitcast[f32](id), mask));
 
-            cpu_permute_ray_stream(primary.rays, k + j, i + j, perm);
+            cpu_compact_ray_stream(primary.rays, k + j, i + j, mask);
 
-            primary.rnd(k + j)       = cpu_permute_u32(primary.rnd(i + j), perm);
-            primary.mis(k + j)       = cpu_permute_f32(primary.mis(i + j), perm);
-            primary.contrib_r(k + j) = cpu_permute_f32(primary.contrib_r(i + j), perm);
-            primary.contrib_g(k + j) = cpu_permute_f32(primary.contrib_g(i + j), perm);
-            primary.contrib_b(k + j) = cpu_permute_f32(primary.contrib_b(i + j), perm);
-            primary.depth(k + j)     = cpu_permute_i32(primary.depth(i + j), perm);
+            primary.rnd(k + j)       = bitcast[u32](rv_compact(bitcast[f32](primary.rnd(i + j)), mask));
+            primary.mis(k + j)       = rv_compact(primary.mis(i + j), mask);
+            primary.contrib_r(k + j) = rv_compact(primary.contrib_r(i + j), mask);
+            primary.contrib_g(k + j) = rv_compact(primary.contrib_g(i + j), mask);
+            primary.contrib_b(k + j) = rv_compact(primary.contrib_b(i + j), mask);
+            primary.depth(k + j)     = bitcast[i32](rv_compact(bitcast[f32](primary.depth(i + j)), mask));
 
-            k += cpu_popcount32(mask);
+            k += cpu_popcount32(rv_ballot(mask));
         }
     }
     k
 }
 
 extern fn cpu_compact_secondary(secondary: &SecondaryStream) -> i32 {
-    let lut = generate_compaction_lut();
     let mut k = 0;
     for i in range_step(0, secondary.size, 8) {
-        let d = secondary.size - i;
-        let valid_mask = if d < 8 { (1 << d) - 1 } else { -1 };
         for j in vectorize(8) {
             let id = secondary.rays.id(i + j);
-            let mask = rv_ballot(id >= 0) & valid_mask;
-            let perm = lut(mask);
+            let mask = (id >= 0) & (i + j < secondary.size);
 
-            secondary.rays.id(k + j) = cpu_permute_i32(id, perm);
+            secondary.rays.id(k + j) = bitcast[i32](rv_compact(bitcast[f32](id), mask));
 
-            cpu_permute_ray_stream(secondary.rays, k + j, i + j, perm);
+            cpu_compact_ray_stream(secondary.rays, k + j, i + j, mask);
 
-            secondary.prim_id(k + j) = cpu_permute_i32(secondary.prim_id(i + j), perm);
-            secondary.color_r(k + j) = cpu_permute_f32(secondary.color_r(i + j), perm);
-            secondary.color_g(k + j) = cpu_permute_f32(secondary.color_g(i + j), perm);
-            secondary.color_b(k + j) = cpu_permute_f32(secondary.color_b(i + j), perm);
+            secondary.prim_id(k + j) = bitcast[i32](rv_compact(bitcast[f32](secondary.prim_id(i + j)), mask));
+            secondary.color_r(k + j) = rv_compact(secondary.color_r(i + j), mask);
+            secondary.color_g(k + j) = rv_compact(secondary.color_g(i + j), mask);
+            secondary.color_b(k + j) = rv_compact(secondary.color_b(i + j), mask);
 
-            k += cpu_popcount32(mask);
+            k += cpu_popcount32(rv_ballot(mask));
         }
     }
     k
@@ -397,7 +389,7 @@ fn @make_cpu_device(use_embree: bool, single: bool, min_max: MinMax, vector_widt
                 spp,
                 num_cores,
                 vector_width,
-                use_embree
+                use_embree,
             )
         },
         present: @ || rodent_present(0),

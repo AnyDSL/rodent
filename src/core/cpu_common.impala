@@ -10,61 +10,7 @@ extern "C" {
     fn rv_store(&mut f32, i32, f32) -> ();
     fn rv_shuffle(f32, i32) -> f32;
     fn rv_align(&i8, i32)-> &i8;
-}
-
-// Permutations --------------------------------------------------------------------
-
-type Perm = simd[i32 * 8];
-
-// Creates the identity permutation
-fn @make_id_perm() -> Perm { simd[0, 1, 2, 3, 4, 5, 6, 7] }
-
-// Applies a permutation to a vector
-fn @cpu_permute_f32(value: f32, perm: Perm) -> f32 {
-    fn @fold(cur: f32, i: i32) -> f32 {
-        if i < 8 {
-            fold(rv_insert(cur, i, rv_extract(value, perm(i))), i + 1)
-        } else {
-            cur
-        }
-    }
-    fold(value, 0)
-}
-
-fn @cpu_permute_i32(val: i32, perm: Perm) -> i32 {
-    bitcast[i32](cpu_permute_f32(bitcast[f32](val), perm))
-}
-
-fn @cpu_permute_u32(val: u32, perm: Perm) -> u32 {
-    bitcast[u32](cpu_permute_f32(bitcast[f32](val), perm))
-}
-
-// Generates an entry of the table of permutations for compaction
-fn @generate_compaction_lut_entry(case: i32) -> Perm {
-    fn @fold(cur: Perm, i: i32, j: i32) -> Perm {
-        if i < 8 {
-            if (case & (1 << i)) != 0 {
-                fold(insert(cur, j, i), i + 1, j + 1)
-            } else {
-                fold(cur, i + 1, j)
-            }
-        } else {
-            cur
-        }
-    }
-    fold(make_id_perm(), 0, 0)
-}
-
-// Generates a table of permutations for compaction
-fn @generate_compaction_lut() -> [Perm * 256] {
-    fn @fold(cur: [Perm * 256], i: i32) -> [Perm * 256] {
-        if i < 256 {
-            fold(insert(cur, i, generate_compaction_lut_entry(i)), i + 1)
-        } else {
-            cur
-        }
-    }
-    fold([make_id_perm(),..256], 0)
+    fn rv_compact(f32, bool) -> f32;
 }
 
 // Misc. ---------------------------------------------------------------------------
