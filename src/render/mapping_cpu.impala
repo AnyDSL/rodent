@@ -91,50 +91,56 @@ fn @cpu_compact_ray_stream(rays: RayStream, i: i32, j: i32, mask: bool) -> () {
     rays.tmax(i)  = rv_compact(rays.tmax(j), mask);
 }
 
-extern fn cpu_compact_primary(primary: &PrimaryStream) -> i32 {
-    let mut k = 0;
-    for i in range_step(0, primary.size, 8) {
-        for j in vectorize(8) {
-            let id = primary.rays.id(i + j);
-            let mask = (id >= 0) & (i + j < primary.size);
+fn @cpu_compact_primary(primary: &PrimaryStream, vector_width: i32) -> i32 {
+    fn cpu_compact_primary_specialized(primary: &PrimaryStream) -> i32 {
+        let mut k = 0;
+        for i in range_step(0, primary.size, vector_width) {
+            for j in vectorize(vector_width) {
+                let id = primary.rays.id(i + j);
+                let mask = (id >= 0) & (i + j < primary.size);
 
-            primary.rays.id(k + j) = bitcast[i32](rv_compact(bitcast[f32](id), mask));
+                primary.rays.id(k + j) = bitcast[i32](rv_compact(bitcast[f32](id), mask));
 
-            cpu_compact_ray_stream(primary.rays, k + j, i + j, mask);
+                cpu_compact_ray_stream(primary.rays, k + j, i + j, mask);
 
-            primary.rnd(k + j)       = bitcast[u32](rv_compact(bitcast[f32](primary.rnd(i + j)), mask));
-            primary.mis(k + j)       = rv_compact(primary.mis(i + j), mask);
-            primary.contrib_r(k + j) = rv_compact(primary.contrib_r(i + j), mask);
-            primary.contrib_g(k + j) = rv_compact(primary.contrib_g(i + j), mask);
-            primary.contrib_b(k + j) = rv_compact(primary.contrib_b(i + j), mask);
-            primary.depth(k + j)     = bitcast[i32](rv_compact(bitcast[f32](primary.depth(i + j)), mask));
+                primary.rnd(k + j)       = bitcast[u32](rv_compact(bitcast[f32](primary.rnd(i + j)), mask));
+                primary.mis(k + j)       = rv_compact(primary.mis(i + j), mask);
+                primary.contrib_r(k + j) = rv_compact(primary.contrib_r(i + j), mask);
+                primary.contrib_g(k + j) = rv_compact(primary.contrib_g(i + j), mask);
+                primary.contrib_b(k + j) = rv_compact(primary.contrib_b(i + j), mask);
+                primary.depth(k + j)     = bitcast[i32](rv_compact(bitcast[f32](primary.depth(i + j)), mask));
 
-            k += cpu_popcount32(rv_ballot(mask));
+                k += cpu_popcount32(rv_ballot(mask));
+            }
         }
+        k
     }
-    k
+    ($cpu_compact_primary_specialized)(primary)
 }
 
-extern fn cpu_compact_secondary(secondary: &SecondaryStream) -> i32 {
-    let mut k = 0;
-    for i in range_step(0, secondary.size, 8) {
-        for j in vectorize(8) {
-            let id = secondary.rays.id(i + j);
-            let mask = (id >= 0) & (i + j < secondary.size);
+fn @cpu_compact_secondary(secondary: &SecondaryStream, vector_width: i32) -> i32 {
+    fn cpu_compact_secondary_specialized(secondary: &SecondaryStream) -> i32 {
+        let mut k = 0;
+        for i in range_step(0, secondary.size, vector_width) {
+            for j in vectorize(vector_width) {
+                let id = secondary.rays.id(i + j);
+                let mask = (id >= 0) & (i + j < secondary.size);
 
-            secondary.rays.id(k + j) = bitcast[i32](rv_compact(bitcast[f32](id), mask));
+                secondary.rays.id(k + j) = bitcast[i32](rv_compact(bitcast[f32](id), mask));
 
-            cpu_compact_ray_stream(secondary.rays, k + j, i + j, mask);
+                cpu_compact_ray_stream(secondary.rays, k + j, i + j, mask);
 
-            secondary.prim_id(k + j) = bitcast[i32](rv_compact(bitcast[f32](secondary.prim_id(i + j)), mask));
-            secondary.color_r(k + j) = rv_compact(secondary.color_r(i + j), mask);
-            secondary.color_g(k + j) = rv_compact(secondary.color_g(i + j), mask);
-            secondary.color_b(k + j) = rv_compact(secondary.color_b(i + j), mask);
+                secondary.prim_id(k + j) = bitcast[i32](rv_compact(bitcast[f32](secondary.prim_id(i + j)), mask));
+                secondary.color_r(k + j) = rv_compact(secondary.color_r(i + j), mask);
+                secondary.color_g(k + j) = rv_compact(secondary.color_g(i + j), mask);
+                secondary.color_b(k + j) = rv_compact(secondary.color_b(i + j), mask);
 
-            k += cpu_popcount32(rv_ballot(mask));
+                k += cpu_popcount32(rv_ballot(mask));
+            }
         }
+        k
     }
-    k
+    ($cpu_compact_secondary_specialized)(secondary)
 }
 
 fn @cpu_generate_rays( primary: PrimaryStream
@@ -189,7 +195,7 @@ fn @cpu_traverse_primary(scene: Scene, min_max: MinMax, primary: &PrimaryStream,
             false /*any_hit*/
         );
     }
-    cpu_traverse_primary_specialized(primary);
+    ($cpu_traverse_primary_specialized)(primary);
 }
 
 fn @cpu_traverse_secondary(scene: Scene, min_max: MinMax, secondary: &SecondaryStream, single: bool, vector_width: i32) -> () {
@@ -205,7 +211,7 @@ fn @cpu_traverse_secondary(scene: Scene, min_max: MinMax, secondary: &SecondaryS
             true /*any_hit*/
         );
     }
-    cpu_traverse_secondary_specialized(secondary);
+    ($cpu_traverse_secondary_specialized)(secondary);
 }
 
 fn @cpu_shade(geom_id: i32, primary: &PrimaryStream, secondary: &SecondaryStream, scene: Scene, path_tracer: PathTracer, accumulate: fn (i32, Color) -> (), begin: i32, end: i32, vector_width: i32) -> () {
@@ -345,10 +351,10 @@ fn @cpu_trace( scene: Scene
 
             // Filter terminated rays
             secondary.size = primary.size;
-            primary.size   = cpu_compact_primary(primary);
+            primary.size   = cpu_compact_primary(primary, vector_width);
 
             // Compact and trace secondary rays
-            secondary.size = cpu_compact_secondary(secondary);
+            secondary.size = cpu_compact_secondary(secondary, vector_width);
             if likely(secondary.size > 0) {
                 if use_embree {
                     rodent_cpu_intersect_secondary_embree(secondary);
