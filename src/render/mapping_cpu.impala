@@ -91,52 +91,96 @@ fn @cpu_compact_ray_stream(rays: RayStream, i: i32, j: i32, mask: bool) -> () {
     rays.tmax(i)  = rv_compact(rays.tmax(j), mask);
 }
 
-fn @cpu_compact_primary(primary: &PrimaryStream, vector_width: i32) -> i32 {
+fn @cpu_move_ray_stream(rays: RayStream, i: i32, j: i32) -> () {
+    rays.org_x(i) = rays.org_x(j);
+    rays.org_y(i) = rays.org_y(j);
+    rays.org_z(i) = rays.org_z(j);
+    rays.dir_x(i) = rays.dir_x(j);
+    rays.dir_y(i) = rays.dir_y(j);
+    rays.dir_z(i) = rays.dir_z(j);
+    rays.tmin(i)  = rays.tmin(j);
+    rays.tmax(i)  = rays.tmax(j);
+}
+
+fn @cpu_compact_primary(primary: &PrimaryStream, vector_width: i32, vectorized_compaction: bool) -> i32 {
     fn cpu_compact_primary_specialized(primary: &PrimaryStream) -> i32 {
         let mut k = 0;
-        for i in range_step(0, primary.size, vector_width) {
-            for j in vectorize(vector_width) {
-                let id = primary.rays.id(i + j);
-                let mask = (id >= 0) & (i + j < primary.size);
+        if vectorized_compaction {
+            for i in range_step(0, primary.size, vector_width) {
+                for j in vectorize(vector_width) {
+                    let id = primary.rays.id(i + j);
+                    let mask = (id >= 0) & (i + j < primary.size);
 
-                primary.rays.id(k + j) = bitcast[i32](rv_compact(bitcast[f32](id), mask));
+                    primary.rays.id(k + j) = bitcast[i32](rv_compact(bitcast[f32](id), mask));
 
-                cpu_compact_ray_stream(primary.rays, k + j, i + j, mask);
+                    cpu_compact_ray_stream(primary.rays, k + j, i + j, mask);
 
-                primary.rnd(k + j)       = bitcast[u32](rv_compact(bitcast[f32](primary.rnd(i + j)), mask));
-                primary.mis(k + j)       = rv_compact(primary.mis(i + j), mask);
-                primary.contrib_r(k + j) = rv_compact(primary.contrib_r(i + j), mask);
-                primary.contrib_g(k + j) = rv_compact(primary.contrib_g(i + j), mask);
-                primary.contrib_b(k + j) = rv_compact(primary.contrib_b(i + j), mask);
-                primary.depth(k + j)     = bitcast[i32](rv_compact(bitcast[f32](primary.depth(i + j)), mask));
+                    primary.rnd(k + j)       = bitcast[u32](rv_compact(bitcast[f32](primary.rnd(i + j)), mask));
+                    primary.mis(k + j)       = rv_compact(primary.mis(i + j), mask);
+                    primary.contrib_r(k + j) = rv_compact(primary.contrib_r(i + j), mask);
+                    primary.contrib_g(k + j) = rv_compact(primary.contrib_g(i + j), mask);
+                    primary.contrib_b(k + j) = rv_compact(primary.contrib_b(i + j), mask);
+                    primary.depth(k + j)     = bitcast[i32](rv_compact(bitcast[f32](primary.depth(i + j)), mask));
 
-                k += cpu_popcount32(rv_ballot(mask));
+                    k += cpu_popcount32(rv_ballot(mask));
+                }
             }
+        } else {
+            for i in range(0, primary.size) {
+                let id = primary.rays.id(i);
+                if id >= 0 {
+                    primary.rays.id(k) = id;
+                    cpu_move_ray_stream(primary.rays, k, i);
+                    primary.rnd(k)       = primary.rnd(i);
+                    primary.mis(k)       = primary.mis(i);
+                    primary.contrib_r(k) = primary.contrib_r(i);
+                    primary.contrib_g(k) = primary.contrib_g(i);
+                    primary.contrib_b(k) = primary.contrib_b(i);
+                    primary.depth(k)     = primary.depth(i);
+                    k++;
+                }
+            } 
         }
         k
     }
     ($cpu_compact_primary_specialized)(primary)
 }
 
-fn @cpu_compact_secondary(secondary: &SecondaryStream, vector_width: i32) -> i32 {
+fn @cpu_compact_secondary(secondary: &SecondaryStream, vector_width: i32, vectorized_compaction: bool) -> i32 {
     fn cpu_compact_secondary_specialized(secondary: &SecondaryStream) -> i32 {
         let mut k = 0;
-        for i in range_step(0, secondary.size, vector_width) {
-            for j in vectorize(vector_width) {
-                let id = secondary.rays.id(i + j);
-                let mask = (id >= 0) & (i + j < secondary.size);
+        if vectorized_compaction {
+            for i in range_step(0, secondary.size, vector_width) {
+                for j in vectorize(vector_width) {
+                    let id = secondary.rays.id(i + j);
+                    let mask = (id >= 0) & (i + j < secondary.size);
 
-                secondary.rays.id(k + j) = bitcast[i32](rv_compact(bitcast[f32](id), mask));
+                    secondary.rays.id(k + j) = bitcast[i32](rv_compact(bitcast[f32](id), mask));
 
-                cpu_compact_ray_stream(secondary.rays, k + j, i + j, mask);
+                    cpu_compact_ray_stream(secondary.rays, k + j, i + j, mask);
 
-                secondary.prim_id(k + j) = bitcast[i32](rv_compact(bitcast[f32](secondary.prim_id(i + j)), mask));
-                secondary.color_r(k + j) = rv_compact(secondary.color_r(i + j), mask);
-                secondary.color_g(k + j) = rv_compact(secondary.color_g(i + j), mask);
-                secondary.color_b(k + j) = rv_compact(secondary.color_b(i + j), mask);
+                    secondary.prim_id(k + j) = bitcast[i32](rv_compact(bitcast[f32](secondary.prim_id(i + j)), mask));
+                    secondary.color_r(k + j) = rv_compact(secondary.color_r(i + j), mask);
+                    secondary.color_g(k + j) = rv_compact(secondary.color_g(i + j), mask);
+                    secondary.color_b(k + j) = rv_compact(secondary.color_b(i + j), mask);
 
-                k += cpu_popcount32(rv_ballot(mask));
+                    k += cpu_popcount32(rv_ballot(mask));
+                }
             }
+        } else {
+            for i in range(0, secondary.size) {
+                let id = secondary.rays.id(i);
+                if id >= 0 {
+                    secondary.rays.id(k) = id;
+                    cpu_move_ray_stream(secondary.rays, k, i);
+                    secondary.prim_id(k) = secondary.prim_id(i);
+                    secondary.color_r(k) = secondary.color_r(i);
+                    secondary.color_g(k) = secondary.color_g(i);
+                    secondary.color_b(k) = secondary.color_b(i);
+                    k++;
+                }
+            } 
+
         }
         k
     }
@@ -304,6 +348,7 @@ fn @cpu_trace( scene: Scene
              , num_cores: i32
              , vector_width: i32
              , use_embree: bool
+             , vectorized_compaction: bool
              ) -> () {
     let (film_pixels, film_width, film_height) = cpu_get_film_data();
 
@@ -351,10 +396,10 @@ fn @cpu_trace( scene: Scene
 
             // Filter terminated rays
             secondary.size = primary.size;
-            primary.size   = cpu_compact_primary(primary, vector_width);
+            primary.size   = cpu_compact_primary(primary, vector_width, vectorized_compaction);
 
             // Compact and trace secondary rays
-            secondary.size = cpu_compact_secondary(secondary, vector_width);
+            secondary.size = cpu_compact_secondary(secondary, vector_width, vectorized_compaction);
             if likely(secondary.size > 0) {
                 if use_embree {
                     rodent_cpu_intersect_secondary_embree(secondary);
@@ -382,7 +427,7 @@ fn @cpu_trace( scene: Scene
 
 // CPU device ----------------------------------------------------------------------
 
-fn @make_cpu_device(use_embree: bool, single: bool, min_max: MinMax, vector_width: i32, num_cores: i32, tile_size: i32) -> Device {
+fn @make_cpu_device(use_embree: bool, vectorized_compaction: bool, single: bool, min_max: MinMax, vector_width: i32, num_cores: i32, tile_size: i32) -> Device {
     Device {
         intrinsics: cpu_intrinsics,
         trace: @ |scene, path_tracer, spp| {
@@ -396,6 +441,7 @@ fn @make_cpu_device(use_embree: bool, single: bool, min_max: MinMax, vector_widt
                 num_cores,
                 vector_width,
                 use_embree,
+                vectorized_compaction
             )
         },
         present: @ || rodent_present(0),
@@ -443,21 +489,21 @@ fn @make_cpu_device(use_embree: bool, single: bool, min_max: MinMax, vector_widt
 }
 
 fn @make_avx2_device(use_embree: bool) -> Device {
-    make_cpu_device(use_embree, true, make_cpu_int_min_max(), 8, 0, 16)
+    make_cpu_device(use_embree, true, true, make_cpu_int_min_max(), 8, 0, 16)
 }
 
 fn @make_avx_device() -> Device {
-    make_cpu_device(false, true, make_default_min_max(), 8, 0, 16)
+    make_cpu_device(false, true, true, make_default_min_max(), 8, 0, 16)
 }
 
 fn @make_sse42_device() -> Device {
-    make_cpu_device(false, true, make_cpu_int_min_max(), 4, 0, 16)
+    make_cpu_device(false, false, true, make_cpu_int_min_max(), 4, 0, 16)
 }
 
 fn @make_asimd_device() -> Device {
-    make_cpu_device(false, false, make_cpu_int_min_max(), 4, 0, 16)
+    make_cpu_device(false, false, false, make_cpu_int_min_max(), 4, 0, 16)
 }
 
 fn @make_cpu_default_device() -> Device {
-    make_cpu_device(false, false, make_default_min_max(), 1, 0, 16)
+    make_cpu_device(false, false, false, make_default_min_max(), 1, 0, 16)
 }
