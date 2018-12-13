@@ -102,10 +102,10 @@ fn @cpu_move_ray_stream(rays: RayStream, i: i32, j: i32) -> () {
     rays.tmax(i)  = rays.tmax(j);
 }
 
-fn @cpu_compact_primary(primary: &PrimaryStream, vector_width: i32, vectorized_compaction: bool) -> i32 {
+fn @cpu_compact_primary(primary: &PrimaryStream, vector_width: i32, vector_compact: bool) -> i32 {
     fn cpu_compact_primary_specialized(primary: &PrimaryStream) -> i32 {
         let mut k = 0;
-        if vectorized_compaction {
+        if vector_compact {
             for i in range_step(0, primary.size, vector_width) {
                 for j in vectorize(vector_width) {
                     let id = primary.rays.id(i + j);
@@ -146,10 +146,10 @@ fn @cpu_compact_primary(primary: &PrimaryStream, vector_width: i32, vectorized_c
     ($cpu_compact_primary_specialized)(primary)
 }
 
-fn @cpu_compact_secondary(secondary: &SecondaryStream, vector_width: i32, vectorized_compaction: bool) -> i32 {
+fn @cpu_compact_secondary(secondary: &SecondaryStream, vector_width: i32, vector_compact: bool) -> i32 {
     fn cpu_compact_secondary_specialized(secondary: &SecondaryStream) -> i32 {
         let mut k = 0;
-        if vectorized_compaction {
+        if vector_compact {
             for i in range_step(0, secondary.size, vector_width) {
                 for j in vectorize(vector_width) {
                     let id = secondary.rays.id(i + j);
@@ -348,7 +348,7 @@ fn @cpu_trace( scene: Scene
              , num_cores: i32
              , vector_width: i32
              , use_embree: bool
-             , vectorized_compaction: bool
+             , vector_compact: bool
              ) -> () {
     let (film_pixels, film_width, film_height) = cpu_get_film_data();
 
@@ -396,10 +396,10 @@ fn @cpu_trace( scene: Scene
 
             // Filter terminated rays
             secondary.size = primary.size;
-            primary.size   = cpu_compact_primary(primary, vector_width, vectorized_compaction);
+            primary.size   = cpu_compact_primary(primary, vector_width, vector_compact);
 
             // Compact and trace secondary rays
-            secondary.size = cpu_compact_secondary(secondary, vector_width, vectorized_compaction);
+            secondary.size = cpu_compact_secondary(secondary, vector_width, vector_compact);
             if likely(secondary.size > 0) {
                 if use_embree {
                     rodent_cpu_intersect_secondary_embree(secondary);
@@ -427,7 +427,7 @@ fn @cpu_trace( scene: Scene
 
 // CPU device ----------------------------------------------------------------------
 
-fn @make_cpu_device(use_embree: bool, vectorized_compaction: bool, single: bool, min_max: MinMax, vector_width: i32, num_cores: i32, tile_size: i32) -> Device {
+fn @make_cpu_device(use_embree: bool, vector_compact: bool, single: bool, min_max: MinMax, vector_width: i32, num_cores: i32, tile_size: i32) -> Device {
     Device {
         intrinsics: cpu_intrinsics,
         trace: @ |scene, path_tracer, spp| {
@@ -435,13 +435,13 @@ fn @make_cpu_device(use_embree: bool, vectorized_compaction: bool, single: bool,
                 scene,
                 path_tracer,
                 min_max,
-                true /*single*/,
+                single,
                 tile_size,
                 spp,
                 num_cores,
                 vector_width,
                 use_embree,
-                vectorized_compaction
+                vector_compact
             )
         },
         present: @ || rodent_present(0),
