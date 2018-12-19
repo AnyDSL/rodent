@@ -52,7 +52,7 @@ fn @fastpow2(p: f32) -> f32 {
     let clipp  = select(p < -126.0f, -126.0f, p);
     let w = clipp as i32;
     let z = clipp - (w as f32) + offset;
-    let v = ((1u << 23u) as f32 * (clipp + 121.2740575f + 27.7280233f / (4.84252568f - z) - 1.49012907f * z)) as u32;
+    let v = ((1u << 23u) as f32 * (clipp + 121.2740575f + 27.7280233f / (4.84252568f - z) - 1.49012907f * z)) as i32;
     bitcast[f32](v)
 }
 
@@ -161,10 +161,4 @@ fn @swap_u32(a: &mut u32, b: &mut u32) -> () {
     let tmp = *a;
     *a = *b;
     *b = tmp;
-}
-
-fn @shrink_alloc(dev: i32, ptr: &[i8], size: i64) -> &[i8] {
-    let tmp = runtime_alloc(dev, size);
-    runtime_copy(dev, ptr, 0i64, dev, tmp, 0i64, size);
-    tmp
 }

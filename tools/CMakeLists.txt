@@ -1,5 +1,6 @@
 # Generate the traversal benchmark utility, and the ../common/traversal.h interface
 add_subdirectory(bench_traversal)
+add_subdirectory(bench_shading)
 
 find_package(CUDA QUIET)
 if (CUDA_FOUND)
