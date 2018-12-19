@@ -5,6 +5,10 @@
 
 #include <anydsl_runtime.hpp>
 
+#if defined(__x86_64__) || defined(__amd64__) || defined(_M_X64)
+#include <x86intrin.h>
+#endif
+
 #include "interface.h"
 #include "bvh.h"
 #include "obj.h"
@@ -29,9 +33,9 @@ struct EmbreeIntersect {};
 
 template <>
 struct EmbreeIntersect<8> {
-    static void intersect(const int* valid, RTCScene scene, RTCRayHitNt<8>& ray_hit) {
+    static void intersect(const int* valid, RTCScene scene, RTCRayHitNt<8>& ray_hit, bool coherent) {
         RTCIntersectContext context;
-        context.flags = RTC_INTERSECT_CONTEXT_FLAG_INCOHERENT;
+        context.flags = coherent ? RTC_INTERSECT_CONTEXT_FLAG_COHERENT : RTC_INTERSECT_CONTEXT_FLAG_INCOHERENT;
         context.filter = NULL;
         context.instID[0] = RTC_INVALID_GEOMETRY_ID;
         rtcIntersect8(valid, scene, &context, reinterpret_cast<RTCRayHit8*>(&ray_hit));
@@ -48,9 +52,9 @@ struct EmbreeIntersect<8> {
 
 template <>
 struct EmbreeIntersect<4> {
-    static void intersect(const int* valid, RTCScene scene, RTCRayHitNt<4>& ray_hit) {
+    static void intersect(const int* valid, RTCScene scene, RTCRayHitNt<4>& ray_hit, bool coherent) {
         RTCIntersectContext context;
-        context.flags = RTC_INTERSECT_CONTEXT_FLAG_INCOHERENT;
+        context.flags = coherent ? RTC_INTERSECT_CONTEXT_FLAG_COHERENT : RTC_INTERSECT_CONTEXT_FLAG_INCOHERENT;
         context.filter = NULL;
         context.instID[0] = RTC_INVALID_GEOMETRY_ID;
         rtcIntersect4(valid, scene, &context, reinterpret_cast<RTCRayHit4*>(&ray_hit));
@@ -187,13 +191,13 @@ struct EmbreeDevice {
     }
 
     template <int N>
-    void intersect(PrimaryStream& primary, int32_t invalid_id) {
+    void intersect(PrimaryStream& primary, int32_t invalid_id, bool coherent) {
         alignas(32) int valid[N];
         alignas(32) RTCRayHitNt<N> ray_hit;
         memset(valid, 0xFF, sizeof(int) * N);
         for (size_t i = 0; i < primary.size; i += N) {
             load_ray(ray_hit, primary.rays, i, primary.size);
-            EmbreeIntersect<N>::intersect(valid, scene, ray_hit);
+            EmbreeIntersect<N>::intersect(valid, scene, ray_hit, coherent);
             store_hit(ray_hit, primary, i, invalid_id);
         }
     }
@@ -539,8 +543,8 @@ void rodent_gpu_get_secondary_stream(int32_t dev, SecondaryStream* secondary, in
 }
 
 #ifdef ENABLE_EMBREE_DEVICE
-void rodent_cpu_intersect_primary_embree(PrimaryStream* primary, int32_t invalid_id) {
-    interface->embree_device.intersect<8>(*primary, invalid_id);
+void rodent_cpu_intersect_primary_embree(PrimaryStream* primary, int32_t invalid_id, int32_t coherent) {
+    interface->embree_device.intersect<8>(*primary, invalid_id, coherent != 0);
 }
 
 void rodent_cpu_intersect_secondary_embree(SecondaryStream* secondary) {
@@ -551,6 +555,16 @@ void rodent_cpu_intersect_secondary_embree(SecondaryStream* secondary) {
 void rodent_present(int32_t dev) {
     if (dev != 0)
         interface->present(dev);
+}
+
+int64_t clock_us() {
+#if defined(__x86_64__) || defined(__amd64__) || defined(_M_X64)
+#define CPU_FREQ 4e9
+    return __rdtsc() * int64_t(1000000) / int64_t(CPU_FREQ);
+#else
+    using namespace chrono;
+    return duration_cast<microseconds>(high_resolution_clock::now().time_since_epoch());
+#endif
 }
 
 } // extern "C"

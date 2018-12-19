@@ -11,9 +11,25 @@ extern "C" {
     fn rv_shuffle(f32, i32) -> f32;
     fn rv_align(&i8, i32)-> &i8;
     fn rv_compact(f32, bool) -> f32;
+
+    fn clock_us() -> i64;
 }
 
 // Misc. ---------------------------------------------------------------------------
+
+static cpu_profiling_enabled = false;
+
+// Profiles the function given as argument
+fn @cpu_profile(counter: &mut i64, body: fn () -> ()) -> () {
+    if cpu_profiling_enabled {
+        let start = clock_us();
+        body();
+        let end = clock_us();
+        atomic(1u32, counter, end - start);
+    } else {
+        body()
+    }
+}
 
 // Iterate over the bit that are set in a mask (assumes that mask != 0)
 fn cpu_one_bits(mut mask: i32, @body: fn (i32) -> ()) -> () {

@@ -14,7 +14,7 @@ extern "C" {
     fn rodent_load_bvh8_tri4(i32, &[u8], &mut &[Node8], &mut &[Tri4]) -> ();
     fn rodent_load_png(i32, &[u8], &mut &[u8], &mut i32, &mut i32) -> ();
     fn rodent_load_jpg(i32, &[u8], &mut &[u8], &mut i32, &mut i32) -> ();
-    fn rodent_cpu_intersect_primary_embree(&PrimaryStream, i32) -> ();
+    fn rodent_cpu_intersect_primary_embree(&PrimaryStream, i32, i32) -> ();
     fn rodent_cpu_intersect_secondary_embree(&SecondaryStream) -> ();
     fn rodent_present(i32) -> ();
 }

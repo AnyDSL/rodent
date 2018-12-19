@@ -358,70 +358,100 @@ fn @cpu_trace( scene: Scene
         film_pixels(pixel * 3 + 1) += color.g * inv;
         film_pixels(pixel * 3 + 2) += color.b * inv;
     }
+    let mut primary_counter = 0i64;
+    let mut bounces_counter = 0i64;
+    let mut shadow_counter  = 0i64;
+    let mut shading_counter = 0i64;
+    let mut total_counter   = 0i64;
     for xmin, ymin, xmax, ymax in cpu_parallel_tiles(film_width, film_height, tile_size, tile_size, num_cores) {
-        // Get ray streams/states from the CPU driver
-        let mut primary   : PrimaryStream;
-        let mut secondary : SecondaryStream;
-        let capacity = spp * tile_size * tile_size;
-        rodent_cpu_get_primary_stream(&mut primary,     capacity);
-        rodent_cpu_get_secondary_stream(&mut secondary, capacity);
+        with cpu_profile(&mut total_counter) {
+            // Get ray streams/states from the CPU driver
+            let mut primary   : PrimaryStream;
+            let mut secondary : SecondaryStream;
+            let capacity = spp * tile_size * tile_size;
+            rodent_cpu_get_primary_stream(&mut primary,     capacity);
+            rodent_cpu_get_secondary_stream(&mut secondary, capacity);
 
-        let mut id = 0;
-        let num_rays = spp * (ymax - ymin) * (xmax - xmin);
-        while id < num_rays || primary.size > 0 {
-            // (Re-)generate primary rays
-            if primary.size < capacity {
-                primary.size = cpu_generate_rays(primary, capacity, path_tracer, &mut id, xmin, ymin, xmax, ymax, film_width, film_height, spp, vector_width);
-            }
+            let mut id = 0;
+            let num_rays = spp * (ymax - ymin) * (xmax - xmin);
+            while id < num_rays || primary.size > 0 {
+                let first = id == 0;
 
-            // Trace primary rays
-            if use_embree {
-                rodent_cpu_intersect_primary_embree(primary, scene.num_geometries);
-            } else {
-                cpu_traverse_primary(scene, min_max, primary, single, vector_width);
-            }
-
-            // Sort hits by shader id, and filter invalid hits
-            let mut ray_begins : [i32 * 1024];
-            let mut ray_ends   : [i32 * 1024];
-            primary.size = cpu_sort_primary(primary, &mut ray_begins, &mut ray_ends, scene.num_geometries);
-
-            // Perform (vectorized) shading
-            let mut begin = 0;
-            for geom_id in unroll(0, scene.num_geometries) {
-                let end = ray_ends(geom_id);
-                cpu_shade(geom_id, primary, secondary, scene, path_tracer, accumulate, begin, end, vector_width);
-                begin = end;
-            }
-
-            // Filter terminated rays
-            secondary.size = primary.size;
-            primary.size   = cpu_compact_primary(primary, vector_width, vector_compact);
-
-            // Compact and trace secondary rays
-            secondary.size = cpu_compact_secondary(secondary, vector_width, vector_compact);
-            if likely(secondary.size > 0) {
-                if use_embree {
-                    rodent_cpu_intersect_secondary_embree(secondary);
-                } else {
-                    cpu_traverse_secondary(scene, min_max, secondary, single, vector_width);
+                // (Re-)generate primary rays
+                if primary.size < capacity {
+                    primary.size = cpu_generate_rays(primary, capacity, path_tracer, &mut id, xmin, ymin, xmax, ymax, film_width, film_height, spp, vector_width);
                 }
-            }
 
-            // Add the contribution for secondary rays to the frame buffer
-            for i in range(0, secondary.size) {
-                if secondary.prim_id(i) < 0 {
-                    let j = secondary.rays.id(i);
-                    accumulate(j,
-                        make_color(
-                            secondary.color_r(i),
-                            secondary.color_g(i),
-                            secondary.color_b(i)
-                        )
-                    );
+                // Trace primary rays
+                with cpu_profile(if first { &mut primary_counter } else { &mut bounces_counter }) {
+                    if use_embree {
+                        rodent_cpu_intersect_primary_embree(primary, scene.num_geometries, select(first, -1, 0));
+                    } else {
+                        cpu_traverse_primary(scene, min_max, primary, single, vector_width);
+                    }
+                }
+
+                // Sort hits by shader id, and filter invalid hits
+                let mut ray_begins : [i32 * 1024];
+                let mut ray_ends   : [i32 * 1024];
+                primary.size = cpu_sort_primary(primary, &mut ray_begins, &mut ray_ends, scene.num_geometries);
+
+                // Perform (vectorized) shading
+                with cpu_profile(&mut shading_counter) {
+                    let mut begin = 0;
+                    for geom_id in unroll(0, scene.num_geometries) {
+                        let end = ray_ends(geom_id);
+                        cpu_shade(geom_id, primary, secondary, scene, path_tracer, accumulate, begin, end, vector_width);
+                        begin = end;
+                    }
+                }
+                // Filter terminated rays
+                secondary.size = primary.size;
+                primary.size   = cpu_compact_primary(primary, vector_width, vector_compact);
+
+                // Compact and trace secondary rays
+                secondary.size = cpu_compact_secondary(secondary, vector_width, vector_compact);
+                if likely(secondary.size > 0) {
+                    with cpu_profile(&mut shadow_counter) {
+                        if use_embree {
+                            rodent_cpu_intersect_secondary_embree(secondary);
+                        } else {
+                            cpu_traverse_secondary(scene, min_max, secondary, single, vector_width);
+                        }
+                    }
+                }
+
+                // Add the contribution for secondary rays to the frame buffer
+                for i in range(0, secondary.size) {
+                    if secondary.prim_id(i) < 0 {
+                        let j = secondary.rays.id(i);
+                        accumulate(j,
+                            make_color(
+                                secondary.color_r(i),
+                                secondary.color_g(i),
+                                secondary.color_b(i)
+                            )
+                        );
+                    }
                 }
             }
         }
+    }
+
+    if cpu_profiling_enabled {
+        fn print_counter(counter: i64, total: i64, name: &[u8]) -> () {
+            print_string(name);
+            print_string(": ");
+            print_i64(counter);
+            print_string(" (");
+            print_i64(counter * 100i64 / total);
+            print_string("%)\n");
+        }
+        print_counter(primary_counter, total_counter, "primary");
+        print_counter(bounces_counter, total_counter, "bounces");
+        print_counter(shadow_counter,  total_counter, "shadow");
+        print_counter(shading_counter, total_counter, "shade");
+        print_counter(total_counter,   total_counter, "total");
     }
 }
 
