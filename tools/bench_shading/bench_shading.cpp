@@ -3,8 +3,9 @@
 #include <vector>
 #include <random>
 #include <limits>
-#include <chrono>
 #include <algorithm>
+
+#include <x86intrin.h>
 
 #include <anydsl_runtime.hpp>
 
@@ -41,6 +42,8 @@ inline void get_primary_stream(PrimaryStream& primary, float* ptr, size_t capaci
 }
 
 int main(int argc, char** argv) {
+    _mm_setcsr(_mm_getcsr() | (_MM_FLUSH_ZERO_ON | _MM_DENORMALS_ZERO_ON));
+
     std::vector<float3> vertices;
     std::vector<float3> normals;
     std::vector<float3> face_normals;
@@ -51,12 +54,15 @@ int main(int argc, char** argv) {
     std::vector<int32_t> begins;
     std::vector<int32_t> ends;
 
+    const bool sorted = true;
+
     // Create a quad
     vertices.emplace_back(-1.0f,  1.0f, 0.0f);
     vertices.emplace_back(-1.0f, -1.0f, 0.0f);
     vertices.emplace_back( 1.0f, -1.0f, 0.0f);
     vertices.emplace_back( 1.0f,  1.0f, 0.0f);
 
+    normals.emplace_back(0.0f, 0.0f, 1.0f);
     normals.emplace_back(0.0f, 0.0f, 1.0f);
     normals.emplace_back(0.0f, 0.0f, 1.0f);
     normals.emplace_back(0.0f, 0.0f, 1.0f);
@@ -90,11 +96,12 @@ int main(int argc, char** argv) {
     }
 
     // Generate streams
-    PrimaryStream primary;
-    size_t num_rays = 1024 * 4;
-    anydsl::Array<float> primary_data(20 * num_rays);
-    anydsl::Array<float> tmp_data(20 * num_rays);
-    get_primary_stream(primary, primary_data.data(), num_rays);
+    PrimaryStream primary_in, primary_out;
+    size_t num_rays = 4096;
+    anydsl::Array<float> primary_in_data (20 * num_rays);
+    anydsl::Array<float> primary_out_data(20 * num_rays);
+    get_primary_stream(primary_in,  primary_in_data.data(), num_rays);
+    get_primary_stream(primary_out, primary_out_data.data(), num_rays);
 
     // Generate rays
     float3 org(0.0f, 0.0f, -1.0f);
@@ -124,38 +131,68 @@ int main(int argc, char** argv) {
             float3 dir = p - org;
 
             // Create ray
-            primary.rays.id[cur + i] = cur + i;
-            primary.rays.org_x[cur + i] = org.x;
-            primary.rays.org_y[cur + i] = org.y;
-            primary.rays.org_z[cur + i] = org.z;
-            primary.rays.dir_x[cur + i] = dir.x;
-            primary.rays.dir_y[cur + i] = dir.y;
-            primary.rays.dir_z[cur + i] = dir.z;
-            primary.rays.tmin[cur + i] = 0.0f;
-            primary.rays.tmax[cur + i] = std::numeric_limits<float>::max();
+            primary_in.rays.id[cur + i] = cur + i;
+            primary_in.rays.org_x[cur + i] = org.x;
+            primary_in.rays.org_y[cur + i] = org.y;
+            primary_in.rays.org_z[cur + i] = org.z;
+            primary_in.rays.dir_x[cur + i] = dir.x;
+            primary_in.rays.dir_y[cur + i] = dir.y;
+            primary_in.rays.dir_z[cur + i] = dir.z;
+            primary_in.rays.tmin[cur + i] = 0.0f;
+            primary_in.rays.tmax[cur + i] = std::numeric_limits<float>::max();
 
-            primary.geom_id[cur + i] = geom;
-            primary.prim_id[cur + i] = prim_id;
-            primary.t[cur + i] = 1.0f;
-            primary.u[cur + i] = u;
-            primary.v[cur + i] = v;
-            primary.rnd[cur + i] = 33 * geom + i;
-            primary.mis[cur + i] = 0.5f;
-            primary.contrib_r[cur + i] = 1.0f;
-            primary.contrib_g[cur + i] = 1.0f;
-            primary.contrib_b[cur + i] = 1.0f;
-            primary.depth[cur + i] = 0;
+            primary_in.geom_id[cur + i] = geom;
+            primary_in.prim_id[cur + i] = prim_id;
+            primary_in.t[cur + i] = 1.0f;
+            primary_in.u[cur + i] = u;
+            primary_in.v[cur + i] = v;
+            primary_in.rnd[cur + i] = 33 * geom + i;
+            primary_in.mis[cur + i] = 0.5f;
+            primary_in.contrib_r[cur + i] = 1.0f;
+            primary_in.contrib_g[cur + i] = 1.0f;
+            primary_in.contrib_b[cur + i] = 1.0f;
+            primary_in.depth[cur + i] = 0;
         }
     }
-    primary.size = ends[num_geometries - 1];
-    anydsl::copy(primary_data, tmp_data);
+    primary_in.size = num_rays;
+    if (!sorted) {
+        std::vector<size_t> ids(num_rays);
+        std::iota(ids.begin(), ids.end(), 0);
+        std::shuffle(ids.begin(), ids.end(), gen);
+        for (size_t i = 0; i < num_rays; ++i) {
+            primary_out.rays.org_x[i] = primary_in.rays.org_x[ids[i]];
+            primary_out.rays.org_y[i] = primary_in.rays.org_y[ids[i]];
+            primary_out.rays.org_z[i] = primary_in.rays.org_z[ids[i]];
+            primary_out.rays.dir_x[i] = primary_in.rays.dir_x[ids[i]];
+            primary_out.rays.dir_y[i] = primary_in.rays.dir_y[ids[i]];
+            primary_out.rays.dir_z[i] = primary_in.rays.dir_z[ids[i]];
+            primary_out.rays.tmin[i]  = primary_in.rays.tmin[ids[i]];
+            primary_out.rays.tmax[i]  = primary_in.rays.tmax[ids[i]];
 
-    size_t num_iters = 1000;
+            primary_out.geom_id[i]    = primary_in.geom_id[ids[i]];
+            primary_out.prim_id[i]    = primary_in.prim_id[ids[i]];
+            primary_out.t[i]          = primary_in.t[ids[i]];
+            primary_out.u[i]          = primary_in.u[ids[i]];
+            primary_out.v[i]          = primary_in.v[ids[i]];
+            primary_out.rnd[i]        = primary_in.rnd[ids[i]];
+            primary_out.mis[i]        = primary_in.mis[ids[i]];
+            primary_out.contrib_r[i]  = primary_in.contrib_r[ids[i]];
+            primary_out.contrib_g[i]  = primary_in.contrib_g[ids[i]];
+            primary_out.contrib_b[i]  = primary_in.contrib_b[ids[i]];
+            primary_out.depth[i]      = primary_in.depth[ids[i]];
+        }
+        anydsl::copy(primary_out_data, primary_in_data);
+    }
+
+    size_t num_iters = 100;
+    size_t num_bench = 1000;
+    int64_t cpu_mhz = 4000;
     std::vector<uint64_t> us;
-    for (size_t iter = 0; iter < num_iters; ++iter) {
-        using namespace std::chrono;
-        auto start = high_resolution_clock::now();
-        cpu_bench_shading(&primary,
+    for (size_t i = 0; i < num_bench; ++i) {
+        auto start = __rdtsc();
+        cpu_bench_shading(
+            &primary_in,
+            &primary_out,
             (Vec3*)vertices.data(),
             (Vec3*)normals.data(),
             (Vec3*)face_normals.data(),
@@ -166,13 +203,13 @@ int main(int argc, char** argv) {
             height,
             begins.data(),
             ends.data(),
-            2
+            2,
+            num_iters
         );
-        auto end = high_resolution_clock::now();
-        us.push_back(duration_cast<microseconds>(end - start).count());
-        anydsl::copy(tmp_data, primary_data);
+        auto end = __rdtsc();
+        us.push_back((end - start) / cpu_mhz);
     }
     std::sort(us.begin(), us.end());
-    std::cout << double(num_rays) / double(us[us.size() / 2]) << " Mrays/s" << std::endl;
+    std::cout << double(num_rays * num_iters) / double(us[us.size()/2]) << " Mrays/s" << std::endl;
     return 0;
 }

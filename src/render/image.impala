@@ -68,8 +68,8 @@ fn @make_bilinear_filter() -> ImageFilter {
         let y0 = math.min(v as i32, img.height - 1);
         let x1 = math.min(x0 + 1, img.width  - 1);
         let y1 = math.min(y0 + 1, img.height - 1);
-        let kx = u - math.floorf(u);
-        let ky = v - math.floorf(v);
+        let kx = u - (u as i32 as f32);
+        let ky = v - (v as i32 as f32);
 
         let p00 = img.pixels(x0, y0);
         let p10 = img.pixels(x1, y0);

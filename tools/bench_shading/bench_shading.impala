@@ -1,8 +1,26 @@
 static vector_width = 8;
 static num_geoms = 4;
 static offset = 0.0001f;
+static sorted = true;
+static specialized = true;
 
-extern fn cpu_bench_shading( primary: &PrimaryStream
+fn @iterate_rays(primary: &PrimaryStream, begins: &[i32], ends: &[i32], num_geoms: i32, body: fn(i32, i32) -> ()) -> () {
+    if sorted & specialized {
+        for geom_id in unroll(0, num_geoms) {
+            let (begin, end) = (begins(geom_id), ends(geom_id));
+            for i, vector_width in vectorized_range(vector_width, begin, end) {
+                @@body(i, geom_id);
+            }
+        }
+    } else {
+        for i, vector_width in vectorized_range(vector_width, begins(0), ends(num_geoms - 1)) {
+            @@body(i, primary.geom_id(i))
+        }
+    }
+}
+
+extern fn cpu_bench_shading( primary_in: &PrimaryStream
+                           , primary_out: &PrimaryStream
                            , vertices: &[Vec3]
                            , normals: &[Vec3]
                            , face_normals: &[Vec3]
@@ -13,12 +31,13 @@ extern fn cpu_bench_shading( primary: &PrimaryStream
                            , height: i32
                            , begins: &[i32]
                            , ends: &[i32]
-                           , num_tris: i32) -> () {
-    let read_primary_ray    = make_ray_stream_reader(primary.rays, 1);
-    let read_primary_hit    = make_primary_stream_hit_reader(*primary, 1);
-    let read_primary_state  = make_primary_stream_state_reader(*primary, 1);
-    let write_primary_ray   = make_ray_stream_writer(primary.rays, 1);
-    let write_primary_state = make_primary_stream_state_writer(*primary, 1);
+                           , num_tris: i32
+                           , num_iters: i32) -> () {
+    let read_primary_ray    = make_ray_stream_reader(primary_in.rays, 1);
+    let read_primary_hit    = make_primary_stream_hit_reader(*primary_in, 1);
+    let read_primary_state  = make_primary_stream_state_reader(*primary_in, 1);
+    let write_primary_ray   = make_ray_stream_writer(primary_out.rays, 1);
+    let write_primary_state = make_primary_stream_state_writer(*primary_out, 1);
 
     let math = cpu_intrinsics;
 
@@ -26,31 +45,23 @@ extern fn cpu_bench_shading( primary: &PrimaryStream
 
     fn @shader(geom_id: i32, surf: SurfaceElement) -> Material {
         let texture = make_texture(math, make_repeat_border(), make_bilinear_filter(), image);
-        let kd = match geom_id {
-            0_ => make_color(0.0f, 1.0f, 0.0f),
-            1 => texture(vec4_to_2(surf.attr(0))),
-            2 => make_color(0.0f, 0.0f, 1.0f),
-            _ => texture(vec2_add(vec4_to_2(surf.attr(0)), make_vec2(0.5f, 0.5f)))
+        let kd = if geom_id & 1 == 0 {
+            make_color(0.0f, 1.0f, 0.0f)
+        } else {
+            texture(vec4_to_2(surf.attr(0)))
         };
         let diffuse = make_diffuse_bsdf(math, surf, kd);
-        let (ks, ns) = match geom_id {
-            0 => (make_color(0.0f, 1.0f, 0.0f), 96.0f),
-            1 => {
-                let ks = texture(vec4_to_2(surf.attr(0)));
-                (ks, ks.r)
-            },
-            2 => {
-                let ks = texture(vec4_to_2(surf.attr(0)));
-                let ns = texture(vec2_add(vec4_to_2(surf.attr(0)), make_vec2(0.5f, 0.5f)));
-                (ks, ns.r)
-            },
-            _ => (make_color(0.0f, 0.0f, 1.0f), 12.0f)
+        let (ks, ns) = if geom_id & 2 == 0 {
+            (make_color(0.0f, 1.0f, 0.0f), 96.0f)
+        } else {
+            (texture(vec4_to_2(surf.attr(0))), 12.0f)
         };
         let specular = make_phong_bsdf(math, surf, ks, ns);
         let lum_ks = color_luminance(ks);
         let lum_kd = color_luminance(kd);
-        let bsdf = make_mix_bsdf(diffuse, specular, lum_ks / (lum_ks + lum_kd));
-        make_material(specular)
+        let k = select(lum_ks + lum_kd == 0.0f, 0.0f, lum_ks / (lum_ks + lum_kd));
+        let bsdf = make_mix_bsdf(diffuse, specular, k);
+        make_material(bsdf)
     }
 
     let tri_mesh = TriMesh {
@@ -65,13 +76,11 @@ extern fn cpu_bench_shading( primary: &PrimaryStream
 
     let path_tracer = make_path_tracing_renderer(20, 4);
 
-    for geom_id in unroll(0, num_geoms) {
-        let (begin, end) = (begins(geom_id), ends(geom_id));
-        for i, vector_width in vectorized_range(vector_width, begin, end) {
+    for iter in range(0, num_iters) {
+        for i, geom_id in iterate_rays(primary_in, begins, ends, num_geoms) {
             let ray       = read_primary_ray(i, 0);
             let hit       = read_primary_hit(i, 0);
             let mut state = read_primary_state(i, 0);
-            let ray_id    = primary.rays.id(i);
 
             let geom = make_tri_mesh_geometry(math, tri_mesh, @ |_, _, surf| shader(geom_id, surf));
             let surf = geom.surface_element(ray, hit);

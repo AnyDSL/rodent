@@ -880,7 +880,8 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
                 os << "{\n"
                    << "            let lum_ks = color_luminance(ks);\n"
                    << "            let lum_kd = color_luminance(kd);\n"
-                   << "            make_mix_bsdf(diffuse, specular, lum_ks / (lum_ks + lum_kd))\n"
+                   << "            let k = select(lum_ks + lum_kd == 0.0f, 0.0f, lum_ks / (lum_ks + lum_kd));\n"
+                   << "            make_mix_bsdf(diffuse, specular, k)\n"
                    << "        };\n";
             } else if (has_diffuse || has_specular) {
                 if (has_specular) os << "specular;\n";
