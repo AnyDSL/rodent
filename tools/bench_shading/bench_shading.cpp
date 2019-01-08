@@ -184,8 +184,8 @@ int main(int argc, char** argv) {
         anydsl::copy(primary_out_data, primary_in_data);
     }
 
-    size_t num_iters = 100;
-    size_t num_bench = 1000;
+    size_t num_iters = 1000;
+    size_t num_bench = 100;
     int64_t cpu_mhz = 4000;
     std::vector<uint64_t> us;
     for (size_t i = 0; i < num_bench; ++i) {

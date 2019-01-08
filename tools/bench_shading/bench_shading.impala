@@ -5,7 +5,7 @@ static sorted = true;
 static specialized = true;
 
 fn @iterate_rays(primary: &PrimaryStream, begins: &[i32], ends: &[i32], num_geoms: i32, body: fn(i32, i32) -> ()) -> () {
-    if sorted & specialized {
+    if ?num_geoms & sorted & specialized {
         for geom_id in unroll(0, num_geoms) {
             let (begin, end) = (begins(geom_id), ends(geom_id));
             for i, vector_width in vectorized_range(vector_width, begin, end) {
@@ -73,8 +73,6 @@ extern fn cpu_bench_shading( primary_in: &PrimaryStream
         num_attrs:    1,
         num_tris:     num_tris
     };
-
-    let path_tracer = make_path_tracing_renderer(20, 4);
 
     for iter in range(0, num_iters) {
         for i, geom_id in iterate_rays(primary_in, begins, ends, num_geoms) {
