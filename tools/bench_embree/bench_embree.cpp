@@ -383,8 +383,8 @@ int main(int argc, char** argv) {
     size_t ray_count = 0;
     if (single_ray) {
         bool rays_loaded = any_hit
-            ? load_rays(ray_file, rays1, tmin, tmax, false)
-            : load_rays(ray_file, rayhits1, tmin, tmax, false);
+            ? load_rays(ray_file, rays1, tmin, tmax, anydsl::Platform::Host, anydsl::Device(0))
+            : load_rays(ray_file, rayhits1, tmin, tmax, anydsl::Platform::Host, anydsl::Device(0));
         if (!rays_loaded) {
             std::cerr << "Cannot load rays" << std::endl;
             return 1;
@@ -405,8 +405,8 @@ int main(int argc, char** argv) {
         };
     } else if (ray_width == 4) {
         bool rays_loaded = any_hit
-            ? load_rays(ray_file, rays4, tmin, tmax, false)
-            : load_rays(ray_file, rayhits4, tmin, tmax, false);
+            ? load_rays(ray_file, rays4, tmin, tmax, anydsl::Platform::Host, anydsl::Device(0))
+            : load_rays(ray_file, rayhits4, tmin, tmax, anydsl::Platform::Host, anydsl::Device(0));
         if (!rays_loaded) {
             std::cerr << "Cannot load rays" << std::endl;
             return 1;
@@ -431,8 +431,8 @@ int main(int argc, char** argv) {
         };
     } else {
         bool rays_loaded = any_hit
-            ? load_rays(ray_file, rays8, tmin, tmax, false)
-            : load_rays(ray_file, rayhits8, tmin, tmax, false);
+            ? load_rays(ray_file, rays8, tmin, tmax, anydsl::Platform::Host, anydsl::Device(0))
+            : load_rays(ray_file, rayhits8, tmin, tmax, anydsl::Platform::Host, anydsl::Device(0));
         if (!rays_loaded) {
             std::cerr << "Cannot load rays" << std::endl;
             return 1;

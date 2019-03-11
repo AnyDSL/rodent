@@ -95,13 +95,13 @@ int main(int argc, char** argv) {
 
     anydsl::Array<Node2> nodes;
     anydsl::Array<Tri1>  tris;
-    if (!load_bvh(bvh_file, nodes, tris, BvhType::BVH2_TRI1, false)) {
+    if (!load_bvh(bvh_file, nodes, tris, BvhType::BVH2_TRI1, anydsl::Platform::Host, anydsl::Device(0))) {
         std::cerr << "Cannot load BVH file" << std::endl;
         return 1;
     }
 
     anydsl::Array<Ray1> rays;
-    if (!load_rays(ray_file, rays, tmin, tmax, false)) {
+    if (!load_rays(ray_file, rays, tmin, tmax, anydsl::Platform::Host, anydsl::Device(0))) {
         std::cerr << "Cannot load rays" << std::endl;
         return 1;
     }
