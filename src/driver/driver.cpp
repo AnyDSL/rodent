@@ -235,7 +235,7 @@ int main(int argc, char** argv) {
 #ifdef DISABLE_GUI
     info("Running in console-only mode (compiled with -DDISABLE_GUI).");
     if (bench_iter == 0) {
-        warn("Benchmark iterations no set. Defaulting to 1.");
+        warn("Benchmark iterations not set. Defaulting to 1.");
         bench_iter = 1;
     }
 #else

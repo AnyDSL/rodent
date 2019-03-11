@@ -59,7 +59,8 @@ template <typename Ray>
 inline bool load_rays(const std::string& filename,
                       anydsl::Array<Ray>& rays,
                       float tmin, float tmax,
-                      bool use_gpu) {
+                      anydsl::Platform platform,
+                      anydsl::Device device) {
     std::ifstream in(filename, std::ifstream::binary);
     if (!in) return false;
 
@@ -81,8 +82,8 @@ inline bool load_rays(const std::string& filename,
         }
     }
 
-    if (use_gpu) {
-        rays = std::move(anydsl::Array<Ray>(anydsl::Platform::Cuda, anydsl::Device(0), ray_count));
+    if (platform != anydsl::Platform::Host) {
+        rays = std::move(anydsl::Array<Ray>(platform, device, ray_count));
         anydsl::copy(host_rays, rays);
     } else {
         rays = std::move(host_rays);

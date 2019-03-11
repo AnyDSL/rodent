@@ -48,7 +48,8 @@ inline bool load_bvh(const std::string& filename,
                      anydsl::Array<Node>& nodes,
                      anydsl::Array<Tri>& tris,
                      BvhType bvh_type,
-                     bool use_gpu) {
+                     anydsl::Platform platform,
+                     anydsl::Device device) {
     std::ifstream in(filename, std::ifstream::binary);
     if (!in || !detail::check_header(in) || !detail::locate_block(in, bvh_type))
         return false;
@@ -60,9 +61,9 @@ inline bool load_bvh(const std::string& filename,
     in.read((char*)host_nodes.data(), sizeof(Node) * header.node_count);
     in.read((char*)host_tris.data(),  sizeof(Tri)  * header.tri_count);
 
-    if (use_gpu) {
-        nodes = std::move(anydsl::Array<Node>(anydsl::Platform::Cuda, anydsl::Device(0), header.node_count));
-        tris  = std::move(anydsl::Array<Tri >(anydsl::Platform::Cuda, anydsl::Device(0), header.tri_count ));
+    if (platform != anydsl::Platform::Host) {
+        nodes = std::move(anydsl::Array<Node>(platform, device, header.node_count));
+        tris  = std::move(anydsl::Array<Tri >(platform, device, header.tri_count ));
         anydsl::copy(host_nodes, nodes);
         anydsl::copy(host_tris,  tris);
     } else {

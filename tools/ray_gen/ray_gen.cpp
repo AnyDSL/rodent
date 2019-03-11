@@ -134,7 +134,7 @@ inline void usage() {
 static bool extract_bounds(const std::string& bvh_file, BBox& bounds) {
     anydsl::Array<Node4> nodes;
     anydsl::Array<Tri4>  tris;
-    if (!load_bvh(bvh_file, nodes, tris, BvhType::BVH4_TRI4, false)) return false;
+    if (!load_bvh(bvh_file, nodes, tris, BvhType::BVH4_TRI4, anydsl::Platform::Host, anydsl::Device(0))) return false;
     bounds = BBox::empty();
     for (int i = 0; i < 4; i++) {
         bounds.min = min(bounds.min, float3(nodes[0].bounds[0][i], nodes[0].bounds[2][i], nodes[0].bounds[4][i]));
@@ -180,7 +180,7 @@ int main(int argc, char** argv) {
         output = argv[9];
 
         anydsl::Array<Ray1> rays;
-        if (!load_rays(ray_file, rays, 0.0f, 1.0f, false)) {
+        if (!load_rays(ray_file, rays, 0.0f, 1.0f, anydsl::Platform::Host, anydsl::Device(0))) {
             std::cerr << "Cannot load rays" << std::endl;
             return 1;
         }

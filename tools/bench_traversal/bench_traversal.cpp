@@ -9,6 +9,12 @@
 #include "load_bvh.h"
 #include "load_rays.h"
 
+enum class Target {
+    CPU,
+    NVVM,
+    AMDGPU
+};
+
 inline void check_argument(int i, int argc, char** argv) {
     if (i + 1 >= argc) {
         std::cerr << "Missing argument for " << argv[i] << std::endl;
@@ -25,7 +31,8 @@ inline void usage() {
                  "           --tmax            Sets the maximum distance along the rays (default: 1e9)\n"
                  "           --bench           Sets the number of benchmark iterations (default: 1)\n"
                  "           --warmup          Sets the number of warmup iterations (default: 0)\n"
-                 "  -gpu                       Runs the traversal on the GPU (disabled by default)\n"
+                 "  -gpu     --gpu-platform    Runs the traversal on the given GPU platform (disabled by default)\n"
+                 "  -dev     --gpu-device      Runs the traversal on the given GPU device (disabled by default)\n"
                  "  -any                       Exits at the first intersection (disabled by default)\n"
                  "  -s       --single          Uses only single rays on the CPU (incompatible with --packet, disabled by default)\n"
                  "  -p       --packet          Uses only packets of rays on the CPU (incompatible with --single, disabled by default)\n"
@@ -114,10 +121,15 @@ static double bench_cpu_single(Node4* nodes, Tri4* tris, Ray1* rays, Hit1* hits,
     return (t1 - t0) / 1000.0;
 }
 
-static double bench_gpu(Node2* nodes, Tri1* tris, Ray1* rays, Hit1* hits, size_t n, bool any_hit) {
+static double bench_gpu(Node2* nodes, Tri1* tris, Ray1* rays, Hit1* hits, size_t n, bool any_hit, Target target, int32_t dev) {
     auto t0 = anydsl_get_kernel_time();
-    if (any_hit) nvvm_occluded_single_ray1_bvh2_tri1(nodes, tris, rays, hits, n);
-    else         nvvm_intersect_single_ray1_bvh2_tri1(nodes, tris, rays, hits, n);
+    if (target == Target::AMDGPU) {
+        if (any_hit) amdgpu_occluded_single_ray1_bvh2_tri1(dev, nodes, tris, rays, hits, n);
+        else         amdgpu_intersect_single_ray1_bvh2_tri1(dev, nodes, tris, rays, hits, n);
+    } else {
+        if (any_hit) nvvm_occluded_single_ray1_bvh2_tri1(dev, nodes, tris, rays, hits, n);
+        else         nvvm_intersect_single_ray1_bvh2_tri1(dev, nodes, tris, rays, hits, n);
+    }
     auto t1 = anydsl_get_kernel_time();
     return (t1 - t0) / 1000.0;
 }
@@ -129,7 +141,8 @@ int main(int argc, char** argv) {
     float tmin = 0.0f, tmax = 1e9f;
     int iters = 1;
     int warmup = 0;
-    bool use_gpu = false;
+    int dev = 0;
+    auto target = Target::CPU;
     bool any_hit = false;
     int bvh_width = 4;
     int ray_width = 8;
@@ -160,7 +173,19 @@ int main(int argc, char** argv) {
                 check_argument(i, argc, argv);
                 warmup = strtol(argv[++i], nullptr, 10);
             } else if (!strcmp(arg, "-gpu")) {
-                use_gpu = true;
+                check_argument(i, argc, argv);
+                if (!strcmp(argv[i + 1], "amdgpu")) {
+                    target = Target::AMDGPU;
+                } else if (!strcmp(argv[i + 1], "nvvm")) {
+                    target = Target::NVVM;
+                } else {
+                    std::cerr << "Unknown GPU platform '" << argv[i + 1] << "'" << std::endl;
+                    return 1;
+                }
+                ++i;
+            } else if (!strcmp(arg, "-dev")) {
+                check_argument(i, argc, argv);
+                dev = strtol(argv[++i], nullptr, 10);
             } else if (!strcmp(arg, "-any")) {
                 any_hit = true;
             } else if (!strcmp(arg, "-s") || !strcmp(arg, "--single")) {
@@ -184,6 +209,13 @@ int main(int argc, char** argv) {
             std::cerr << "Invalid argument '" << arg << "'" << std::endl;
             return 1;
         }
+    }
+    bool use_gpu = target == Target::NVVM || target == Target::AMDGPU;
+    auto platform = anydsl::Platform::Host;
+    auto device = anydsl::Device(dev);
+    switch (target) {
+        case Target::AMDGPU: platform = anydsl::Platform::HSA;  break;
+        case Target::NVVM:   platform = anydsl::Platform::Cuda; break;
     }
 
     if (bvh_file == "") {
@@ -219,17 +251,17 @@ int main(int argc, char** argv) {
     anydsl::Array<Tri4>  tris4;
 
     if (use_gpu) {
-        if (!load_bvh(bvh_file, nodes2, tris1, BvhType::BVH2_TRI1, true)) {
+        if (!load_bvh(bvh_file, nodes2, tris1, BvhType::BVH2_TRI1, platform, device)) {
             std::cerr << "Cannot load BVH file" << std::endl;
             return 1;
         }
     } else if (bvh_width == 4) {
-        if (!load_bvh(bvh_file, nodes4, tris4, BvhType::BVH4_TRI4, false)) {
+        if (!load_bvh(bvh_file, nodes4, tris4, BvhType::BVH4_TRI4, platform, device)) {
             std::cerr << "Cannot load BVH file" << std::endl;
             return 1;
         }
     } else {
-        if (!load_bvh(bvh_file, nodes8, tris4, BvhType::BVH8_TRI4, false)) {
+        if (!load_bvh(bvh_file, nodes8, tris4, BvhType::BVH8_TRI4, platform, device)) {
             std::cerr << "Cannot load BVH file" << std::endl;
             return 1;
         }
@@ -240,19 +272,19 @@ int main(int argc, char** argv) {
     anydsl::Array<Ray8> rays8;
     size_t ray_count = 0;
     if (use_gpu || single) {
-        if (!load_rays(ray_file, rays1, tmin, tmax, use_gpu)) {
+        if (!load_rays(ray_file, rays1, tmin, tmax, platform, device)) {
             std::cerr << "Cannot load rays" << std::endl;
             return 1;
         }
         ray_count = rays1.size();
     } else if (ray_width == 4) {
-        if (!load_rays(ray_file, rays4, tmin, tmax, false)) {
+        if (!load_rays(ray_file, rays4, tmin, tmax, platform, device)) {
             std::cerr << "Cannot load rays" << std::endl;
             return 1;
         }
         ray_count = rays4.size() * 4;
     } else {
-        if (!load_rays(ray_file, rays8, tmin, tmax, false)) {
+        if (!load_rays(ray_file, rays8, tmin, tmax, platform, device)) {
             std::cerr << "Cannot load rays" << std::endl;
             return 1;
         }
@@ -265,7 +297,7 @@ int main(int argc, char** argv) {
     anydsl::Array<Hit4> hits4;
     anydsl::Array<Hit8> hits8;
     if (use_gpu || single) {
-        hits1 = std::move(anydsl::Array<Hit1>(use_gpu ? anydsl::Platform::Cuda : anydsl::Platform::Host, anydsl::Device(0), rays1.size()));
+        hits1 = std::move(anydsl::Array<Hit1>(platform, device, rays1.size()));
     } else if (ray_width == 4) {
         hits4 = std::move(anydsl::Array<Hit4>(rays4.size()));
     } else {
@@ -273,7 +305,7 @@ int main(int argc, char** argv) {
     }
 
     std::function<double()> bench;
-    if (use_gpu) bench = [&] { return bench_gpu(nodes2.data(), tris1.data(), rays1.data(), hits1.data(), ray_count, any_hit); };
+    if (use_gpu) bench = [&] { return bench_gpu(nodes2.data(), tris1.data(), rays1.data(), hits1.data(), ray_count, any_hit, target, dev); };
     else if (bvh_width == 4) {
         if (single) bench = [&] { return bench_cpu_single(nodes4.data(), tris4.data(), rays1.data(), hits1.data(), rays1.size(), any_hit); };
         else if (packet) {
