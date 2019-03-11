@@ -50,14 +50,14 @@ fn @make_gpu_bvh2_tri1(nodes: &[Node2], tris: &[Tri1], is_nvvm: bool) -> Bvh {
             let prim_id = bitcast[i32](tri2(3));
             let geom_id = bitcast[i32](tri1(3));
             Prim {
-                intersect: @ |_, math, mask, ray| {
+                intersect: @ |_, math, ray, no_hit| {
                     let v0  = make_vec3(tri0(0), tri0(1), tri0(2));
                     let e1  = make_vec3(tri1(0), tri1(1), tri1(2));
                     let e2  = make_vec3(tri2(0), tri2(1), tri2(2));
                     let n   = vec3_cross(e1, e2);
                     let tri = make_tri(v0, e1, e2, n);
-                    let (mask, t, u, v) = intersect_ray_tri(math, false /*backface_culling*/, mask, ray, tri);
-                    (mask, make_hit(geom_id, prim_id & 0x7FFFFFFF, t, make_vec2(u, v)))
+                    let (t, u, v) = intersect_ray_tri(math, false /*backface_culling*/, ray, tri, no_hit);
+                    make_hit(geom_id, prim_id & 0x7FFFFFFF, t, make_vec2(u, v))
                 },
                 is_valid: @ |_| true,
                 is_last: prim_id < 0,
@@ -109,7 +109,7 @@ fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
 
         let mut mask = 0;
         let small_stack = make_small_stack(bvh.arity);
-        for k in unroll(0, bvh.arity) @{
+        for k in unroll(0, bvh.arity) {
             let (t0, t1) = intersect_ray_box(min_max, false, ray, node.bbox(k));
             if t0 <= t1 {
                 mask |= 1 << k;
@@ -162,11 +162,9 @@ fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
                 for k in unroll(0, prim.size) @{
                     if !prim.is_valid(k) { break() }
 
-                    let (was_hit, prim_hit) = prim.intersect(k, gpu_intrinsics, true /*mask*/, ray);
-                    if was_hit {
-                        hit = prim_hit;
-                        ray.tmax = prim_hit.distance;
-                    }
+                    let prim_hit = prim.intersect(k, gpu_intrinsics, ray, continue);
+                    hit = prim_hit;
+                    ray.tmax = prim_hit.distance;
 
                     if any_hit && hit.prim_id >= 0 { early_exit() }
                 }

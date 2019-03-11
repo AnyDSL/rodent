@@ -23,17 +23,17 @@ struct Node8 {
 
 fn @make_cpu_tri4(tris: &[Tri4]) -> fn (i32) -> Prim {
     @ |j| Prim {
-        intersect: @ |i, math, mask, ray| {
+        intersect: @ |i, math, ray, no_hit| {
             let tri_ptr = rv_align(&tris(j) as &i8, 32) as &Tri4;
             let v0  = make_vec3(tri_ptr.v0(0)(i), tri_ptr.v0(1)(i), tri_ptr.v0(2)(i));
             let e1  = make_vec3(tri_ptr.e1(0)(i), tri_ptr.e1(1)(i), tri_ptr.e1(2)(i));
             let e2  = make_vec3(tri_ptr.e2(0)(i), tri_ptr.e2(1)(i), tri_ptr.e2(2)(i));
             let n   = make_vec3(tri_ptr.n (0)(i), tri_ptr.n (1)(i), tri_ptr.n (2)(i));
             let tri = make_tri(v0, e1, e2, n);
-            let (mask, t, u, v) = intersect_ray_tri(math, false /*backface_culling*/, mask, ray, tri);
+            let (t, u, v) = intersect_ray_tri(math, false /*backface_culling*/, ray, tri, no_hit);
             let prim_id = tri_ptr.prim_id(i) & 0x7FFFFFFF;
             let geom_id = tri_ptr.geom_id(i);
-            (mask, make_hit(geom_id, prim_id, t, make_vec2(u, v)))
+            make_hit(geom_id, prim_id, t, make_vec2(u, v))
         },
         is_valid: @ |i| tris(j).prim_id(i) != -1,
         is_last: tris(j).prim_id(3) < 0,
@@ -228,19 +228,17 @@ fn @cpu_traverse_single_helper( mut ray: Ray
 
                 // Intersect primitives
                 for j in vectorize(prim.size) {
-                    let (was_hit, prim_hit) = prim.intersect(j, cpu_intrinsics, prim.is_valid(j) /*mask*/, ray);
+                    if !prim.is_valid(j) { continue() }
+                    let prim_hit = prim.intersect(j, cpu_intrinsics, ray, continue);
                     if any_hit {
                         // Early exit mode
-                        let mask = rv_ballot(was_hit);
-                        if mask != 0 {
-                            let lane = cpu_ctz32(mask, true);
-                            hit = extract_hit(prim_hit, lane);
-                            terminated = true;
-                        }
-                    } else if rv_any(was_hit) {
-                        let found_t = select(was_hit, prim_hit.distance, flt_max);
-                        let min_t = cpu_reduce(found_t, prim.size, min_max.fminf);
-                        let lane = cpu_index_of(found_t, min_t);
+                        let lane = cpu_ctz32(rv_ballot(true), true);
+                        hit = extract_hit(prim_hit, lane);
+                        terminated = true;
+                    } else {
+                        let hit_distance = select(rv_mask(), prim_hit.distance, flt_max);
+                        let min_distance = cpu_reduce(hit_distance, prim.size, min_max.fminf);
+                        let lane = cpu_index_of(hit_distance, min_distance);
                         hit = extract_hit(prim_hit, lane);
                         ray.tmax = hit.distance;
                     }
@@ -363,16 +361,17 @@ fn @cpu_traverse_hybrid_helper( mut ray: Ray
                 for i in range(0, prim.size) {
                     if unlikely(!prim.is_valid(i)) { break() }
 
-                    let (was_hit, prim_hit) = prim.intersect(i, cpu_intrinsics, active /*mask*/, ray);
-                    if was_hit {
-                        hit = prim_hit;
-                        ray.tmax = prim_hit.distance;
+                    if active {
+                        for once() {
+                            hit = prim.intersect(i, cpu_intrinsics, ray, break);
+                            ray.tmax = hit.distance;
+                            if any_hit {
+                                terminated = true;
+                                active = false;
+                            }
+                        }
                     }
-                    if any_hit {
-                        terminated |= was_hit;
-                        if unlikely(rv_all(terminated)) { exit() }
-                        active &= !was_hit;
-                    }
+                    if any_hit && unlikely(rv_all(terminated)) { exit() }
                 }
 
                 // Sentinel test

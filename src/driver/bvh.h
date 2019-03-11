@@ -114,7 +114,7 @@ public:
         const size_t tri_count = tris.size();
 
         Ref* initial_refs = mem_pool_.alloc<Ref>(tri_count);
-        right_bbs_ = mem_pool_.alloc<BBox>(std::max(spatial_bins, tri_count));
+        right_bbs_ = mem_pool_.alloc<BBox>(std::max(spatial_bins(), tri_count));
         BBox mesh_bb = BBox::empty();
         for (size_t i = 0; i < tri_count; i++) {
             const Tri& tri = tris[i];
@@ -258,8 +258,8 @@ public:
 #endif
 
 private:
-    static constexpr size_t spatial_bins = 96;
-    static constexpr size_t binning_passes = 2;
+    static constexpr size_t spatial_bins() { return 96; }
+    static constexpr size_t binning_passes() { return 2; }
 
     struct Ref {
         uint32_t id;
@@ -446,20 +446,20 @@ private:
         float axis_min = parent_bb.min[axis];
         float axis_max = parent_bb.max[axis];
         assert(axis_max > axis_min);
-        Bin bins[spatial_bins];
+        Bin bins[spatial_bins()];
         size_t n = 0;
 
         do {
             if (axis_max <= axis_min) break;
 
-            size_t split_index = spatial_binning(bins, spatial_bins, split, tris, axis, refs, ref_count, axis_min, axis_max);
+            size_t split_index = spatial_binning(bins, spatial_bins(), split, tris, axis, refs, ref_count, axis_min, axis_max);
             if (split_index == size_t(-1)) break;
 
-            float bin_size = (axis_max - axis_min) / spatial_bins;
+            float bin_size = (axis_max - axis_min) / spatial_bins();
             axis_min = split.position - bin_size;
             axis_max = split.position + bin_size;
             n++;
-        } while (n < binning_passes);
+        } while (n < binning_passes());
     }
 
     void apply_spatial_split(const SpatialSplit& split,
