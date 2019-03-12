@@ -108,7 +108,7 @@ int main(int argc, char** argv) {
 #endif
 
     int bvh2_nodes = build_bvh2(out, tri_mesh);
-    if (!bvh4_nodes) {
+    if (!bvh2_nodes) {
         std::cerr << "Cannot build a BVH2" << std::endl;
         return 1;
     }
