@@ -13,7 +13,8 @@ if (PNG_FOUND)
     add_subdirectory(fbuf2png)
 endif()
 
+add_subdirectory(bvh_extractor)
+
 if (EMBREE_FOUND)
-    add_subdirectory(bvh_extractor)
     add_subdirectory(bench_embree)
 endif()

@@ -7,8 +7,10 @@
 #include "driver/file_path.h"
 #include "driver/bvh.h"
 
+#ifdef ENABLE_EMBREE_BVH
 int build_bvh8(std::ofstream&, const obj::TriMesh&);
 int build_bvh4(std::ofstream&, const obj::TriMesh&);
+#endif
 int build_bvh2(std::ofstream&, const obj::TriMesh&);
 
 inline void check_argument(int i, int argc, char** argv) {
@@ -85,6 +87,7 @@ int main(int argc, char** argv) {
     uint32_t magic = 0x95CBED1F;
     out.write((char*)&magic, sizeof(uint32_t));
 
+#ifdef ENABLE_EMBREE_BVH
     int bvh8_nodes = build_bvh8(out, tri_mesh);
     if (!bvh8_nodes) {
         std::cerr << "Cannot build a BVH8 using Embree" << std::endl;
@@ -100,6 +103,9 @@ int main(int argc, char** argv) {
     }
 
     std::cout << "BVH4 successfully built (" << bvh4_nodes << " nodes)" << std::endl;
+#else
+    std::cout << "Warning: Compiled withouth Embree. The extractor will only build a GPU BVH." << std::endl;
+#endif
 
     int bvh2_nodes = build_bvh2(out, tri_mesh);
     if (!bvh4_nodes) {
