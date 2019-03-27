@@ -1,4 +1,8 @@
+#if EMBREE_VERSION == 3
 #include <embree3/rtcore.h>
+#else
+#include <embree2/rtcore.h>
+#endif
 
 #include <kernels/bvh/bvh.h>
 #include <kernels/geometry/triangle.h>
@@ -19,6 +23,7 @@ struct BvhFromArity<8> {
 };
 
 static void error_handler(void*, const RTCError code, const char* str) {
+#if EMBREE_VERSION == 3
     if (code == RTC_ERROR_NONE)
         return;
 
@@ -32,6 +37,21 @@ static void error_handler(void*, const RTCError code, const char* str) {
         case RTC_ERROR_CANCELLED:         std::cerr << "RTC_ERROR_CANCELLED";         break;
         default:                          std::cerr << "invalid error code";          break;
     }
+#else
+    if (code == RTC_NO_ERROR)
+        return;
+
+    std::cerr << "Embree error: ";
+    switch (code) {
+        case RTC_UNKNOWN_ERROR:     std::cerr << "RTC_UNKNOWN_ERROR";       break;
+        case RTC_INVALID_ARGUMENT:  std::cerr << "RTC_INVALID_ARGUMENT";    break;
+        case RTC_INVALID_OPERATION: std::cerr << "RTC_INVALID_OPERATION";   break;
+        case RTC_OUT_OF_MEMORY:     std::cerr << "RTC_OUT_OF_MEMORY";       break;
+        case RTC_UNSUPPORTED_CPU:   std::cerr << "RTC_UNSUPPORTED_CPU";     break;
+        case RTC_CANCELLED:         std::cerr << "RTC_CANCELLED";           break;
+        default:                    std::cerr << "invalid error code";      break;
+    }
+#endif
 
     if (str) std::cerr << " (" << str << ")";
     std::cerr << std::endl;
@@ -153,6 +173,7 @@ bool build_embree_bvh(const obj::TriMesh& tri_mesh, std::vector<BvhNode>& new_no
 
     const char* init = N == 4 ? "tri_accel=bvh4.triangle4" : "tri_accel=bvh8.triangle4";
     auto device = rtcNewDevice(init);
+#if EMBREE_VERSION == 3
     error_handler(nullptr, rtcGetDeviceError(device), "");
     rtcSetDeviceErrorFunction(device, error_handler, nullptr);
 
@@ -179,6 +200,31 @@ bool build_embree_bvh(const obj::TriMesh& tri_mesh, std::vector<BvhNode>& new_no
     rtcAttachGeometry(scene, mesh);
     rtcReleaseGeometry(mesh);
     rtcCommitScene(scene);
+#else
+    error_handler(nullptr, rtcDeviceGetError(device), "");
+    rtcDeviceSetErrorFunction2(device, error_handler, nullptr);
+
+    auto scene = rtcDeviceNewScene(device, RTC_SCENE_STATIC, RTC_INTERSECT8 | RTC_INTERSECT4 | RTC_INTERSECT1);
+    auto mesh = rtcNewTriangleMesh(scene, RTC_GEOMETRY_STATIC, tri_mesh.indices.size() / 4, tri_mesh.vertices.size());
+    auto vertices = (float*)rtcMapBuffer(scene, mesh, RTC_VERTEX_BUFFER);
+    for (size_t i = 0; i < tri_mesh.vertices.size(); i++) {
+        auto& v = tri_mesh.vertices[i];
+        vertices[4 * i +  0] = v.x;
+        vertices[4 * i +  1] = v.y;
+        vertices[4 * i +  2] = v.z;
+        vertices[4 * i +  3] = 1.0f;
+    }
+    rtcUnmapBuffer(scene, mesh, RTC_VERTEX_BUFFER);
+
+    auto indices = (int*)rtcMapBuffer(scene, mesh, RTC_INDEX_BUFFER);
+    for (size_t i = 0, j = 0; i < tri_mesh.indices.size(); i += 4, j += 3) {
+        indices[j + 0] = tri_mesh.indices[i + 0];
+        indices[j + 1] = tri_mesh.indices[i + 1];
+        indices[j + 2] = tri_mesh.indices[i + 2];
+    }
+    rtcUnmapBuffer(scene, mesh, RTC_INDEX_BUFFER);
+    rtcCommit(scene);
+#endif
 
     Bvh* bvh = nullptr;
     AccelData* accel = ((Accel*)scene)->intersectors.ptr;
@@ -192,7 +238,12 @@ bool build_embree_bvh(const obj::TriMesh& tri_mesh, std::vector<BvhNode>& new_no
     new_nodes.emplace_back();
     extract_bvh_node<N, 4, Bvh>(tri_mesh, bvh->root, 0, new_nodes, new_tris);
 
+#if EMBREE_VERSION == 3
     rtcReleaseScene(scene);
     rtcReleaseDevice(device);
+#else
+    rtcDeleteScene(scene);
+    rtcDeleteDevice(device);
+#endif
     return true;
 }

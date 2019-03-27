@@ -3,14 +3,14 @@ import subprocess
 
 iters = "50"
 warmups = "10"
-bench_rodent = "../build/bin/bench_traversal"
-bench_embree = "../build/bin/bench_embree"
+bench_rodent = "../build_embree2/bin/bench_traversal"
+bench_embree = "../build_embree2/bin/bench_embree"
 variants = [
-    "--bvh-width 4",
-    "--bvh-width 4 -p",
+    "--ray-width 8 --bvh-width 4",
+    "--ray-width 8 --bvh-width 4 -p",
     "--bvh-width 4 -s",
-    "--bvh-width 8",
-    "--bvh-width 8 -p",
+    "--ray-width 8 --bvh-width 8",
+    "--ray-width 8 --bvh-width 8 -p",
     "--bvh-width 8 -s"
 ]
 scenes = [

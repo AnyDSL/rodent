@@ -7,8 +7,13 @@
 #include <cstring>
 #include <functional>
 
+#if EMBREE_VERSION == 3
 #include <embree3/rtcore.h>
 #include <embree3/rtcore_ray.h>
+#else
+#include <embree2/rtcore.h>
+#include <embree2/rtcore_ray.h>
+#endif
 #include <common/math/vec3.h>
 #include <common/math/vec3fa.h>
 
@@ -19,6 +24,7 @@
 #include "driver/tri.h"
 #include "load_rays.h"
 
+#if EMBREE_VERSION == 3
 template <>
 struct RayTraits<RTCRay> {
     enum { RayPerPacket = 1 };
@@ -138,6 +144,67 @@ struct RayTraits<RTCRayHit8> {
             ray.hit.instID[i][j] = RTC_INVALID_GEOMETRY_ID;
     }
 };
+#else
+template <>
+struct RayTraits<RTCRay> {
+    enum { RayPerPacket = 1 };
+    static void write_ray(const float* org_dir, float tmin, float tmax, int j, RTCRay& ray) {
+        ray.org[0] = org_dir[0];
+        ray.org[1] = org_dir[1];
+        ray.org[2] = org_dir[2];
+        ray.tnear = tmin;
+        ray.dir[0] = org_dir[3];
+        ray.dir[1] = org_dir[4];
+        ray.dir[2] = org_dir[5];
+        ray.tfar = tmax;
+        ray.mask = 0xFFFFFFFF;
+        ray.time = 0.0f;
+        ray.geomID = RTC_INVALID_GEOMETRY_ID;
+        ray.primID = RTC_INVALID_GEOMETRY_ID;
+        ray.instID = RTC_INVALID_GEOMETRY_ID;
+    }
+};
+
+template <>
+struct RayTraits<RTCRay4> {
+    enum { RayPerPacket = 4 };
+    static void write_ray(const float* org_dir, float tmin, float tmax, int j, RTCRay4& ray) {
+        ray.orgx[j] = org_dir[0];
+        ray.orgy[j] = org_dir[1];
+        ray.orgz[j] = org_dir[2];
+        ray.tnear[j] = tmin;
+        ray.dirx[j] = org_dir[3];
+        ray.diry[j] = org_dir[4];
+        ray.dirz[j] = org_dir[5];
+        ray.tfar[j] = tmax;
+        ray.mask[j] = 0xFFFFFFFF;
+        ray.time[j] = 0.0f;
+        ray.geomID[j] = RTC_INVALID_GEOMETRY_ID;
+        ray.primID[j] = RTC_INVALID_GEOMETRY_ID;
+        ray.instID[j] = RTC_INVALID_GEOMETRY_ID;
+    }
+};
+
+template <>
+struct RayTraits<RTCRay8> {
+    enum { RayPerPacket = 8 };
+    static void write_ray(const float* org_dir, float tmin, float tmax, int j, RTCRay8& ray) {
+        ray.orgx[j] = org_dir[0];
+        ray.orgy[j] = org_dir[1];
+        ray.orgz[j] = org_dir[2];
+        ray.tnear[j] = tmin;
+        ray.dirx[j] = org_dir[3];
+        ray.diry[j] = org_dir[4];
+        ray.dirz[j] = org_dir[5];
+        ray.tfar[j] = tmax;
+        ray.mask[j] = 0xFFFFFFFF;
+        ray.time[j] = 0.0f;
+        ray.geomID[j] = RTC_INVALID_GEOMETRY_ID;
+        ray.primID[j] = RTC_INVALID_GEOMETRY_ID;
+        ray.instID[j] = RTC_INVALID_GEOMETRY_ID;
+    }
+};
+#endif
 
 inline void check_argument(int i, int argc, char** argv) {
     if (i + 1 >= argc) {
@@ -187,13 +254,19 @@ double intersect_scene(const anydsl::Array<RayType>& rays, anydsl::Array<RayType
     anydsl::copy(rays, hits);
 
     auto t0 = high_resolution_clock::now();
+#if EMBREE_VERSION == 3
     for (int i = 0; i < rays.size(); i++)
         f(args..., &hits[i]);
+#else
+    for (int i = 0; i < rays.size(); i++)
+        f(args..., hits[i]);
+#endif
     auto t1 = high_resolution_clock::now();
     return duration_cast<microseconds>(t1 - t0).count() * 1.0e-3;
 }
 
 static void error_handler(void*, const RTCError code, const char* str) {
+#if EMBREE_VERSION == 3
     if (code == RTC_ERROR_NONE)
         return;
 
@@ -207,6 +280,21 @@ static void error_handler(void*, const RTCError code, const char* str) {
         case RTC_ERROR_CANCELLED:         std::cerr << "RTC_ERROR_CANCELLED";         break;
         default:                          std::cerr << "invalid error code";          break;
     }
+#else
+    if (code == RTC_NO_ERROR)
+        return;
+
+    std::cerr << "Embree error: ";
+    switch (code) {
+        case RTC_UNKNOWN_ERROR:     std::cerr << "RTC_UNKNOWN_ERROR";       break;
+        case RTC_INVALID_ARGUMENT:  std::cerr << "RTC_INVALID_ARGUMENT";    break;
+        case RTC_INVALID_OPERATION: std::cerr << "RTC_INVALID_OPERATION";   break;
+        case RTC_OUT_OF_MEMORY:     std::cerr << "RTC_OUT_OF_MEMORY";       break;
+        case RTC_UNSUPPORTED_CPU:   std::cerr << "RTC_UNSUPPORTED_CPU";     break;
+        case RTC_CANCELLED:         std::cerr << "RTC_CANCELLED";           break;
+        default:                    std::cerr << "invalid error code";      break;
+    }
+#endif
 
     if (str) std::cerr << " (" << str << ")";
     std::cerr << std::endl;
@@ -215,13 +303,19 @@ static void error_handler(void*, const RTCError code, const char* str) {
 }
 
 void bench(int N, const std::vector<Tri>& tris,
+#if EMBREE_VERSION == 3
            std::function<double(RTCScene, RTCIntersectContext*)> iter_fn,
+#else
+           std::function<double(RTCScene)> iter_fn,
+#endif
            std::function<size_t()> count_hits,
            int iters, int warmup,
            size_t num_rays) {
     using namespace embree;
 
     auto device = rtcNewDevice(N == 4 ? "tri_accel=bvh4.triangle4" : "tri_accel=bvh8.triangle4");
+
+#if EMBREE_VERSION == 3
     error_handler(nullptr, rtcGetDeviceError(device), "");
     rtcSetDeviceErrorFunction(device, error_handler, nullptr);
 
@@ -264,6 +358,44 @@ void bench(int N, const std::vector<Tri>& tris,
     std::vector<double> timings(iters);
     for (int i = 0; i < warmup; i++) iter_fn(scene, &context);
     for (int i = 0; i < iters ; i++) timings[i] = iter_fn(scene, &context);
+#else
+    error_handler(nullptr, rtcDeviceGetError(device), "");
+    rtcDeviceSetErrorFunction2(device, error_handler, nullptr);
+
+    auto scene = rtcDeviceNewScene(device, RTC_SCENE_STATIC, RTC_INTERSECT8 | RTC_INTERSECT4 | RTC_INTERSECT1);
+    auto mesh = rtcNewTriangleMesh(scene, RTC_GEOMETRY_STATIC, tris.size(), tris.size() * 3);
+    auto vertices = (float*)rtcMapBuffer(scene, mesh, RTC_VERTEX_BUFFER);
+    for (int i = 0; i < tris.size(); i++) {
+        vertices[12 * i + 0] = tris[i].v0.x;
+        vertices[12 * i + 1] = tris[i].v0.y;
+        vertices[12 * i + 2] = tris[i].v0.z;
+        vertices[12 * i + 3] = 1.0f;
+
+        vertices[12 * i + 4] = tris[i].v1.x;
+        vertices[12 * i + 5] = tris[i].v1.y;
+        vertices[12 * i + 6] = tris[i].v1.z;
+        vertices[12 * i + 7] = 1.0f;
+
+        vertices[12 * i +  8] = tris[i].v2.x;
+        vertices[12 * i +  9] = tris[i].v2.y;
+        vertices[12 * i + 10] = tris[i].v2.z;
+        vertices[12 * i + 11] = 1.0f;
+    }
+    rtcUnmapBuffer(scene, mesh, RTC_VERTEX_BUFFER);
+
+    auto triangles = (int*)rtcMapBuffer(scene, mesh, RTC_INDEX_BUFFER);
+    for (int i = 0; i < tris.size(); i++) {
+        triangles[i * 3 + 0] = i * 3 + 0;
+        triangles[i * 3 + 1] = i * 3 + 1;
+        triangles[i * 3 + 2] = i * 3 + 2;
+    }
+    rtcUnmapBuffer(scene, mesh, RTC_INDEX_BUFFER);
+    rtcCommit(scene);
+
+    std::vector<double> timings(iters);
+    for (int i = 0; i < warmup; i++) iter_fn(scene);
+    for (int i = 0; i < iters ; i++) timings[i] = iter_fn(scene);
+#endif
 
     size_t intr = count_hits();
 
@@ -279,8 +411,13 @@ void bench(int N, const std::vector<Tri>& tris,
     std::cout << "# Min: " << min << " ms" << std::endl;
     std::cout << intr << " intersection(s)" << std::endl;
 
+#if EMBREE_VERSION == 3
     rtcReleaseScene(scene);
     rtcReleaseDevice(device);
+#else
+    rtcDeleteScene(scene);
+    rtcDeleteDevice(device);
+#endif
 }
 
 int main(int argc, char** argv) {
@@ -368,54 +505,83 @@ int main(int argc, char** argv) {
     std::vector<Tri> tris;
     create_triangles(obj, tris);
 
+#if EMBREE_VERSION == 3
     anydsl::Array<RTCRayHit>  rayhits1, rayhits1_res;
     anydsl::Array<RTCRayHit4> rayhits4, rayhits4_res;
     anydsl::Array<RTCRayHit8> rayhits8, rayhits8_res;
+#endif
     anydsl::Array<RTCRay>  rays1, rays1_res;
     anydsl::Array<RTCRay4> rays4, rays4_res;
     anydsl::Array<RTCRay8> rays8, rays8_res;
 
     const int valid[8] alignas(32) = { -1, -1, -1, -1, -1, -1, -1, -1 };
-
+#if EMBREE_VERSION == 3
     std::function<double(RTCScene, RTCIntersectContext*)> iter_fn;
+#else
+    std::function<double(RTCScene)> iter_fn;
+#endif
     std::function<size_t()> count_hits;
 
     size_t ray_count = 0;
     if (single_ray) {
+#if EMBREE_VERSION == 3
         bool rays_loaded = any_hit
             ? load_rays(ray_file, rays1, tmin, tmax, anydsl::Platform::Host, anydsl::Device(0))
             : load_rays(ray_file, rayhits1, tmin, tmax, anydsl::Platform::Host, anydsl::Device(0));
+#else
+        bool rays_loaded = load_rays(ray_file, rays1, tmin, tmax, anydsl::Platform::Host, anydsl::Device(0));
+#endif
         if (!rays_loaded) {
             std::cerr << "Cannot load rays" << std::endl;
             return 1;
         }
-        ray_count = any_hit ? rays1.size() : rayhits1.size();
-        rays1_res    = std::move(anydsl::Array<RTCRay>(rays1.size()));
+        rays1_res = std::move(anydsl::Array<RTCRay>(rays1.size()));
+#if EMBREE_VERSION == 3
         rayhits1_res = std::move(anydsl::Array<RTCRayHit>(rayhits1.size()));
-        if (any_hit) iter_fn = [&] (RTCScene scene, RTCIntersectContext* context) { return intersect_scene(rays1, rays1_res, rtcOccluded1,  scene, context); };
+        if (any_hit) iter_fn = [&] (RTCScene scene, RTCIntersectContext* context) { return intersect_scene(rays1, rays1_res, rtcOccluded1, scene, context); };
         else         iter_fn = [&] (RTCScene scene, RTCIntersectContext* context) { return intersect_scene(rayhits1, rayhits1_res, rtcIntersect1, scene, context); };
+        ray_count = any_hit ? rays1.size() : rayhits1.size();
+#else
+        if (any_hit) iter_fn = [&] (RTCScene scene) { return intersect_scene(rays1, rays1_res, rtcOccluded,  scene); };
+        else         iter_fn = [&] (RTCScene scene) { return intersect_scene(rays1, rays1_res, rtcIntersect, scene); };
+        ray_count = rays1.size();
+#endif
         count_hits = [&] {
             size_t intr = 0;
             if (any_hit) {
                 for (auto hit : rays1_res) intr += hit.tfar < 0.0f;
             } else {
+#if EMBREE_VERSION == 3
                 for (auto hit : rayhits1_res) intr += hit.hit.geomID != RTC_INVALID_GEOMETRY_ID;
+#else
+                for (auto hit : rays1_res) intr += hit.geomID != RTC_INVALID_GEOMETRY_ID;
+#endif
             }
             return intr; 
         };
     } else if (ray_width == 4) {
+#if EMBREE_VERSION == 3
         bool rays_loaded = any_hit
             ? load_rays(ray_file, rays4, tmin, tmax, anydsl::Platform::Host, anydsl::Device(0))
             : load_rays(ray_file, rayhits4, tmin, tmax, anydsl::Platform::Host, anydsl::Device(0));
+#else
+        bool rays_loaded = load_rays(ray_file, rays4, tmin, tmax, anydsl::Platform::Host, anydsl::Device(0));
+#endif
         if (!rays_loaded) {
             std::cerr << "Cannot load rays" << std::endl;
             return 1;
         }
-        ray_count = (any_hit ? rays4.size() : rayhits4.size()) * 4;
-        rays4_res    = std::move(anydsl::Array<RTCRay4>(rays4.size()));
+        rays4_res = std::move(anydsl::Array<RTCRay4>(rays4.size()));
+#if EMBREE_VERSION == 3
         rayhits4_res = std::move(anydsl::Array<RTCRayHit4>(rayhits4.size()));
-        if (any_hit) iter_fn = [&] (RTCScene scene, RTCIntersectContext* context) { return intersect_scene(rays4, rays4_res, rtcOccluded4,  valid, scene, context); };
+        if (any_hit) iter_fn = [&] (RTCScene scene, RTCIntersectContext* context) { return intersect_scene(rays4, rays4_res, rtcOccluded4, valid, scene, context); };
         else         iter_fn = [&] (RTCScene scene, RTCIntersectContext* context) { return intersect_scene(rayhits4, rayhits4_res, rtcIntersect4, valid, scene, context); };
+        ray_count = (any_hit ? rays4.size() : rayhits4.size()) * 4;
+#else
+        if (any_hit) iter_fn = [&] (RTCScene scene) { return intersect_scene(rays4, rays4_res, rtcOccluded4,  valid, scene); };
+        else         iter_fn = [&] (RTCScene scene) { return intersect_scene(rays4, rays4_res, rtcIntersect4, valid, scene); };
+        ray_count = rays4.size() * 4;
+#endif
         count_hits = [&] {
             size_t intr = 0;
             if (any_hit) {
@@ -423,25 +589,41 @@ int main(int argc, char** argv) {
                     for (int i = 0; i < 4; i++) intr += hit.tfar[i] < 0.0f;
                 }
             } else {
+#if EMBREE_VERSION == 3
                 for (auto hit : rayhits4_res) {
                     for (int i = 0; i < 4; i++) intr += hit.hit.geomID[i] != RTC_INVALID_GEOMETRY_ID;
                 }
+#else
+                for (auto hit : rays4_res) {
+                    for (int i = 0; i < 4; i++) intr += hit.geomID[i] != RTC_INVALID_GEOMETRY_ID;
+                }
+#endif
             }
             return intr; 
         };
     } else {
+#if EMBREE_VERSION == 3
         bool rays_loaded = any_hit
             ? load_rays(ray_file, rays8, tmin, tmax, anydsl::Platform::Host, anydsl::Device(0))
             : load_rays(ray_file, rayhits8, tmin, tmax, anydsl::Platform::Host, anydsl::Device(0));
+#else
+        bool rays_loaded = load_rays(ray_file, rays8, tmin, tmax, anydsl::Platform::Host, anydsl::Device(0));
+#endif
         if (!rays_loaded) {
             std::cerr << "Cannot load rays" << std::endl;
             return 1;
         }
-        ray_count = (any_hit ? rays8.size() : rayhits8.size()) * 8;
-        rays8_res    = std::move(anydsl::Array<RTCRay8>(rays8.size()));
+        rays8_res = std::move(anydsl::Array<RTCRay8>(rays8.size()));
+#if EMBREE_VERSION == 3
         rayhits8_res = std::move(anydsl::Array<RTCRayHit8>(rayhits8.size()));
-        if (any_hit) iter_fn = [&] (RTCScene scene, RTCIntersectContext* context) { return intersect_scene(rays8, rays8_res, rtcOccluded8,  valid, scene, context); };
+        if (any_hit) iter_fn = [&] (RTCScene scene, RTCIntersectContext* context) { return intersect_scene(rays8, rays8_res, rtcOccluded8, valid, scene, context); };
         else         iter_fn = [&] (RTCScene scene, RTCIntersectContext* context) { return intersect_scene(rayhits8, rayhits8_res, rtcIntersect8, valid, scene, context); };
+        ray_count = (any_hit ? rays8.size() : rayhits8.size()) * 8;
+#else
+        if (any_hit) iter_fn = [&] (RTCScene scene) { return intersect_scene(rays8, rays8_res, rtcOccluded8,  valid, scene); };
+        else         iter_fn = [&] (RTCScene scene) { return intersect_scene(rays8, rays8_res, rtcIntersect8, valid, scene); };
+        ray_count = rays8.size() * 8;
+#endif
         count_hits = [&] {
             size_t intr = 0;
             if (any_hit) {
@@ -449,9 +631,15 @@ int main(int argc, char** argv) {
                     for (int i = 0; i < 8; i++) intr += hit.tfar[i] < 0.0f;
                 }
             } else {
+#if EMBREE_VERSION == 3
                 for (auto hit : rayhits8_res) {
                     for (int i = 0; i < 8; i++) intr += hit.hit.geomID[i] != RTC_INVALID_GEOMETRY_ID;
                 }
+#else
+                for (auto hit : rays8_res) {
+                    for (int i = 0; i < 8; i++) intr += hit.geomID[i] != RTC_INVALID_GEOMETRY_ID;
+                }
+#endif
             }
             return intr; 
         };
@@ -466,6 +654,7 @@ int main(int argc, char** argv) {
             return 1;
         }
         std::ofstream of(out_file, std::ofstream::binary);
+#if EMBREE_VERSION == 3
         if (single_ray) {
             for (auto& hit : rayhits1_res) of.write((char*)&hit.ray.tfar, sizeof(float));
         } else if (ray_width == 4) {
@@ -479,6 +668,21 @@ int main(int argc, char** argv) {
                     of.write((char*)&hit.ray.tfar[i], sizeof(float));
             }
         }
+#else
+        if (single_ray) {
+            for (auto& hit : rays1_res) of.write((char*)&hit.tfar, sizeof(float));
+        } else if (ray_width == 4) {
+            for (auto& hit : rays4_res) {
+                for (int i = 0; i < 4; i++)
+                    of.write((char*)&hit.tfar[i], sizeof(float));
+            }
+        } else {
+            for (auto& hit : rays8_res) {
+                for (int i = 0; i < 8; i++)
+                    of.write((char*)&hit.tfar[i], sizeof(float));
+            }
+        }
+#endif
     }
 
     return 0;

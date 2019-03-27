@@ -26,46 +26,69 @@ using Bvh4Tri4 = Bvh<Node4, Tri4>;
 using Bvh8Tri4 = Bvh<Node8, Tri4>;
 
 #ifdef ENABLE_EMBREE_DEVICE
+#if EMBREE_VERSION == 3
 #include <embree3/rtcore.h>
+#else
+#include <embree2/rtcore.h>
+#include <embree2/rtcore_ray.h>
+#endif
 
 template <int N>
 struct EmbreeIntersect {};
 
 template <>
 struct EmbreeIntersect<8> {
+#if EMBREE_VERSION == 3
     static void intersect(const int* valid, RTCScene scene, RTCRayHitNt<8>& ray_hit, bool coherent) {
         RTCIntersectContext context;
         context.flags = coherent ? RTC_INTERSECT_CONTEXT_FLAG_COHERENT : RTC_INTERSECT_CONTEXT_FLAG_INCOHERENT;
         context.filter = NULL;
         context.instID[0] = RTC_INVALID_GEOMETRY_ID;
         rtcIntersect8(valid, scene, &context, reinterpret_cast<RTCRayHit8*>(&ray_hit));
+#else
+    static void intersect(const int* valid, RTCScene scene, RTCRayNt<8>& ray, bool coherent) {
+        rtcIntersect8(valid, scene, reinterpret_cast<RTCRay8&>(ray));
+#endif
     }
 
     static void occluded(const int* valid, RTCScene scene, RTCRayNt<8>& ray) {
+#if EMBREE_VERSION == 3
         RTCIntersectContext context;
         context.flags = RTC_INTERSECT_CONTEXT_FLAG_INCOHERENT;
         context.filter = NULL;
         context.instID[0] = RTC_INVALID_GEOMETRY_ID;
         rtcOccluded8(valid, scene, &context, reinterpret_cast<RTCRay8*>(&ray));
+#else
+        rtcOccluded8(valid, scene, reinterpret_cast<RTCRay8&>(ray));
+#endif
     }
 };
 
 template <>
 struct EmbreeIntersect<4> {
+#if EMBREE_VERSION == 3
     static void intersect(const int* valid, RTCScene scene, RTCRayHitNt<4>& ray_hit, bool coherent) {
         RTCIntersectContext context;
         context.flags = coherent ? RTC_INTERSECT_CONTEXT_FLAG_COHERENT : RTC_INTERSECT_CONTEXT_FLAG_INCOHERENT;
         context.filter = NULL;
         context.instID[0] = RTC_INVALID_GEOMETRY_ID;
         rtcIntersect4(valid, scene, &context, reinterpret_cast<RTCRayHit4*>(&ray_hit));
+#else
+    static void intersect(const int* valid, RTCScene scene, RTCRayNt<4>& ray, bool coherent) {
+        rtcIntersect4(valid, scene, reinterpret_cast<RTCRay4&>(ray));
+#endif
     }
 
     static void occluded(const int* valid, RTCScene scene, RTCRayNt<4>& ray) {
+#if EMBREE_VERSION == 3
         RTCIntersectContext context;
         context.flags = RTC_INTERSECT_CONTEXT_FLAG_INCOHERENT;
         context.filter = NULL;
         context.instID[0] = RTC_INVALID_GEOMETRY_ID;
         rtcOccluded4(valid, scene, &context, reinterpret_cast<RTCRay4*>(&ray));
+#else
+        rtcOccluded4(valid, scene, reinterpret_cast<RTCRay4&>(ray));
+#endif
     }
 };
 
@@ -76,20 +99,39 @@ struct EmbreeDevice {
     RTCScene scene;
 
     static void error_handler(void*, const RTCError code, const char* str) {
+#if EMBREE_VERSION == 3
         if (code == RTC_ERROR_NONE)
             return;
-        std::cerr << "Embree error ";
+
+        std::cerr << "Embree error: ";
         switch (code) {
-            case RTC_ERROR_UNKNOWN:             std::cerr << "RTC_ERROR_UNKNOWN"; break;
-            case RTC_ERROR_INVALID_ARGUMENT:    std::cerr << "RTC_ERROR_INVALID_ARGUMENT"; break;
-            case RTC_ERROR_INVALID_OPERATION:   std::cerr << "RTC_ERROR_INVALID_OPERATION"; break;
-            case RTC_ERROR_OUT_OF_MEMORY:       std::cerr << "RTC_ERROR_OUT_OF_MEMORY"; break;
-            case RTC_ERROR_UNSUPPORTED_CPU:     std::cerr << "RTC_ERROR_UNSUPPORTED_CPU"; break;
-            case RTC_ERROR_CANCELLED:           std::cerr << "RTC_ERROR_CANCELLED"; break;
-            default: break;
+            case RTC_ERROR_UNKNOWN:           std::cerr << "RTC_ERROR_UNKNOWN";           break;
+            case RTC_ERROR_INVALID_ARGUMENT:  std::cerr << "RTC_ERROR_INVALID_ARGUMENT";  break;
+            case RTC_ERROR_INVALID_OPERATION: std::cerr << "RTC_ERROR_INVALID_OPERATION"; break;
+            case RTC_ERROR_OUT_OF_MEMORY:     std::cerr << "RTC_ERROR_OUT_OF_MEMORY";     break;
+            case RTC_ERROR_UNSUPPORTED_CPU:   std::cerr << "RTC_ERROR_UNSUPPORTED_CPU";   break;
+            case RTC_ERROR_CANCELLED:         std::cerr << "RTC_ERROR_CANCELLED";         break;
+            default:                          std::cerr << "invalid error code";          break;
         }
-        if (str) std::cerr << ": " << str;
+#else
+        if (code == RTC_NO_ERROR)
+            return;
+
+        std::cerr << "Embree error: ";
+        switch (code) {
+            case RTC_UNKNOWN_ERROR:     std::cerr << "RTC_UNKNOWN_ERROR";       break;
+            case RTC_INVALID_ARGUMENT:  std::cerr << "RTC_INVALID_ARGUMENT";    break;
+            case RTC_INVALID_OPERATION: std::cerr << "RTC_INVALID_OPERATION";   break;
+            case RTC_OUT_OF_MEMORY:     std::cerr << "RTC_OUT_OF_MEMORY";       break;
+            case RTC_UNSUPPORTED_CPU:   std::cerr << "RTC_UNSUPPORTED_CPU";     break;
+            case RTC_CANCELLED:         std::cerr << "RTC_CANCELLED";           break;
+            default:                    std::cerr << "invalid error code";      break;
+        }
+#endif
+
+        if (str) std::cerr << " (" << str << ")";
         std::cerr << std::endl;
+
         abort();
     }
 
@@ -103,6 +145,7 @@ struct EmbreeDevice {
         device = rtcNewDevice(nullptr);
         if (!device)
             error("Cannot initialize Embree");
+#if EMBREE_VERSION == 3
         rtcSetDeviceErrorFunction(device, error_handler, nullptr);
         auto mesh = rtcNewGeometry(device, RTC_GEOMETRY_TYPE_TRIANGLE);
         scene = rtcNewScene(device);
@@ -117,15 +160,36 @@ struct EmbreeDevice {
         rtcCommitGeometry(mesh);
         rtcAttachGeometry(scene, mesh);
         rtcCommitScene(scene);
-
+#else
+        scene = rtcDeviceNewScene(device, RTC_SCENE_STATIC, RTC_INTERSECT8 | RTC_INTERSECT4 | RTC_INTERSECT1);
+        auto mesh = rtcNewTriangleMesh(scene, RTC_GEOMETRY_STATIC, indices.size() / 4, vertices.size());
+        auto vertex_ptr = (float4*)rtcMapBuffer(scene, mesh, RTC_VERTEX_BUFFER);
+        for (auto& v : vertices)
+            *(vertex_ptr++) = float4(v, 1.0f);
+        rtcUnmapBuffer(scene, mesh, RTC_VERTEX_BUFFER);
+        auto index_ptr = (int*)rtcMapBuffer(scene, mesh, RTC_INDEX_BUFFER);
+        for (size_t i = 0, j = 0; i < indices.size(); i += 4, j += 3) {
+            index_ptr[j + 0] = indices[i + 0];
+            index_ptr[j + 1] = indices[i + 1];
+            index_ptr[j + 2] = indices[i + 2];
+        }
+        rtcUnmapBuffer(scene, mesh, RTC_INDEX_BUFFER);
+        rtcCommit(scene);
+#endif
         info("Embree device initialized successfully");
     }
 
     ~EmbreeDevice() {
+#if EMBREE_VERSION == 3
         rtcReleaseScene(scene);
         rtcReleaseDevice(device);
+#else
+        rtcDeleteScene(scene);
+        rtcDeleteDevice(device);
+#endif
     }
 
+#if EMBREE_VERSION == 3
     template <int N>
     void load_ray(RTCRayHitNt<N>& ray_hit, const RayStream& rays, size_t i, size_t size) {
         size_t n = std::min(size, i + N);
@@ -148,11 +212,13 @@ struct EmbreeDevice {
             ray_hit.hit.geomID[k] = -1;
         }
     }
+#endif
 
     template <int N>
     void load_ray(RTCRayNt<N>& ray, const RayStream& rays, size_t i, size_t size) {
         size_t n = std::min(size, i + N);
         for (size_t j = i, k = 0; j < n; ++j, ++k) {
+#if EMBREE_VERSION == 3
             ray.org_x[k] = rays.org_x[j];
             ray.org_y[k] = rays.org_y[j];
             ray.org_z[k] = rays.org_z[j];
@@ -166,9 +232,27 @@ struct EmbreeDevice {
             ray.mask[k]  = 0xFFFFFFFF;
             ray.id[k]    = i;
             ray.flags[k] = 0;
+#else
+            ray.orgx[k] = rays.org_x[j];
+            ray.orgy[k] = rays.org_y[j];
+            ray.orgz[k] = rays.org_z[j];
+
+            ray.dirx[k] = rays.dir_x[j];
+            ray.diry[k] = rays.dir_y[j];
+            ray.dirz[k] = rays.dir_z[j];
+
+            ray.tnear[k] = rays.tmin[j];
+            ray.tfar[k]  = rays.tmax[j];
+            ray.mask[k]  = 0xFFFFFFFF;
+
+            ray.primID[k] = -1;
+            ray.geomID[k] = -1;
+            ray.instID[k] = -1;
+#endif
         }
     }
 
+#if EMBREE_VERSION == 3
     template <int N>
     void store_hit(const RTCRayHitNt<N>& ray_hit, PrimaryStream& primary, size_t i, int32_t invalid_id) {
         size_t n = std::min(primary.size, int32_t(i + N));
@@ -181,6 +265,7 @@ struct EmbreeDevice {
             primary.v[j]       = ray_hit.hit.v[k];
         }
     }
+#endif
 
     template <int N>
     void store_hit(const RTCRayNt<N>& ray, SecondaryStream& secondary, size_t i) {
@@ -190,10 +275,29 @@ struct EmbreeDevice {
         }
     }
 
+#if EMBREE_VERSION != 3
+    template <int N>
+    void store_hit(const RTCRayNt<N>& ray, PrimaryStream& primary, size_t i, int32_t invalid_id) {
+        size_t n = std::min(primary.size, int32_t(i + N));
+        for (size_t j = i, k = 0; j < n; ++j, ++k) {
+            auto prim_id = ray.primID[k];
+            primary.geom_id[j] = prim_id == RTC_INVALID_GEOMETRY_ID ? invalid_id : indices[prim_id * 4 + 3];
+            primary.prim_id[j] = prim_id;
+            primary.t[j]       = ray.tfar[k];
+            primary.u[j]       = ray.u[k];
+            primary.v[j]       = ray.v[k];
+        }
+    }
+#endif
+
     template <int N>
     void intersect(PrimaryStream& primary, int32_t invalid_id, bool coherent) {
         alignas(32) int valid[N];
+#if EMBREE_VERSION == 3
         alignas(32) RTCRayHitNt<N> ray_hit;
+#else
+        alignas(32) RTCRayNt<N> ray_hit;
+#endif
         memset(valid, 0xFF, sizeof(int) * N);
         for (size_t i = 0; i < primary.size; i += N) {
             load_ray(ray_hit, primary.rays, i, primary.size);

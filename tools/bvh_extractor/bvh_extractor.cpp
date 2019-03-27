@@ -104,7 +104,7 @@ int main(int argc, char** argv) {
 
     std::cout << "BVH4 successfully built (" << bvh4_nodes << " nodes)" << std::endl;
 #else
-    std::cout << "Warning: Compiled withouth Embree. The extractor will only build a GPU BVH." << std::endl;
+    std::cout << "Warning: Compiled without Embree. The extractor will only build a GPU BVH." << std::endl;
 #endif
 
     int bvh2_nodes = build_bvh2(out, tri_mesh);
