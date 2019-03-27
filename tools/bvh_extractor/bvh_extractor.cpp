@@ -8,10 +8,10 @@
 #include "driver/bvh.h"
 
 #ifdef ENABLE_EMBREE_BVH
-int build_bvh8(std::ofstream&, const obj::TriMesh&);
-int build_bvh4(std::ofstream&, const obj::TriMesh&);
+size_t build_bvh8(std::ofstream&, const obj::TriMesh&);
+size_t build_bvh4(std::ofstream&, const obj::TriMesh&);
 #endif
-int build_bvh2(std::ofstream&, const obj::TriMesh&);
+size_t build_bvh2(std::ofstream&, const obj::TriMesh&);
 
 inline void check_argument(int i, int argc, char** argv) {
     if (i + 1 >= argc) {
@@ -88,7 +88,7 @@ int main(int argc, char** argv) {
     out.write((char*)&magic, sizeof(uint32_t));
 
 #ifdef ENABLE_EMBREE_BVH
-    int bvh8_nodes = build_bvh8(out, tri_mesh);
+    auto bvh8_nodes = build_bvh8(out, tri_mesh);
     if (!bvh8_nodes) {
         std::cerr << "Cannot build a BVH8 using Embree" << std::endl;
         return 1;
@@ -96,7 +96,7 @@ int main(int argc, char** argv) {
 
     std::cout << "BVH8 successfully built (" << bvh8_nodes << " nodes)" << std::endl;
 
-    int bvh4_nodes = build_bvh4(out, tri_mesh);
+    auto bvh4_nodes = build_bvh4(out, tri_mesh);
     if (!bvh4_nodes) {
         std::cerr << "Cannot build a BVH4 using Embree" << std::endl;
         return 1;
@@ -107,7 +107,7 @@ int main(int argc, char** argv) {
     std::cout << "Compiled without Embree. Will only build a GPU BVH." << std::endl;
 #endif
 
-    int bvh2_nodes = build_bvh2(out, tri_mesh);
+    auto bvh2_nodes = build_bvh2(out, tri_mesh);
     if (!bvh2_nodes) {
         std::cerr << "Cannot build a BVH2" << std::endl;
         return 1;

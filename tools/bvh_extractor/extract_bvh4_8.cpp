@@ -23,16 +23,20 @@ void write_embree_bvh(std::ofstream& out, const std::vector<BvhNode>& nodes, con
     out.write((char*)tris.data(),  sizeof(BvhTri)  * tris.size());
 }
 
-void build_bvh4(std::ofstream& out, const obj::TriMesh& tri_mesh) {
+size_t build_bvh4(std::ofstream& out, const obj::TriMesh& tri_mesh) {
     std::vector<Node4> nodes;
     std::vector<Tri4> tris;
-    build_embree_bvh<4>(tri_mesh, nodes, tris);
+    if (!build_embree_bvh<4>(tri_mesh, nodes, tris))
+        return 0;
     write_embree_bvh<4>(out, nodes, tris);
+    return nodes.size();
 }
 
-void build_bvh8(std::ofstream& out, const obj::TriMesh& tri_mesh) {
+size_t build_bvh8(std::ofstream& out, const obj::TriMesh& tri_mesh) {
     std::vector<Node8> nodes;
     std::vector<Tri4> tris;
-    build_embree_bvh<8>(tri_mesh, nodes, tris);
+    if (!build_embree_bvh<8>(tri_mesh, nodes, tris))
+        return 0;
     write_embree_bvh<8>(out, nodes, tris);
+    return nodes.size();
 }
