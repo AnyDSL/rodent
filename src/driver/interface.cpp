@@ -1,5 +1,6 @@
 #include <unordered_map>
 #include <memory>
+#include <chrono>
 #include <cstring>
 #include <fstream>
 
@@ -666,8 +667,7 @@ int64_t clock_us() {
 #define CPU_FREQ 4e9
     return __rdtsc() * int64_t(1000000) / int64_t(CPU_FREQ);
 #else
-    using namespace chrono;
-    return duration_cast<microseconds>(high_resolution_clock::now().time_since_epoch());
+    return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
 #endif
 }
 

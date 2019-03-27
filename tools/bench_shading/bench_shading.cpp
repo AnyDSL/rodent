@@ -1,17 +1,29 @@
 #include <iostream>
+#include <chrono>
 #include <cstdint>
 #include <vector>
 #include <random>
 #include <limits>
 #include <algorithm>
 
+#if defined(__x86_64__) || defined(__amd64__) || defined(_M_X64)
 #include <x86intrin.h>
+#endif
 
 #include <anydsl_runtime.hpp>
 
 #include "float2.h"
 #include "float3.h"
 #include "shading.h"
+
+int64_t clock_us() {
+#if defined(__x86_64__) || defined(__amd64__) || defined(_M_X64)
+#define CPU_FREQ 4e9
+    return __rdtsc() * int64_t(1000000) / int64_t(CPU_FREQ);
+#else
+    return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+#endif
+}
 
 inline void get_ray_stream(RayStream& rays, float* ptr, size_t capacity) {
     rays.id = (int*)ptr + 0 * capacity;
@@ -42,7 +54,9 @@ inline void get_primary_stream(PrimaryStream& primary, float* ptr, size_t capaci
 }
 
 int main(int argc, char** argv) {
+#if defined(__x86_64__) || defined(__amd64__) || defined(_M_X64)
     _mm_setcsr(_mm_getcsr() | (_MM_FLUSH_ZERO_ON | _MM_DENORMALS_ZERO_ON));
+#endif
 
     std::vector<float3> vertices;
     std::vector<float3> normals;
@@ -189,7 +203,7 @@ int main(int argc, char** argv) {
     int64_t cpu_mhz = 4000;
     std::vector<uint64_t> us;
     for (size_t i = 0; i < num_bench; ++i) {
-        auto start = __rdtsc();
+        auto start = clock_us();
         cpu_bench_shading(
             &primary_in,
             &primary_out,
@@ -206,7 +220,7 @@ int main(int argc, char** argv) {
             2,
             num_iters
         );
-        auto end = __rdtsc();
+        auto end = clock_us();
         us.push_back((end - start) / cpu_mhz);
     }
     std::sort(us.begin(), us.end());
