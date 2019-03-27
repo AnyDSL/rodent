@@ -601,7 +601,7 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
         if (mat.map_ke != "") images.emplace(mat.map_ke, images.size()), has_map_ke = true;
     }
 
-    auto tri_mesh = compute_tri_mesh(obj_file, mtl_lib, 0);
+    auto tri_mesh = compute_tri_mesh(obj_file, 0);
     
     // Generate images
     std::vector<std::string> image_names(images.size());

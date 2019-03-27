@@ -409,7 +409,7 @@ static void compute_vertex_normals(const std::vector<uint32_t>& indices,
     }
 }
 
-TriMesh compute_tri_mesh(const File& obj_file, const MaterialLib& /*mtl_lib*/, size_t mtl_offset) {
+TriMesh compute_tri_mesh(const File& obj_file, size_t mtl_offset) {
     TriMesh tri_mesh;
 
     for (auto& obj: obj_file.objects) {

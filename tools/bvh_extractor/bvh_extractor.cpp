@@ -62,19 +62,11 @@ int main(int argc, char** argv) {
 
     FilePath path(obj_file);
     obj::File obj;
-    obj::MaterialLib mtl_lib;
     if (!load_obj(obj_file, obj)) {
         std::cerr << "Cannot load OBJ file" << std::endl;
         return 1;
     }
-    for (auto lib_name : obj.mtl_libs) {
-        auto mtl_name = path.base_name() + "/" + lib_name;
-        if (!obj::load_mtl(mtl_name, mtl_lib)) {
-            error("Invalid MTL file '", mtl_name, "'");
-            return false;
-        }
-    }
-    obj::TriMesh tri_mesh = compute_tri_mesh(obj, mtl_lib, 0);
+    obj::TriMesh tri_mesh = compute_tri_mesh(obj, 0);
 
     std::cout << "Loaded OBJ file with " << tri_mesh.indices.size() / 4 << " triangle(s)" << std::endl;
 
