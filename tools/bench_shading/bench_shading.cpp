@@ -221,7 +221,7 @@ int main(int argc, char** argv) {
             num_iters
         );
         auto end = clock_us();
-        us.push_back((end - start) / cpu_mhz);
+        us.push_back(end - start);
     }
     std::sort(us.begin(), us.end());
     std::cout << double(num_rays * num_iters) / double(us[us.size()/2]) << " Mrays/s" << std::endl;
