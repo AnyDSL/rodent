@@ -1,5 +1,6 @@
 set(EXTRACTOR_SRCS
     bvh_extractor.cpp
+    extract_bvh2.cpp
     ../../src/driver/obj.cpp
     ../../src/driver/obj.h
     ../../src/driver/bvh.h)
@@ -7,7 +8,6 @@ set(EXTRACTOR_SRCS
 if (EMBREE_FOUND)
     set(EXTRACTOR_SRCS ${EXTRACTOR_SRCS}
     extract_bvh4_8.cpp
-    extract_bvh2.cpp
     ../../src/driver/embree_bvh.h)
 endif ()
 

@@ -556,6 +556,22 @@ static size_t cleanup_obj(obj::File& obj_file, obj::MaterialLib& mtl_lib) {
     return num_complex;
 }
 
+static bool must_build_bvh(const std::string& name, Target target) {
+    std::ifstream bvh_stamp("data/bvh.stamp", std::fstream::in);
+    if (bvh_stamp) {
+        int bvh_target;
+        bvh_stamp >> bvh_target;
+        if (bvh_target != (int)target)
+            return true;
+        std::string bvh_name;
+        bvh_stamp >> bvh_name;
+        if (bvh_name != name)
+            return true;
+        return false;
+    }
+    return true;
+}
+
 static bool convert_obj(const std::string& file_name, Target target, size_t dev, size_t max_path_len, size_t spp, bool embree_bvh, bool fusion, std::ostream& os) {
     info("Converting OBJ file '", file_name, "'");
     obj::File obj_file;
@@ -696,32 +712,38 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
     write_tri_mesh(tri_mesh, enable_padding);
 
     // Generate BVHs
-    info("Generating BVH for '", file_name, "'");
-    std::remove("data/bvh.bin");
-    if (target == Target::NVVM_STREAMING   || target == Target::NVVM_MEGAKERNEL ||
-        target == Target::AMDGPU_STREAMING || target == Target::AMDGPU_MEGAKERNEL) {
-        std::vector<typename BvhNTriM<2, 1>::Node> nodes;
-        std::vector<typename BvhNTriM<2, 1>::Tri> tris;
-        build_bvh<2, 1>(tri_mesh, nodes, tris);
-        write_bvh(nodes, tris);
-    } else if (target == Target::GENERIC || target == Target::ASIMD || target == Target::SSE42) {
-        std::vector<typename BvhNTriM<4, 4>::Node> nodes;
-        std::vector<typename BvhNTriM<4, 4>::Tri> tris;
+    if (must_build_bvh(file_name, target)) {
+        info("Generating BVH for '", file_name, "'");
+        std::remove("data/bvh.bin");
+        if (target == Target::NVVM_STREAMING   || target == Target::NVVM_MEGAKERNEL ||
+            target == Target::AMDGPU_STREAMING || target == Target::AMDGPU_MEGAKERNEL) {
+            std::vector<typename BvhNTriM<2, 1>::Node> nodes;
+            std::vector<typename BvhNTriM<2, 1>::Tri> tris;
+            build_bvh<2, 1>(tri_mesh, nodes, tris);
+            write_bvh(nodes, tris);
+        } else if (target == Target::GENERIC || target == Target::ASIMD || target == Target::SSE42) {
+            std::vector<typename BvhNTriM<4, 4>::Node> nodes;
+            std::vector<typename BvhNTriM<4, 4>::Tri> tris;
 #ifdef ENABLE_EMBREE_BVH
-        if (embree_bvh) build_embree_bvh<4>(tri_mesh, nodes, tris);
-        else
+            if (embree_bvh) build_embree_bvh<4>(tri_mesh, nodes, tris);
+            else
 #endif
-        build_bvh<4, 4>(tri_mesh, nodes, tris);
-        write_bvh(nodes, tris);
+            build_bvh<4, 4>(tri_mesh, nodes, tris);
+            write_bvh(nodes, tris);
+        } else {
+            std::vector<typename BvhNTriM<8, 4>::Node> nodes;
+            std::vector<typename BvhNTriM<8, 4>::Tri> tris;
+#ifdef ENABLE_EMBREE_BVH
+            if (embree_bvh) build_embree_bvh<8>(tri_mesh, nodes, tris);
+            else
+#endif
+            build_bvh<8, 4>(tri_mesh, nodes, tris);
+            write_bvh(nodes, tris);
+        }
+        std::ofstream bvh_stamp("data/bvh.stamp");
+        bvh_stamp << int(target) << " " << file_name;
     } else {
-        std::vector<typename BvhNTriM<8, 4>::Node> nodes;
-        std::vector<typename BvhNTriM<8, 4>::Tri> tris;
-#ifdef ENABLE_EMBREE_BVH
-        if (embree_bvh) build_embree_bvh<8>(tri_mesh, nodes, tris);
-        else
-#endif
-        build_bvh<8, 4>(tri_mesh, nodes, tris);
-        write_bvh(nodes, tris);
+        info("Reusing existing BVH for '", file_name, "'");
     }
 
 

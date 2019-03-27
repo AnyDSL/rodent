@@ -46,7 +46,8 @@ struct PrimaryStream {
     contrib_g: &mut [f32],
     contrib_b: &mut [f32],
     depth: &mut [i32],
-    size: i32
+    size: i32,
+    pad: i32 // TODO: Needed for AMDGPU backend
 }
 
 struct SecondaryStream {
@@ -55,7 +56,8 @@ struct SecondaryStream {
     color_r: &mut [f32],
     color_g: &mut [f32],
     color_b: &mut [f32],
-    size: i32
+    size: i32,
+    pad: i32 // TODO: Needed for AMDGPU backend
 }
 
 fn @make_ray_stream_reader(rays: RayStream, vector_width: i32) -> fn (i32, i32) -> Ray {
