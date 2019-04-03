@@ -37,17 +37,17 @@ def main():
         {
             "title"    : "BVH4",
             "variants" : [
-                ("-w 4 -s", "Single"),
-                ("-w 4 -p", "Packet"),
-                ("-w 4",    "Hybrid")
+                ("--bvh-width 4 -s", "Single"),
+                ("--ray-width 8 --bvh-width 4 -p", "Packet"),
+                ("--ray-width 8 --bvh-width 4",    "Hybrid")
             ]
         },
         {
             "title"    : "BVH8",
             "variants" : [
-                ("-w 8 -s", "Single"),
-                ("-w 8 -p", "Packet"),
-                ("-w 8",    "Hybrid")
+                ("--bvh-width 8 -s", "Single"),
+                ("--ray-width 8 --bvh-width 8 -p", "Packet"),
+                ("--ray-width 8 --bvh-width 8",    "Hybrid")
             ]
         }
     ]
@@ -74,6 +74,7 @@ def main():
         print("% {}".format(title))
         for scene, scene_name in scenes:
             if len(variants) > 0:
+                print("\midrule")
                 print("\\multirow{{{}}}{{*}}{{{}}} & ".format(len(variants), scene_name), end="")
             else:
                 print("{} ".format(scene_name), end="")
