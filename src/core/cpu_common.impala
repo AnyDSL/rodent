@@ -5,6 +5,7 @@ extern "C" {
 }
 
 static cpu_profiling_enabled = false;
+static cpu_profiling_serial  = false;
 
 // Profiles the function given as argument
 fn @cpu_profile(counter: &mut i64, body: fn () -> ()) -> () {
@@ -12,7 +13,11 @@ fn @cpu_profile(counter: &mut i64, body: fn () -> ()) -> () {
         let start = clock_us();
         body();
         let end = clock_us();
-        atomic(1u32, counter, end - start);
+        if cpu_profiling_serial {
+            *counter += end - start;
+        } else {
+            atomic(1u32, counter, end - start);
+        }
     } else {
         body()
     }

@@ -33,7 +33,7 @@ ulimit -s 65536
 
 echo "Benchmarking device $1 on platform $2"
 
-BENCH_COMPILATION=true
+BENCH_COMPILATION=false
 echo "Building..."
 if $BENCH_COMPILATION ; then
     mkdir -p living_room && cd living_room && cmake ../../.. -DEMBREE_ROOT_DIR=${EMBREE_ROOT_DIR} -DAnyDSL_runtime_DIR=${ANYDSL_RUNTIME_DIR} -DCMAKE_BUILD_TYPE=Release -DMAX_PATH_LEN=20 -DSPP=4 -DTARGET_DEVICE=$1 -DTARGET_PLATFORM=$2 -DSCENE_FILE=${LIVING_ROOM_SCENE} -DDISABLE_GUI=ON -DMEGAKERNEL_FUSION=$FUSION && make -j convert driver && time make -j rodent && cd .. &&

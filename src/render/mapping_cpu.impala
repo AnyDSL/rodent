@@ -6,19 +6,29 @@ fn @cpu_parallel_tiles( width: i32
                       , tile_height: i32
                       , num_cores: i32
                       , body: fn (i32, i32, i32, i32) -> ()) -> () {
-    let num_tiles_x = round_up(width , tile_width)  / tile_width;
-    let num_tiles_y = round_up(height, tile_height) / tile_height;
-    let num_tiles = num_tiles_x * num_tiles_y;
-    let tiles_div = make_fast_div(num_tiles_x as u32);
 
-    for i in parallel(num_cores, 0, num_tiles) {
-        let y = fast_div(tiles_div, i as u32) as i32;
-        let x = i - num_tiles_x * y;
-        let xmin = x * tile_width;
-        let ymin = y * tile_height;
-        let xmax = cpu_intrinsics.min(xmin + tile_width,  width);
-        let ymax = cpu_intrinsics.min(ymin + tile_height, height);
-        @@body(xmin, ymin, xmax, ymax);
+    if cpu_profiling_enabled && cpu_profiling_serial {
+        for ymin in range_step(0, height, tile_height) {
+            for xmin in range_step(0, width, tile_width) {
+                let xmax = if xmin + tile_width  < width  { xmin + tile_width  } else { width  };
+                let ymax = if ymin + tile_height < height { ymin + tile_height } else { height };
+                @@body(xmin, ymin, xmax, ymax)
+            }
+        }
+    } else {
+        let num_tiles_x = round_up(width , tile_width)  / tile_width;
+        let num_tiles_y = round_up(height, tile_height) / tile_height;
+        let num_tiles = num_tiles_x * num_tiles_y;
+        let tiles_div = make_fast_div(num_tiles_x as u32);
+        for i in parallel(num_cores, 0, num_tiles) {
+            let y = fast_div(tiles_div, i as u32) as i32;
+            let x = i - num_tiles_x * y;
+            let xmin = x * tile_width;
+            let ymin = y * tile_height;
+            let xmax = cpu_intrinsics.min(xmin + tile_width,  width);
+            let ymax = cpu_intrinsics.min(ymin + tile_height, height);
+            @@body(xmin, ymin, xmax, ymax)
+        }
     }
 }
 
@@ -363,6 +373,7 @@ fn @cpu_trace( scene: Scene
     let mut shadow_counter  = 0i64;
     let mut shading_counter = 0i64;
     let mut total_counter   = 0i64;
+    let mut total_rays      = 0i64;
     for xmin, ymin, xmax, ymax in cpu_parallel_tiles(film_width, film_height, tile_size, tile_size, num_cores) {
         with cpu_profile(&mut total_counter) {
             // Get ray streams/states from the CPU driver
@@ -390,6 +401,7 @@ fn @cpu_trace( scene: Scene
                         cpu_traverse_primary(scene, min_max, primary, single, vector_width);
                     }
                 }
+                atomic(1u32, &mut total_rays, primary.size as i64);
 
                 // Sort hits by shader id, and filter invalid hits
                 let mut ray_begins : [i32 * 1024];
@@ -439,19 +451,24 @@ fn @cpu_trace( scene: Scene
     }
 
     if cpu_profiling_enabled {
-        fn print_counter(counter: i64, total: i64, name: &[u8]) -> () {
+        fn @print_counter(counter: i64, name: &[u8]) -> () {
             print_string(name);
             print_string(": ");
             print_i64(counter);
             print_string(" (");
-            print_i64(counter * 100i64 / total);
+            print_i64(counter * 100i64 / total_counter);
             print_string("%)\n");
         }
-        print_counter(primary_counter, total_counter, "primary");
-        print_counter(bounces_counter, total_counter, "bounces");
-        print_counter(shadow_counter,  total_counter, "shadow");
-        print_counter(shading_counter, total_counter, "shade");
-        print_counter(total_counter,   total_counter, "total");
+        let other_counter = total_counter - primary_counter - bounces_counter - shadow_counter - shading_counter;
+        print_counter(primary_counter, "primary");
+        print_counter(bounces_counter, "bounces");
+        print_counter(shadow_counter,  "shadow");
+        print_counter(shading_counter, "shade");
+        print_counter(other_counter,   "others");
+        print_counter(total_counter,   "total");
+        print_string("total rays: ");
+        print_i64(total_rays);
+        print_string("\n");
     }
 }
 

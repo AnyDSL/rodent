@@ -1,8 +1,8 @@
 #! /usr/bin/python3
 import subprocess
 
-iters = "50"
-warmups = "10"
+iters = "20"
+warmups = "5"
 bench_rodent = "../build_embree2/bin/bench_traversal"
 bench_embree = "../build_embree2/bin/bench_embree"
 variants = [

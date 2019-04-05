@@ -665,6 +665,7 @@ void rodent_present(int32_t dev) {
 int64_t clock_us() {
 #if defined(__x86_64__) || defined(__amd64__) || defined(_M_X64)
 #define CPU_FREQ 4e9
+    __asm__ __volatile__("xorl %%eax,%%eax \n    cpuid" ::: "%rax", "%rbx", "%rcx", "%rdx");
     return __rdtsc() * int64_t(1000000) / int64_t(CPU_FREQ);
 #else
     return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
