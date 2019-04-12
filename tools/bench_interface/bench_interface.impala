@@ -1,0 +1,123 @@
+static border_clamp    = 0u32;
+static border_repeat   = 1u32;
+static border_constant = 2u32;
+
+static sampler_nearest  = 0u32;
+static sampler_bilinear = 1u32;
+
+struct Tex {
+    pixels:  &[Color],
+    border_color: Color,
+    border:  u32,
+    sampler: u32,
+    width:   i32,
+    height:  i32
+}
+
+struct ShadedMesh {
+    vertices:  &[Vec3],
+    indices:   &[u32],
+    normals:   &[Vec3],
+    texcoords: &[Vec2],
+
+    tex_kd:    Tex,
+    tex_ks:    Tex,
+    tex_ns:    Tex
+}
+
+struct TriHit {
+    id: i32,
+    uv: Vec2    
+}
+
+struct ShaderInput {
+    point:       Vec3,
+    face_normal: Vec3,
+    normal:      Vec3,
+    uv_coords:   Vec2,
+    local:       Mat3x3,
+    kd:          Color,
+    ks:          Color,
+    ns:          f32
+}
+
+static math = cpu_intrinsics;
+static opt_interface = true;
+static opt_tex = true;
+
+extern fn @(opt) lookup_tex(opt: bool, tex: Tex, mut uv: Vec2) -> Color {
+    if tex.border == border_clamp {
+        let border = make_clamp_border();
+        uv.x = border.horz(math, uv.x);
+        uv.y = border.vert(math, uv.y);
+    } else if tex.border == border_repeat {
+        let border = make_repeat_border();
+        uv.x = border.horz(math, uv.x);
+        uv.y = border.vert(math, uv.y);
+    } else /* if tex.border == border_constant */ {
+        if uv.x < 0.0f || uv.x > 1.0f ||
+           uv.y < 0.0f || uv.y > 1.0f {
+            return(tex.border_color)
+        }
+    }
+    let image = make_image(|x, y| tex.pixels(x + y * tex.width), tex.width, tex.height);
+    if tex.sampler == sampler_nearest {
+            let filter = make_nearest_filter();
+            filter(math, image, uv)
+    } else /* if tex.sampler == sampler_bilinear */ {
+        let filter = make_bilinear_filter();
+        filter(math, image, uv)
+    }
+}
+
+extern fn @(opt) compute_shader_input(opt: bool, mesh: ShadedMesh, tri_hit: TriHit) -> ShaderInput {
+    let i0 = mesh.indices(tri_hit.id * 4 + 0);
+    let i1 = mesh.indices(tri_hit.id * 4 + 1);
+    let i2 = mesh.indices(tri_hit.id * 4 + 2);
+    let v0 = mesh.vertices(i0);
+    let v1 = mesh.vertices(i1);
+    let v2 = mesh.vertices(i2);
+    let uv = tri_hit.uv;
+
+    let point       = vec3_lerp2(v0, v1, v2, uv.x, uv.y);
+    let face_normal = vec3_normalize(math, vec3_cross(vec3_sub(v1, v0), vec3_sub(v2, v0)));
+    let normal      = vec3_normalize(math, vec3_lerp2(mesh.normals(i0), mesh.normals(i1), mesh.normals(i2), uv.x, uv.y));
+    let texcoord    = vec2_lerp2(mesh.texcoords(i0), mesh.texcoords(i1), mesh.texcoords(i2), uv.x, uv.y);
+
+    let kd = lookup_tex(opt_tex, mesh.tex_kd, texcoord);
+    let ks = lookup_tex(opt_tex, mesh.tex_ks, texcoord);
+    let ns = lookup_tex(opt_tex, mesh.tex_ns, texcoord).r;
+
+    let local = make_orthonormal_mat3x3(normal);
+
+    ShaderInput {
+        point:       point,
+        face_normal: face_normal,
+        normal:      normal,
+        uv_coords:   uv,
+        local:       local,
+        kd:          kd,
+        ks:          ks,
+        ns:          ns
+    }
+}
+
+extern fn @(opt) shade(opt: bool, input: ShaderInput, in_dir: Vec3, out_dir: Vec3) -> Color {
+    let surf = SurfaceElement {
+        is_entering: true,
+        point:       input.point,
+        face_normal: input.face_normal,
+        uv_coords:   input.uv_coords,
+        attr:        @ |_| make_vec4(0.0f, 0.0f, 0.0f, 0.0f),
+        local:       input.local
+    };
+    let bsdf = make_diffuse_bsdf(math, surf, input.kd);
+    bsdf.eval(in_dir, out_dir)
+}
+
+extern fn cpu_bench_interface(mesh: &ShadedMesh, tri_hits: &[TriHit], in_dirs: &[Vec3], out_dirs: &[Vec3], colors: &mut [Color], n: i32) -> () {
+    for i in range(0, n) {
+        let input = compute_shader_input(opt_interface, *mesh, tri_hits(i));
+        colors(i) = shade(opt_interface, input, in_dirs(i), out_dirs(i));
+    }
+}
