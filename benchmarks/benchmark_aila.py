@@ -37,10 +37,10 @@ def main():
             tmax = 1.0e9
             if rays == "ao":
                 tmax = ao_max
-            args = ["-ray", bench_dir + "/scenes/" + scene + "/" + rays + ".rays", "-tmin", str(tmin), "-tmax", str(tmax), "-bench", iters, "-warmup", warmups]
+            args = ["-ray", bench_dir + "/scenes/" + scene + "/" + rays + ".rays", "--tmin", str(tmin), "--tmax", str(tmax), "--bench", iters, "--warmup", warmups]
             #print(scene, ": ", " ".join(args))
             mrays_aila= bench_mrays([bench_aila, "-bvh", bench_dir + "/scenes/" + scene + "/" + scene + ".bvh"] + args)
-            mrays_rodent = bench_mrays([bench_rodent, "-gpu", "-bvh", bench_dir + "/scenes/" + scene + "/" + scene + ".bvh"] + args)
+            mrays_rodent = bench_mrays([bench_rodent, "-gpu", "nvvm", "-bvh", bench_dir + "/scenes/" + scene + "/" + scene + ".bvh"] + args)
             print("{} : {} : {} : {}".format(scene, rays, mrays_aila, mrays_rodent))
 
 if __name__ == "__main__":
