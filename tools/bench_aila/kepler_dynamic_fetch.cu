@@ -309,8 +309,8 @@ TRACE_FUNC
                     const float4 e1 = tex1Dfetch(t_trisA, triAddr + 1);
                     const float4 e2 = tex1Dfetch(t_trisA, triAddr + 2);
 
-                    float nx = v0.w;
-                    float ny = e1.w;
+                    float nx = e1.y * e2.z - e1.z * e2.y;
+                    float ny = e1.z * e2.x - e1.x * e2.z;
                     float nz = e1.x * e2.y - e1.y * e2.x;
                     float cx = v0.x - origx;
                     float cy = v0.y - origy;
