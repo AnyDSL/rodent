@@ -4,7 +4,7 @@ import os
 
 iters = "500"
 warmups = "100"
-bin_dir = "/space/perard/sources/rodent/build/bin"
+bin_dir = "/space/perard/sources/rodent/build_embree2/bin"
 bench_dir = "/space/perard/sources/rodent/benchmarks"
 bench_rodent = "./bench_traversal"
 bench_aila = "./bench_aila"
@@ -39,7 +39,7 @@ def main():
                 tmax = ao_max
             args = ["-ray", bench_dir + "/scenes/" + scene + "/" + rays + ".rays", "--tmin", str(tmin), "--tmax", str(tmax), "--bench", iters, "--warmup", warmups]
             #print(scene, ": ", " ".join(args))
-            mrays_aila= bench_mrays([bench_aila, "-bvh", bench_dir + "/scenes/" + scene + "/" + scene + ".bvh"] + args)
+            mrays_aila = bench_mrays([bench_aila, "-bvh", bench_dir + "/scenes/" + scene + "/" + scene + ".bvh"] + args)
             mrays_rodent = bench_mrays([bench_rodent, "-gpu", "nvvm", "-bvh", bench_dir + "/scenes/" + scene + "/" + scene + ".bvh"] + args)
             print("{} : {} : {} : {}".format(scene, rays, mrays_aila, mrays_rodent))
 
