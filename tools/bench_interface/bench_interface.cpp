@@ -17,11 +17,15 @@
 #include "float3.h"
 #include "interface.h"
 
+#define BENCH_CUDA
+
+#ifdef BENCH_CUDA
 // Some external functions will refer to those symbols when compiled on the GPU
 extern "C" float __nv_fminf(float a, float b) { return fminf(a, b); }
 extern "C" float __nv_fmaxf(float a, float b) { return fmaxf(a, b); }
 extern "C" float __nv_sqrtf(float x) { return sqrtf(x); }
 extern "C" float __nv_floorf(float x) { return floorf(x); }
+#endif
 
 template <typename T>
 void fill(anydsl::Array<T>& array, T val) {
@@ -42,8 +46,13 @@ int main(int argc, char** argv) {
     _mm_setcsr(_mm_getcsr() | (_MM_FLUSH_ZERO_ON | _MM_DENORMALS_ZERO_ON));
 #endif
 
+#ifdef BENCH_CUDA
     auto plt = anydsl::Platform::Cuda;
     auto dev = anydsl::Device(0);
+#else
+    auto plt = anydsl::Platform::Host;
+    auto dev = anydsl::Device(0);
+#endif
 
     auto num_vertices = 4;
     auto num_triangles = 2;
@@ -163,7 +172,11 @@ int main(int argc, char** argv) {
     anydsl::copy(host_out_dirs, out_dirs);
     anydsl::copy(host_tri_hits, tri_hits);
 
+#ifdef BENCH_CUDA
     size_t iters = 1000;
+#else
+    size_t iters = 100;
+#endif
     std::vector<double> times;
     for (size_t i = 0; i < iters; ++i) {
         auto t0 = std::chrono::high_resolution_clock::now();
