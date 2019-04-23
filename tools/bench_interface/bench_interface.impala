@@ -41,9 +41,29 @@ struct ShaderInput {
     ns:          f32
 }
 
+static iterate = cpu_iterate;
 static math = cpu_intrinsics;
 static opt_interface = true;
 static opt_tex = true;
+
+fn cpu_iterate(n: i32, body: fn (i32) -> ()) -> () {
+    let vector_width = 8;
+    for i in parallel(0, n / vector_width) {
+        for j in vectorize(vector_width) {
+            body(i + j);
+        }
+    }
+}
+
+fn gpu_iterate(n: i32, body: fn (i32) -> ()) -> () {
+    let dev = 0;
+    let grid  = (n, 1, 1);
+    let block = (64, 1, 1);
+    let acc   = nvvm_accelerator(dev);
+    for work_item in acc.exec() {
+        body(work_item.gidx());
+    }
+}
 
 extern fn @(opt) lookup_tex(opt: bool, tex: Tex, mut uv: Vec2) -> Color {
     if tex.border == border_clamp {
@@ -115,9 +135,10 @@ extern fn @(opt) shade(opt: bool, input: ShaderInput, in_dir: Vec3, out_dir: Vec
     bsdf.eval(in_dir, out_dir)
 }
 
-extern fn cpu_bench_interface(mesh: &ShadedMesh, tri_hits: &[TriHit], in_dirs: &[Vec3], out_dirs: &[Vec3], colors: &mut [Color], n: i32) -> () {
-    for i in range(0, n) {
-        let input = compute_shader_input(opt_interface, *mesh, tri_hits(i));
-        colors(i) = shade(opt_interface, input, in_dirs(i), out_dirs(i));
+extern fn bench_interface(mesh: &ShadedMesh, tri_hits: &[TriHit], in_dirs: &[Vec3], out_dirs: &[Vec3], colors: &mut [Color], n: i32) -> () {
+    for i in iterate(n) {
+            let input = compute_shader_input(opt_interface, *mesh, tri_hits(i));
+            colors(i) = shade(opt_interface, input, in_dirs(i), out_dirs(i));
+        }
     }
 }

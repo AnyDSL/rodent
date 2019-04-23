@@ -130,7 +130,7 @@ int main(int argc, char** argv) {
     std::vector<double> times;
     for (size_t i = 0; i < iters; ++i) {
         auto t0 = std::chrono::high_resolution_clock::now();
-        cpu_bench_interface(&mesh, tri_hits.get(), in_dirs.get(), out_dirs.get(), colors.get(), N);
+        bench_interface(&mesh, tri_hits.get(), in_dirs.get(), out_dirs.get(), colors.get(), N);
         auto t1 = std::chrono::high_resolution_clock::now();
         times.push_back(std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
     }
