@@ -41,17 +41,15 @@ struct ShaderInput {
     ns:          f32
 }
 
-static iterate = cpu_iterate;
-static math = cpu_intrinsics;
-static opt_interface = true;
-static opt_tex = true;
+static iterate = gpu_iterate;
+static math = nvvm_intrinsics;
+static opt_interface = false;
+static opt_tex = false;
 
 fn cpu_iterate(n: i32, body: fn (i32) -> ()) -> () {
-    let vector_width = 8;
-    for i in parallel(0, n / vector_width) {
-        for j in vectorize(vector_width) {
-            body(i + j);
-        }
+    let num_cores = 0; // autodetect
+    for i in parallel(num_cores, 0, n) {
+        body(i);
     }
 }
 
@@ -60,9 +58,10 @@ fn gpu_iterate(n: i32, body: fn (i32) -> ()) -> () {
     let grid  = (n, 1, 1);
     let block = (64, 1, 1);
     let acc   = nvvm_accelerator(dev);
-    for work_item in acc.exec() {
+    for work_item in acc.exec(grid, block) {
         body(work_item.gidx());
     }
+    acc.sync();
 }
 
 extern fn @(opt) lookup_tex(opt: bool, tex: Tex, mut uv: Vec2) -> Color {
@@ -82,8 +81,8 @@ extern fn @(opt) lookup_tex(opt: bool, tex: Tex, mut uv: Vec2) -> Color {
     }
     let image = make_image(|x, y| tex.pixels(x + y * tex.width), tex.width, tex.height);
     if tex.sampler == sampler_nearest {
-            let filter = make_nearest_filter();
-            filter(math, image, uv)
+        let filter = make_nearest_filter();
+        filter(math, image, uv)
     } else /* if tex.sampler == sampler_bilinear */ {
         let filter = make_bilinear_filter();
         filter(math, image, uv)
@@ -135,10 +134,10 @@ extern fn @(opt) shade(opt: bool, input: ShaderInput, in_dir: Vec3, out_dir: Vec
     bsdf.eval(in_dir, out_dir)
 }
 
-extern fn bench_interface(mesh: &ShadedMesh, tri_hits: &[TriHit], in_dirs: &[Vec3], out_dirs: &[Vec3], colors: &mut [Color], n: i32) -> () {
+extern fn bench_interface(mesh_ptr: &ShadedMesh, tri_hits: &[TriHit], in_dirs: &[Vec3], out_dirs: &[Vec3], colors: &mut [Color], n: i32) -> () {
+    let mesh = *mesh_ptr;
     for i in iterate(n) {
-            let input = compute_shader_input(opt_interface, *mesh, tri_hits(i));
-            colors(i) = shade(opt_interface, input, in_dirs(i), out_dirs(i));
-        }
+        let input = compute_shader_input(opt_interface, mesh, tri_hits(i));
+        colors(i) = shade(opt_interface, input, in_dirs(i), out_dirs(i));
     }
 }

@@ -17,54 +17,85 @@
 #include "float3.h"
 #include "interface.h"
 
+// Some external functions will refer to those symbols when compiled on the GPU
+extern "C" float __nv_fminf(float a, float b) { return fminf(a, b); }
+extern "C" float __nv_fmaxf(float a, float b) { return fmaxf(a, b); }
+extern "C" float __nv_sqrtf(float x) { return sqrtf(x); }
+extern "C" float __nv_floorf(float x) { return floorf(x); }
+
+template <typename T>
+void fill(anydsl::Array<T>& array, T val) {
+    anydsl::Array<T> copy(array.size());
+    std::fill(copy.begin(), copy.end(), val);
+    anydsl::copy(copy, array);
+}
+
+template <typename T>
+void set(anydsl::Array<T>& array, const std::vector<T>& vals) {
+    anydsl::Array<T> host_array(vals.size());
+    std::copy(vals.begin(), vals.end(), host_array.begin());
+    copy(host_array, array);
+}
+
 int main(int argc, char** argv) {
 #if defined(__x86_64__) || defined(__amd64__) || defined(_M_X64)
     _mm_setcsr(_mm_getcsr() | (_MM_FLUSH_ZERO_ON | _MM_DENORMALS_ZERO_ON));
 #endif
 
-    std::vector<float3> vertices;
-    std::vector<float3> normals;
-    std::vector<float2> texcoords;
-    std::vector<int32_t> indices;
+    auto plt = anydsl::Platform::Cuda;
+    auto dev = anydsl::Device(0);
+
+    auto num_vertices = 4;
+    auto num_triangles = 2;
+
+    anydsl::Array<float3>  vertices (plt, dev, num_vertices);
+    anydsl::Array<float3>  normals  (plt, dev, num_vertices);
+    anydsl::Array<float2>  texcoords(plt, dev, num_vertices);
+    anydsl::Array<int32_t> indices  (plt, dev, num_triangles * 4);
 
     // Create a quad
-    vertices.emplace_back(-1.0f,  1.0f, 0.0f);
-    vertices.emplace_back(-1.0f, -1.0f, 0.0f);
-    vertices.emplace_back( 1.0f, -1.0f, 0.0f);
-    vertices.emplace_back( 1.0f,  1.0f, 0.0f);
+    set(vertices, {
+        float3(-1.0f,  1.0f, 0.0f),
+        float3(-1.0f, -1.0f, 0.0f),
+        float3( 1.0f, -1.0f, 0.0f),
+        float3( 1.0f,  1.0f, 0.0f)
+    });
+    set(normals, {
+        float3(0.0f, 0.0f, 1.0f),
+        float3(0.0f, 0.0f, 1.0f),
+        float3(0.0f, 0.0f, 1.0f),
+        float3(0.0f, 0.0f, 1.0f)
+    });
+    set(texcoords, {
+        float2(-1.0f,  1.0f),
+        float2(-1.0f, -1.0f),
+        float2( 1.0f, -1.0f),
+        float2( 1.0f,  1.0f)
+    });
+    set(indices, {
+        0,
+        1,
+        2,
+        -1,
 
-    normals.emplace_back(0.0f, 0.0f, 1.0f);
-    normals.emplace_back(0.0f, 0.0f, 1.0f);
-    normals.emplace_back(0.0f, 0.0f, 1.0f);
-    normals.emplace_back(0.0f, 0.0f, 1.0f);
-
-    texcoords.emplace_back(-1.0f,  1.0f);
-    texcoords.emplace_back(-1.0f, -1.0f);
-    texcoords.emplace_back( 1.0f, -1.0f);
-    texcoords.emplace_back( 1.0f,  1.0f);
-
-    indices.push_back(0);
-    indices.push_back(1);
-    indices.push_back(2);
-    indices.push_back(-1);
-
-    indices.push_back(2);
-    indices.push_back(3);
-    indices.push_back(0);
-    indices.push_back(-1);
+        2,
+        3,
+        0,
+        -1
+    });
 
     int width  = 1024;
     int height = 1024;
-    std::unique_ptr<Color[]> pixels_kd(new Color[width * height]);
-    std::unique_ptr<Color[]> pixels_ks(new Color[width * height]);
-    std::unique_ptr<Color[]> pixels_ns(new Color[width * height]);
+    anydsl::Array<Color> pixels_kd(plt, dev, width * height);
+    anydsl::Array<Color> pixels_ks(plt, dev, width * height);
+    anydsl::Array<Color> pixels_ns(plt, dev, width * height);
 
-    std::fill(pixels_kd.get(), pixels_kd.get() + width * height, Color { 0.1f, 0.2f, 0.3f });
-    std::fill(pixels_ks.get(), pixels_ks.get() + width * height, Color { 1.0f, 0.5f, 0.1f });
-    std::fill(pixels_ns.get(), pixels_ns.get() + width * height, Color { 0.1f, 0.5f, 1.0f });
+    fill(pixels_kd, Color { 0.1f, 0.2f, 0.3f });
+    fill(pixels_ks, Color { 1.0f, 0.5f, 0.1f });
+    fill(pixels_ns, Color { 0.1f, 0.5f, 1.0f });
 
     Tex tex_kd {
-        pixels_kd.get(),
+        pixels_kd.data(),
         Color { 0.0f, 0.0f, 0.0f },
         0,
         1,
@@ -73,7 +104,7 @@ int main(int argc, char** argv) {
     };
 
     Tex tex_ks {
-        pixels_ks.get(),
+        pixels_ks.data(),
         Color { 0.5f, 1.0f, 0.2f },
         2,
         0,
@@ -82,7 +113,7 @@ int main(int argc, char** argv) {
     };
 
     Tex tex_ns {
-        pixels_ns.get(),
+        pixels_ns.data(),
         Color { 0.0f, 0.0f, 0.0f },
         1,
         1,
@@ -100,37 +131,43 @@ int main(int argc, char** argv) {
         tex_ns
     };
 
-    size_t N = 10000;
-    std::unique_ptr<Vec3[]> in_dirs(new Vec3[N]);
-    std::unique_ptr<Vec3[]> out_dirs(new Vec3[N]);
-    std::unique_ptr<Color[]> colors(new Color[N]);
-    std::unique_ptr<TriHit[]> tri_hits(new TriHit[N]);
+    size_t N = 1024*1024;
+    anydsl::Array<Vec3> host_in_dirs(N);
+    anydsl::Array<Vec3> host_out_dirs(N);
+    anydsl::Array<TriHit> host_tri_hits(N);
 
     uint32_t seed = 42;
     std::mt19937 gen(seed);
     std::uniform_real_distribution<float> rnd(0.0f, 1.0f);
     for (size_t i = 0; i < N; ++i) {
-        tri_hits[i].id = i % 2;
-        tri_hits[i].uv.x = rnd(gen);
-        tri_hits[i].uv.y = rnd(gen);
+        host_tri_hits[i].id = i % 2;
+        host_tri_hits[i].uv.x = rnd(gen);
+        host_tri_hits[i].uv.y = rnd(gen);
 
         auto in  = normalize(float3(rnd(gen), rnd(gen), rnd(gen)));
         auto out = normalize(float3(rnd(gen), rnd(gen), rnd(gen)));
 
-        in_dirs[i].x = in.x;
-        in_dirs[i].y = in.y;
-        in_dirs[i].z = in.z;
+        host_in_dirs[i].x = in.x;
+        host_in_dirs[i].y = in.y;
+        host_in_dirs[i].z = in.z;
 
-        out_dirs[i].x = out.x;
-        out_dirs[i].y = out.y;
-        out_dirs[i].z = out.z;
+        host_out_dirs[i].x = out.x;
+        host_out_dirs[i].y = out.y;
+        host_out_dirs[i].z = out.z;
     }
+    anydsl::Array<Color>  colors  (plt, dev, N);
+    anydsl::Array<Vec3>   in_dirs (plt, dev, N);
+    anydsl::Array<Vec3>   out_dirs(plt, dev, N);
+    anydsl::Array<TriHit> tri_hits(plt, dev, N);
+    anydsl::copy(host_in_dirs,  in_dirs);
+    anydsl::copy(host_out_dirs, out_dirs);
+    anydsl::copy(host_tri_hits, tri_hits);
 
     size_t iters = 1000;
     std::vector<double> times;
     for (size_t i = 0; i < iters; ++i) {
         auto t0 = std::chrono::high_resolution_clock::now();
-        bench_interface(&mesh, tri_hits.get(), in_dirs.get(), out_dirs.get(), colors.get(), N);
+        bench_interface(&mesh, tri_hits.data(), in_dirs.data(), out_dirs.data(), colors.data(), N);
         auto t1 = std::chrono::high_resolution_clock::now();
         times.push_back(std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
     }
