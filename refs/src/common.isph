@@ -1,0 +1,299 @@
+#ifndef COMMON_ISPH
+#define COMMON_ISPH
+
+#define FLT_MAX 3.4028234664e+38f
+
+// Timing --------------------------------------------------------------------------
+
+#ifdef ENABLE_TIMING
+#define CPU_FREQ 4e9
+#define clock_us() (clock() * 1000000 / CPU_FREQ)
+#else
+#define clock_us() 0
+#endif
+
+// Global ray offset ---------------------------------------------------------------
+
+static const float uniform offset = 1e-4f;
+
+// Math functions ------------------------------------------------------------------
+
+#define QUALIFIER varying
+#include "math.isph"
+#undef QUALIFIER
+#define QUALIFIER uniform
+#include "math.isph"
+#undef QUALIFIER
+
+inline float lerp(float a, float b, float uniform t) {
+    return a * (1.0f - t) + b * t;
+}
+
+inline struct rgb_s lerp(struct rgb_s a, struct rgb_s b, float uniform t) {
+    return a * (1.0f - t) + b * t;
+}
+
+// Misc. ---------------------------------------------------------------------------
+
+struct fastdiv_t {
+    uint32_t m, s1, s2;
+};
+
+inline uniform fastdiv_t make_fastdiv(uniform uint32_t div) {
+    uniform uint32_t l = 1;
+    while ((1 << l) < div) ++l;
+    uniform uint64_t max = 1ull << 32ull;
+    uniform fastdiv_t fd;
+    fd.m = (max << l) / div - max + 1;
+    fd.s1 = l < 1 ? l : 1;
+    fd.s2 = l > 1 ? l - 1 : 0;
+    return fd;
+}
+
+inline uint32_t fastdiv(uniform fastdiv_t fd, uint32_t i) {
+    uint32_t t = ((uint64_t)fd.m * (uint64_t)i) >> 32ull;
+    return (t + ((i - t) >> fd.s1)) >> fd.s2;
+}
+
+inline int32_t xorshift(uint32_t& seed) {
+    uint32_t x = seed;
+    x = x == 0 ? 1 : x;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    seed = x;
+    return x;
+}
+
+inline float randf(uint32_t& rnd) {
+    uint32_t u = xorshift(rnd);
+    return floatbits((127u << 23u) | (u & 0x7FFFFFu)) - 1.0f;
+}
+
+inline int32_t randi(uint32_t& rnd) {
+    return xorshift(rnd);
+}
+
+inline uint32_t uniform fnv_init() { return 0x811C9DC5u; }
+
+inline uint32_t fnv_hash(uint32_t h, uint32_t d) {
+    h = (h * 16777619u) ^ ( d         & 0xFFu);
+    h = (h * 16777619u) ^ ((d >>  8u) & 0xFFu);
+    h = (h * 16777619u) ^ ((d >> 16u) & 0xFFu);
+    h = (h * 16777619u) ^ ((d >> 24u) & 0xFFu);
+    return h;
+}
+
+inline struct float3_s reflect(struct float3_s v, struct float3_s n) {
+    return n * (2 * dot(n, v)) - v;
+}
+
+inline struct float3_s sample_triangle(float u, float v, struct float3_s v0, struct float3_s v1, struct float3_s v2) {
+    if (u + v >= 1.0f) {
+        u = 1.0f - u;
+        v = 1.0f - v;
+    }
+    return v0 * (1.0f - u - v) + v1 * u + v2 * v;
+}
+
+inline float russian_roulette(const struct rgb_s color, float max_prob) {
+    float prob = 2.0f * luminance(color);
+    return prob > max_prob ? max_prob : prob;
+}
+
+inline void gen_local_coords(const struct float3_s normal, struct float3_s& tangent, struct float3_s& bitangent) {
+    float sign = normal.z >= 0.0f ? 1.0f : -1.0f;
+    float a = -1.0f / (sign + normal.z);
+    float b = normal.x * normal.y * a;
+
+    tangent = make_float3(1.0f + sign * normal.x * normal.x * a, sign * b, -sign * normal.x);
+    bitangent = make_float3(b, sign + normal.y * normal.y * a, -normal.y);
+}
+
+// Texturing -----------------------------------------------------------------------
+
+inline struct rgb_s rgba32_to_rgb(uint32_t pix) {
+    uint32_t r =  pix        & 0xFF;
+    uint32_t g = (pix >>  8) & 0xFF;
+    uint32_t b = (pix >> 16) & 0xFF;
+    float inv = 1.0f / 255.0f;
+    return make_rgb(((int)r) * inv, ((int)g) * inv, ((int)b) * inv);
+}
+
+inline struct rgb_s lookup_texture(const struct image_s img, struct float2_s uv) {
+    uv.x = uv.x - floor(uv.x);
+    uv.y = uv.y - floor(uv.y);
+    float u = uv.x * (int32_t)img.width;
+    float v = uv.y * (int32_t)img.height;
+    int x0 = min((int32_t)u, (int32_t)img.width  - 1);
+    int y0 = min((int32_t)v, (int32_t)img.height - 1);
+    int x1 = min(x0 + 1, (int32_t)img.width  - 1);
+    int y1 = min(y0 + 1, (int32_t)img.height - 1);
+    float kx = u - (int32_t)u;
+    float ky = v - (int32_t)v;
+    struct rgb_s p00 = rgba32_to_rgb(img.pixels[x0 + y0 * img.width]);
+    struct rgb_s p10 = rgba32_to_rgb(img.pixels[x1 + y0 * img.width]);
+    struct rgb_s p01 = rgba32_to_rgb(img.pixels[x0 + y1 * img.width]);
+    struct rgb_s p11 = rgba32_to_rgb(img.pixels[x1 + y1 * img.width]);
+    return lerp(lerp(p00, p10, kx), lerp(p01, p11, kx), ky);
+}
+
+// Materials -----------------------------------------------------------------------
+
+struct sample_s {
+    struct float3_s dir;
+    float cos;
+    struct rgb_s color;
+    float pdf;
+};
+
+inline float phong_interp(struct rgb_s kd, struct rgb_s ks) {
+    float lum_ks = luminance(ks);
+    float lum_kd = luminance(kd);
+    return lum_ks + lum_kd == 0 ? 0.0f : lum_ks / (lum_ks + lum_kd);
+}
+
+inline struct sample_s make_sample(struct float3_s face_normal, struct float3_s in_dir, float pdf, float cos_, struct rgb_s color, bool uniform inverted) {
+    // Checks that the sample is above the surface (or under it if inverted is true)
+    bool valid = (pdf > 0.0f) && (inverted ^ (dot(in_dir, face_normal) > 0.0f));
+    struct sample_s sample;
+    sample.dir = in_dir;
+    sample.cos = cos_;
+    sample.pdf = valid ? pdf : 1.0f;
+    sample.color = valid ? color : make_rgb(0.0f, 0.0f, 0.0f);
+    return sample;
+}
+
+inline float specular_sample_pdf(float ns, struct float3_s normal, struct float3_s out_dir, struct float3_s in_dir) {
+    float cos = max(dot(in_dir, reflect(out_dir, normal)), 0.0f);
+    return pow(cos, ns) * (ns + 1.0f) * (1.0f / (2.0f * PI));
+}
+
+inline float diffuse_sample_pdf(struct float3_s normal, struct float3_s in_dir) {
+    return max(dot(in_dir, normal), 0.0f) * (1.0f / PI);
+}
+
+inline float phong_sample_pdf(const struct image_s* uniform images, const struct material_s* mat, struct float3_s normal, struct float2_s uv, struct float3_s out_dir, struct float3_s in_dir) {
+    int32_t map_kd  = mat->map_kd;
+    int32_t map_ks  = mat->map_ks;
+    float ns = mat->ns;
+    struct rgb_s kd = map_kd >= 0 ? lookup_texture(images[map_kd], uv) : mat->kd;
+    struct rgb_s ks = map_ks >= 0 ? lookup_texture(images[map_ks], uv) : mat->ks;
+    return lerp(diffuse_sample_pdf(normal, in_dir), specular_sample_pdf(ns, normal, out_dir, in_dir), phong_interp(kd, ks));
+}
+
+inline struct rgb_s eval_specular_bsdf(struct rgb_s ks, float ns, struct float3_s normal, struct float3_s out_dir, struct float3_s in_dir) {
+    float cos = max(dot(in_dir, reflect(out_dir, normal)), 0.0f);
+    return ks * pow(cos, ns) * (ns + 2.0f) * (1.0f / (2.0f * PI));
+}
+
+inline struct rgb_s eval_diffuse_bsdf(struct rgb_s kd) {
+    return kd * (1.0f / PI);
+}
+
+inline struct rgb_s eval_phong_bsdf(const struct image_s* uniform images, const struct material_s* mat, struct float3_s normal, struct float2_s uv, struct float3_s out_dir, struct float3_s in_dir) {
+    int32_t map_kd  = mat->map_kd;
+    int32_t map_ks  = mat->map_ks;
+    float ns = mat->ns;
+    struct rgb_s kd = map_kd >= 0 ? lookup_texture(images[map_kd], uv) : mat->kd;
+    struct rgb_s ks = map_ks >= 0 ? lookup_texture(images[map_ks], uv) : mat->ks;
+    return lerp(eval_diffuse_bsdf(kd), eval_specular_bsdf(ks, ns, normal, out_dir, in_dir), phong_interp(kd, ks));
+}
+
+inline struct sample_s sample_diffuse_bsdf(struct rgb_s kd, struct float3_s normal, struct float3_s face_normal, uint32_t& rnd, struct float3_s out_dir) {
+    // Cosine hemisphere sampling
+    float u = randf(rnd);
+    float v = randf(rnd);
+    float cos_ = sqrt(1.0f - v);
+    float sin_ = sqrt(v);
+    float phi = 2.0f * PI * u;
+
+    struct float3_s tangent, bitangent;
+    gen_local_coords(normal, tangent, bitangent);
+
+    struct float3_s in_dir = tangent * (sin_ * cos(phi)) + bitangent * (sin_ * sin(phi)) + normal * cos_;
+    struct rgb_s color     = kd * (1.0f / PI);
+    float pdf              = cos_ * (1.0f / PI);
+    return make_sample(face_normal, in_dir, pdf, cos_, color, false);
+}
+
+inline struct sample_s sample_specular_bsdf(struct rgb_s ks, float ns, struct float3_s normal, struct float3_s face_normal, uint32_t& rnd, struct float3_s out_dir) {
+    // Cosine-power hemisphere sampling
+    float u = randf(rnd);
+    float v = randf(rnd);
+    struct float3_s reflect_out = reflect(out_dir, normal);
+    float cos_ = pow(v, 1.0f / (ns + 1.0f));
+    float sin_ = sqrt(1.0f - cos_ * cos_);
+    float phi = 2.0f * PI * u;
+    
+    float lobe = pow(cos_, ns) * (1.0f / (2.0f * PI));
+
+    struct float3_s tangent, bitangent;
+    gen_local_coords(reflect_out, tangent, bitangent);
+
+    struct float3_s in_dir = tangent * (sin_ * cos(phi)) + bitangent * (sin_ * sin(phi)) + reflect_out * cos_;
+    struct rgb_s color     = ks * lobe * (ns + 2.0f);
+    float pdf              = lobe * (ns + 1.0f);
+    float in_dir_cos       = max(dot(in_dir, normal), 0.0f);
+    return make_sample(face_normal, in_dir, pdf, in_dir_cos, color, false);
+}
+
+inline struct sample_s sample_phong_bsdf(const struct image_s* uniform images, const struct material_s* mat, struct float3_s normal, struct float3_s face_normal, struct float2_s uv, uint32_t& rnd, struct float3_s out_dir) {
+    int32_t map_kd  = mat->map_kd;
+    int32_t map_ks  = mat->map_ks;
+    float ns = mat->ns;
+    struct rgb_s kd = map_kd >= 0 ? lookup_texture(images[map_kd], uv) : mat->kd;
+    struct rgb_s ks = map_ks >= 0 ? lookup_texture(images[map_ks], uv) : mat->ks;
+    float k = phong_interp(kd, ks);
+    bool use_kd = randf(rnd) >= k;
+
+    struct sample_s sample = use_kd ? sample_diffuse_bsdf(kd, normal, face_normal, rnd, out_dir) : sample_specular_bsdf(ks, ns, normal, face_normal, rnd, out_dir);
+    if (use_kd) {
+        sample.color = lerp(sample.color, eval_specular_bsdf(ks, ns, normal, out_dir, sample.dir), k);
+        sample.pdf   = lerp(sample.pdf,   specular_sample_pdf(ns, normal, out_dir, sample.dir),    k);
+    } else {
+        sample.color = lerp(eval_diffuse_bsdf(kd),                  sample.color, k);
+        sample.pdf   = lerp(diffuse_sample_pdf(normal, sample.dir), sample.pdf,   k);
+    }
+    return sample;
+}
+
+inline struct sample_s sample_mirror_bsdf(const struct material_s* mat, struct float3_s normal, struct float3_s face_normal, struct float3_s out_dir) {
+    struct float3_s in_dir = reflect(out_dir, normal);
+    return make_sample(face_normal, in_dir, 1.0f, 1.0f, mat->ks, false);
+}
+
+inline float fresnel_factor(float k, float cos_i, float cos_t) {
+    float R_s = (k * cos_i - cos_t) / (k * cos_i + cos_t);
+    float R_p = (cos_i - k * cos_t) / (cos_i + k * cos_t);
+    return (R_s * R_s + R_p * R_p) * 0.5f;
+}
+
+inline struct sample_s sample_glass_bsdf(bool entering, const struct material_s* mat, struct float3_s normal, struct float3_s face_normal, uint32_t& rnd, struct float3_s out_dir) {
+    float n1 = 1.0f;
+    float n2 = mat->ni;
+    if (!entering) {
+        float tmp = n1;
+        n1 = n2;
+        n2 = tmp;
+    }
+    float n = n1 / n2;
+
+    float cos_incoming = dot(out_dir, normal);
+    float cos2_transmitted = 1.0f - n * n * (1.0f - cos_incoming * cos_incoming);
+
+    if (cos2_transmitted > 0.0f) {
+        // Refraction
+        float cos_transmitted = sqrt(cos2_transmitted);
+        float F = fresnel_factor(n, cos_incoming, cos_transmitted);
+        if (randf(rnd) > F) {
+            struct float3_s t = normal * (n * cos_incoming - cos_transmitted) - out_dir * n;
+            return make_sample(face_normal, t, 1.0f, 1.0f, mat->tf, true);
+        }
+    }
+
+    // Reflection
+    return sample_mirror_bsdf(mat, normal, face_normal, out_dir);
+}
+
+#endif // COMMON_ISPH

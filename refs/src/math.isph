@@ -1,0 +1,99 @@
+#ifndef QUALIFIER
+#error "Please define the preprocessor symbol QUALIFIER before including this file"
+#endif
+
+inline struct float3_s QUALIFIER make_float3(float QUALIFIER x, float QUALIFIER y, float QUALIFIER z) {
+    struct float3_s QUALIFIER v = { x, y, z };
+    return v;
+}
+
+inline struct float2_s QUALIFIER  make_float2(float QUALIFIER x, float QUALIFIER y) {
+    struct float2_s QUALIFIER v = { x, y };
+    return v;
+}
+
+inline struct rgb_s QUALIFIER make_rgb(float QUALIFIER r, float QUALIFIER g, float QUALIFIER b) {
+    struct rgb_s QUALIFIER c = { r, g, b };
+    return c;
+}
+
+inline struct rgb_s QUALIFIER operator+ (const struct rgb_s QUALIFIER a, const struct rgb_s QUALIFIER b) {
+    return make_rgb(a.r + b.r, a.g + b.g, a.b + b.b);
+}
+
+inline struct float3_s QUALIFIER operator+ (const struct float3_s QUALIFIER a, const struct float3_s QUALIFIER b) {
+    return make_float3(a.x + b.x, a.y + b.y, a.z + b.z);
+}
+
+inline struct float3_s QUALIFIER operator- (const struct float3_s QUALIFIER a, const struct float3_s QUALIFIER b) {
+    return make_float3(a.x - b.x, a.y - b.y, a.z - b.z);
+}
+
+inline struct float2_s QUALIFIER operator+ (const struct float2_s QUALIFIER a, const struct float2_s QUALIFIER b) {
+    return make_float2(a.x + b.x, a.y + b.y);
+}
+
+inline struct rgb_s QUALIFIER operator* (const struct rgb_s QUALIFIER a, float QUALIFIER b) {
+    return make_rgb(a.r * b, a.g * b, a.b * b);
+}
+
+inline struct float3_s QUALIFIER operator* (const struct float3_s QUALIFIER a, float QUALIFIER b) {
+    return make_float3(a.x * b, a.y * b, a.z * b);
+}
+
+inline struct rgb_s QUALIFIER operator* (const struct rgb_s QUALIFIER a, const struct rgb_s QUALIFIER b) {
+    return make_rgb(a.r * b.r, a.g * b.g, a.b * b.b);
+}
+
+inline struct float2_s QUALIFIER operator* (const struct float2_s QUALIFIER a, float QUALIFIER b) {
+    return make_float2(a.x * b, a.y * b);
+}
+
+inline struct float3_s QUALIFIER negate(const struct float3_s QUALIFIER v) {
+    return make_float3(-v.x, -v.y, -v.z);
+}
+
+inline float QUALIFIER dot(const struct float3_s QUALIFIER a, const struct float3_s QUALIFIER b) {
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+inline float QUALIFIER length(const struct float3_s QUALIFIER a) {
+    return sqrt(dot(a, a));
+}
+
+inline struct float3_s QUALIFIER normalize(const struct float3_s QUALIFIER v) {
+    return v * (1.0f / length(v));
+}
+
+inline float QUALIFIER lerp(float QUALIFIER a, float QUALIFIER b, float QUALIFIER t) {
+    return a * (1.0f - t) + b * t;
+}
+
+inline struct rgb_s QUALIFIER lerp(struct rgb_s QUALIFIER a, struct rgb_s QUALIFIER b, float QUALIFIER t) {
+    return a * (1.0f - t) + b * t;
+}
+
+inline float QUALIFIER luminance(struct rgb_s QUALIFIER c) {
+    return c.r * 0.2126f + c.g * 0.7152f + c.b * 0.0722f;
+}
+
+inline float QUALIFIER fastlog2(float QUALIFIER x) {
+    unsigned int QUALIFIER vx = intbits(x);
+    unsigned int QUALIFIER mx = (vx & 0x007FFFFFu) | 0x3f000000u;
+    float QUALIFIER y = vx * 1.1920928955078125e-7f;
+    float QUALIFIER z = floatbits(mx);
+    return y - 124.22551499f - 1.498030302f * z - 1.72587999f / (0.3520887068f + z);
+}
+
+inline float QUALIFIER fastpow2(float QUALIFIER p) {
+    float QUALIFIER off   = p < 0.0f    ? 1.0f : 0.0f;
+    float QUALIFIER clipp = p < -126.0f ? -126.0f : p;
+    int QUALIFIER w = clipp;
+    float QUALIFIER z = clipp - w + off;
+    int QUALIFIER v = (1u << 23u) * (clipp + 121.2740575f + 27.7280233f / (4.84252568f - z) - 1.49012907f * z);
+    return floatbits(v);
+}
+
+inline float QUALIFIER fastpow(float QUALIFIER x, float QUALIFIER y) {
+    return fastpow2(y * fastlog2(x));
+}

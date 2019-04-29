@@ -1,0 +1,15 @@
+#ifndef IMAGE_H
+#define IMAGE_H
+
+#include "file_path.h"
+
+struct ImageRgba32 {
+    std::unique_ptr<uint8_t[]> pixels;
+    size_t width, height;
+    size_t channels;
+};
+
+bool load_png(const FilePath&, ImageRgba32&);
+bool load_jpg(const FilePath&, ImageRgba32&);
+
+#endif // IMAGE_H
