@@ -87,7 +87,7 @@ fn @cosine_power_hemisphere_pdf(math: Intrinsics, c: f32, k: f32) -> f32 {
 
 // Samples a direction on a hemisphere proportionally to the power of the cosine with the surface normal
 fn @sample_cosine_power_hemisphere(math: Intrinsics, k: f32, u: f32, v: f32) -> DirSample {
-    let c = fastpow/*math.powf*/(v, 1.0f / (k + 1.0f));
+    let c = math.fminf(fastpow/*math.powf*/(v, 1.0f / (k + 1.0f)), 1.0f);
     let s = math.sqrtf(1.0f - c * c);
     let phi = 2.0f * flt_pi * u;
     // We have:
