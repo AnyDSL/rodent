@@ -13,7 +13,7 @@ Once the dependencies are installed, use the following commands to build the pro
     # By default, SCENE_FILE=../testing/cornell_box.obj
     cmake .. -DSCENE_FILE=myfile.obj
     # Optional: Create benchmarking tools for Embree and BVH extractor tools
-    # cmake .. -DEMBREE_ROOT_DIR = <path to Embree sources>
+    # cmake .. -DEMBREE_ROOT_DIR=<path to Embree sources>
     make
 
 # Testing
