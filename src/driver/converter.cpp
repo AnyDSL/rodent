@@ -983,7 +983,7 @@ static void usage() {
 #ifdef ENABLE_EMBREE_BVH
               << "           --embree-bvh          Use Embree to build the BVH (default: disabled)\n"
 #endif
-              << "Available target:\n"
+              << "Available targets:\n"
               << "    generic, sse42, avx, avx2, avx2-embree, asimd,\n"
               << "    nvvm = nvvm-streaming, nvvm-megakernel,\n"
               << "    amdgpu = amdgpu-streaming, amdgpu-megakernel\n"
