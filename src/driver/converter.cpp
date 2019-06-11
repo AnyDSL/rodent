@@ -627,7 +627,6 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
 
     os << "\nextern fn render(settings: &Settings, iter: i32) -> () {\n";
 
-    assert(target != Target(0));
     bool enable_padding = target == Target::NVVM_STREAMING   ||
                           target == Target::NVVM_MEGAKERNEL  ||
                           target == Target::AMDGPU_STREAMING ||
