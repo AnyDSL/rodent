@@ -21,7 +21,7 @@ if (EMBREE_FOUND)
 endif()
 
 find_package(ImageMagick COMPONENTS compare QUIET)
-if (ImageMagick_FOUND)
+if (ImageMagick_FOUND AND PNG_FOUND)
     # Only test the primary rays, as the random rays are often too close
     # to surfaces and often give slightly different results for each algorithm
     add_test(NAME single_bvh4 COMMAND ${CMAKE_COMMAND} -DBENCH_TRAVERSAL=$<TARGET_FILE:bench_traversal> -DFBUF2PNG=$<TARGET_FILE:fbuf2png> -DIM_COMPARE=${ImageMagick_compare_EXECUTABLE} "-DBENCH_TRAVERSAL_ARGS=--single;--bvh-width;4" -DTESTING_DIR=${PROJECT_SOURCE_DIR}/testing -DTRAVERSAL_OUTPUT=single-bvh4-output -P ${PROJECT_SOURCE_DIR}/cmake/test/run_traversal.cmake)
