@@ -24,7 +24,12 @@ This section assumes that the current directory is the build directory. To run r
 
 You may want to change the initial camera parameters using the command line options `--eye`, `--dir` and `--up`. Run `bin/rodent --help` to get a full list of options.
 
-Use the following commands to test the traversal code with the provided test scene:
+When ImageMagick is found by Cmake, use the following commands to test the traversal code with the provided test scene:
+
+    make test
+
+This will only test the primary ray distribution with the packet, single, and hybrid variants.
+To test all possible combinations, or if you do not have ImageMagick installed, use the benchmarking tool directly:
 
     bin/bench_traversal -bvh ../testing/sponza.bvh -ray ../testing/sponza-primary.rays --bench 50 --warmup 10 --tmax 5000 -o output-hybrid-primary.fbuf
     bin/bench_traversal -bvh ../testing/sponza.bvh -ray ../testing/sponza-primary.rays --bench 50 --warmup 10 --tmax 5000 -s -o output-single-primary.fbuf

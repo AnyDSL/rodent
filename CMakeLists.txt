@@ -103,5 +103,6 @@ if (NOT ${EMBREE_ROOT_DIR}    STREQUAL "EMBREE_ROOT_DIR-NOTFOUND"    AND
     set(EMBREE_FOUND ON)
 endif()
 
+include(CTest)
 add_subdirectory(src)
 add_subdirectory(tools)
