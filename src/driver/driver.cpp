@@ -7,7 +7,7 @@
 #include <cmath>
 
 #ifndef DISABLE_GUI
-#include <SDL2/SDL.h>
+#include <SDL.h>
 #endif
 
 #include "interface.h"
