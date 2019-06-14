@@ -128,3 +128,8 @@ endif()
 
 add_executable(rodent ${RODENT_OBJS})
 target_link_libraries(rodent driver ${AnyDSL_runtime_LIBRARIES} ${PNG_LIBRARIES} ${JPEG_LIBRARIES} ${TBB_LIBRARIES} ${LZ4_LIBRARY})
+
+if (SCENE_FILE STREQUAL "${PROJECT_SOURCE_DIR}/testing/cornell_box.obj")
+    # Test rodent when the cornell box is used
+    add_test(NAME rodent_cornell COMMAND ${CMAKE_COMMAND} -DRODENT=$<TARGET_FILE:rodent> -DIM_COMPARE=${ImageMagick_compare_EXECUTABLE} "-DRODENT_ARGS=--eye;0;1;2.7;--dir;0;0;-1;--up;0;1;0" -DTESTING_DIR=${PROJECT_SOURCE_DIR}/testing -DRODENT_DIR=${CMAKE_BINARY_DIR} -DRODENT_OUTPUT=rodent-cornell-output -P ${PROJECT_SOURCE_DIR}/cmake/test/run_rodent.cmake)
+endif()

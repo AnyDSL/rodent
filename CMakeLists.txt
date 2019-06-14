@@ -103,6 +103,9 @@ if (NOT ${EMBREE_ROOT_DIR}    STREQUAL "EMBREE_ROOT_DIR-NOTFOUND"    AND
     set(EMBREE_FOUND ON)
 endif()
 
+# For tests
 include(CTest)
+find_package(ImageMagick COMPONENTS compare QUIET)
+
 add_subdirectory(src)
 add_subdirectory(tools)

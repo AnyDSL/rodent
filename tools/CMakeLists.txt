@@ -20,7 +20,6 @@ if (EMBREE_FOUND)
     add_subdirectory(bench_embree)
 endif()
 
-find_package(ImageMagick COMPONENTS compare QUIET)
 if (ImageMagick_FOUND AND PNG_FOUND)
     # Only test the primary rays, as the random rays are often too close
     # to surfaces and often give slightly different results for each algorithm

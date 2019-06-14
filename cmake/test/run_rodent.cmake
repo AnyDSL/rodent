@@ -1,0 +1,8 @@
+execute_process(COMMAND ${RODENT} --bench 50 -o ${CMAKE_CURRENT_BINARY_DIR}/${RODENT_OUTPUT}.png ${RODENT_ARGS} RESULT_VARIABLE CMD_RESULT WORKING_DIRECTORY ${RODENT_DIR})
+if (CMD_RESULT)
+    message(FATAL_ERROR "Error running rodent")
+endif()
+execute_process(COMMAND ${IM_COMPARE} -metric MSE ${TESTING_DIR}/ref-cornell.png ${RODENT_OUTPUT}.png ${RODENT_OUTPUT}-diff.png RESULT_VARIABLE CMD_RESULT)
+if (CMD_RESULT)
+    message(FATAL_ERROR "The output of rodent '${RODENT_OUTPUT}.png' does not match the reference '${TESTING_DIR}/ref-cornell.png'")
+endif()
