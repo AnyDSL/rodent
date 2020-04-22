@@ -75,16 +75,6 @@ fn @once(body: fn () -> ()) -> () {
     @@body()
 }
 
-fn @atomic_add_f32(ptr: &mut f32, value: f32) -> () {
-    let mut cur = *(ptr as &i32);
-    while true {
-        let next = bitcast[f32](cur) + value;
-        let (new, success) = cmpxchg(ptr as &mut i32, cur, bitcast[i32](next));
-        if success { break() }
-        cur = new;
-    }
-}
-
 fn @prodsign(x: f32, y: f32) -> f32 {
     bitcast[f32](bitcast[i32](x) ^ (bitcast[i32](y) & bitcast[i32](0x80000000u)))
 }
