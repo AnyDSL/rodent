@@ -16,7 +16,7 @@ fn @cpu_profile(counter: &mut i64, body: fn () -> ()) -> () {
         if cpu_profiling_serial {
             *counter += end - start;
         } else {
-            atomic(1u32, counter, end - start);
+            atomic(1u32, counter, end - start, 7u32, "");
         }
     } else {
         body()

@@ -401,7 +401,7 @@ fn @cpu_trace( scene: Scene
                         cpu_traverse_primary(scene, min_max, primary, single, vector_width);
                     }
                 }
-                atomic(1u32, &mut total_rays, primary.size as i64);
+                atomic(1u32, &mut total_rays, primary.size as i64, 7u32, "");
 
                 // Sort hits by shader id, and filter invalid hits
                 let mut ray_begins : [i32 * 1024];
