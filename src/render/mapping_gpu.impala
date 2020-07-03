@@ -198,14 +198,14 @@ fn @gpu_sort_primary( primary: PrimaryStream
 
     // Perform a scan on the CPU (there are very few elements to scan)
     let mut ray_begins : [i32 * 1024];
-    runtime_copy(dev_id, gpu_tmp as &[i8], 0i64, 0, ray_ends as &[i8], 0i64, (sizeof[i32]() * (scene.num_geometries + 1)) as i64);
+    runtime_copy(dev_id, gpu_tmp as &[i8], 0i64, 0, ray_ends as &[i8], 0i64, sizeof[i32]() * (scene.num_geometries + 1) as i64);
     let mut n = 0;
     for i in range(0, scene.num_geometries + 1) {
         ray_begins(i) = n;
         n += ray_ends(i);
         ray_ends(i) = n;
     }
-    runtime_copy(0, &ray_begins as &[i8], 0i64, dev_id, gpu_tmp as &[i8], 0i64, (sizeof[i32]() * (scene.num_geometries + 1)) as i64);
+    runtime_copy(0, &ray_begins as &[i8], 0i64, dev_id, gpu_tmp as &[i8], 0i64, sizeof[i32]() * (scene.num_geometries + 1) as i64);
 
     // Sort rays
     with work_item in acc.exec((round_up(primary.size, block_w), 1, 1), (block_w, 1, 1)) {
@@ -276,7 +276,7 @@ fn @gpu_compact_primary( primary: PrimaryStream
 
     // reset temporary memory
     let mut size = 0;
-    runtime_copy(0, &size as &[i8], 0i64, dev_id, gpu_tmp as &[i8], 0i64, sizeof[i32]() as i64);
+    runtime_copy(0, &size as &[i8], 0i64, dev_id, gpu_tmp as &[i8], 0i64, sizeof[i32]());
 
     // Compact primary rays into another queue
     with work_item in acc.exec((round_up(primary.size, block_w), 1, 1), (block_w, 1, 1)) {
@@ -295,7 +295,7 @@ fn @gpu_compact_primary( primary: PrimaryStream
     }
     acc.sync();
 
-    runtime_copy(dev_id, gpu_tmp as &[i8], 0i64, 0, &mut size as &[i8], 0i64, sizeof[i32]() as i64);
+    runtime_copy(dev_id, gpu_tmp as &[i8], 0i64, 0, &mut size as &[i8], 0i64, sizeof[i32]());
     size
 }
 
