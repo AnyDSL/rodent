@@ -574,18 +574,10 @@ fn @make_nvvm_device(dev: i32, streaming: bool) -> Device {
         }
     };
     let atomics = Atomics {
-        add_global_i32: @ |p, i| nvvm_atomic_add_global(p as &mut[1]i32, i),
-        add_global_f32: @ |p, i| {
-            let mut old: f32;
-            asm("atom.global.add.f32 $0, [$1], $2;" : "=f"(old) : "l"(p), "f"(i) : "memory");
-            old
-        },
+        add_global_i32: @ |p, i| nvvm_atomic_add_global_i32(p as &mut[1]i32, i),
+        add_global_f32: @ |p, i| nvvm_atomic_add_global_f32(p as &mut[1]f32, i),
         add_shared_i32: @ |p, i| nvvm_atomic_add_shared(p, i),
-        add_shared_f32: @ |p, i| {
-            let mut old: f32;
-            asm("atom.shared.add.f32 $0, [$1], $2;" : "=f"(old) : "l"(p), "f"(i) : "memory");
-            old
-        }
+        add_shared_f32: @ |p, i| atomic_p3(11u32, p, i, 2u32, "")
     };
     make_gpu_device(
         dev_id,
@@ -640,26 +632,10 @@ fn @make_amdgpu_device(dev: i32, streaming: bool) -> Device {
         }
     };
     let atomics = Atomics {
-        add_global_i32: @ |p, i| amdgcn_atomic_add_global(p as &mut[1]i32, i),
-        add_global_f32: @ |p, i| {
-            let mut assumed = *p;
-            while true {
-                let (old, success) = cmpxchg_p1(p as &mut [1]i32, bitcast[i32](assumed), bitcast[i32](i + assumed), 2u32, "agent");
-                assumed = bitcast[f32](old);
-                if success { break() }
-            }
-            assumed
-        },
+        add_global_i32: @ |p, i| amdgcn_atomic_add_global_i32(p as &mut[1]i32, i),
+        add_global_f32: @ |p, i| amdgcn_atomic_add_global_f32(p as &mut[1]f32, i),
         add_shared_i32: @ |p, i| amdgcn_atomic_add_shared(p, i),
-        add_shared_f32: @ |p, i| {
-            let mut assumed = *p;
-            while true {
-                let (old, success) = cmpxchg_p3(p as &mut [3]i32, bitcast[i32](assumed), bitcast[i32](i + assumed), 2u32, "wavefront");
-                assumed = bitcast[f32](old);
-                if success { break() }
-            }
-            assumed
-        }
+        add_shared_f32: @ |p, i| atomic_p3(11u32, p, i, 2u32, "wavefront")
     };
     make_gpu_device(
         dev_id,
