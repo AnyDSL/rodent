@@ -50,7 +50,7 @@ fn @make_small_stack(n: i32) -> SmallStack {
 }
 
 fn @alloc_stack() -> Stack {
-    let mut nodes : [i32   * 64];
+    let mut nodes : [i32 * 64];
     let mut tmins : [f32 * 64];
     let mut node = 0;
     let mut tmin = flt_max;
