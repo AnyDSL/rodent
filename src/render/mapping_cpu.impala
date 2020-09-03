@@ -1,18 +1,12 @@
 // Trace function ------------------------------------------------------------------
 
-fn @cpu_parallel_tiles( width: i32
-                      , height: i32
-                      , tile_width: i32
-                      , tile_height: i32
-                      , num_cores: i32
-                      , body: fn (i32, i32, i32, i32) -> ()) -> () {
-
+fn @cpu_parallel_tiles(body: fn (i32, i32, i32, i32) -> ()) = @|width: i32, height: i32, tile_width: i32, tile_height: i32, num_cores: i32| {
     if cpu_profiling_enabled && cpu_profiling_serial {
         for ymin in range_step(0, height, tile_height) {
             for xmin in range_step(0, width, tile_width) {
                 let xmax = if xmin + tile_width  < width  { xmin + tile_width  } else { width  };
                 let ymax = if ymin + tile_height < height { ymin + tile_height } else { height };
-                @@body(xmin, ymin, xmax, ymax)
+                @body(xmin, ymin, xmax, ymax)
             }
         }
     } else {
@@ -27,12 +21,13 @@ fn @cpu_parallel_tiles( width: i32
             let ymin = y * tile_height;
             let xmax = cpu_intrinsics.min(xmin + tile_width,  width);
             let ymax = cpu_intrinsics.min(ymin + tile_height, height);
-            @@body(xmin, ymin, xmax, ymax)
+            @body(xmin, ymin, xmax, ymax)
         }
     }
 }
 
-extern fn cpu_sort_primary(primary: &PrimaryStream, ray_begins: &mut [i32], ray_ends: &mut[i32], num_geometries: i32) -> i32 {
+#[export]
+fn cpu_sort_primary(primary: &PrimaryStream, ray_begins: &mut [i32], ray_ends: &mut[i32], num_geometries: i32) -> i32 {
     let read_primary_hit = make_primary_stream_hit_reader(*primary, 1);
 
     // Count the number of rays per shader
@@ -59,27 +54,27 @@ extern fn cpu_sort_primary(primary: &PrimaryStream, ray_begins: &mut [i32], ray_
             if geom_id != i {
                 let k = ray_begins(geom_id)++;
 
-                swap_i32(&mut primary.rays.id(k),    &mut primary.rays.id(j));
-                swap_f32(&mut primary.rays.org_x(k), &mut primary.rays.org_x(j));
-                swap_f32(&mut primary.rays.org_y(k), &mut primary.rays.org_y(j));
-                swap_f32(&mut primary.rays.org_z(k), &mut primary.rays.org_z(j));
-                swap_f32(&mut primary.rays.dir_x(k), &mut primary.rays.dir_x(j));
-                swap_f32(&mut primary.rays.dir_y(k), &mut primary.rays.dir_y(j));
-                swap_f32(&mut primary.rays.dir_z(k), &mut primary.rays.dir_z(j));
-                swap_f32(&mut primary.rays.tmin(k),  &mut primary.rays.tmin(j));
-                swap_f32(&mut primary.rays.tmax(k),  &mut primary.rays.tmax(j));
+                swap(&mut primary.rays.id(k),    &mut primary.rays.id(j));
+                swap(&mut primary.rays.org_x(k), &mut primary.rays.org_x(j));
+                swap(&mut primary.rays.org_y(k), &mut primary.rays.org_y(j));
+                swap(&mut primary.rays.org_z(k), &mut primary.rays.org_z(j));
+                swap(&mut primary.rays.dir_x(k), &mut primary.rays.dir_x(j));
+                swap(&mut primary.rays.dir_y(k), &mut primary.rays.dir_y(j));
+                swap(&mut primary.rays.dir_z(k), &mut primary.rays.dir_z(j));
+                swap(&mut primary.rays.tmin(k),  &mut primary.rays.tmin(j));
+                swap(&mut primary.rays.tmax(k),  &mut primary.rays.tmax(j));
 
-                swap_i32(&mut primary.geom_id(k),   &mut primary.geom_id(j));
-                swap_i32(&mut primary.prim_id(k),   &mut primary.prim_id(j));
-                swap_f32(&mut primary.t(k),         &mut primary.t(j));
-                swap_f32(&mut primary.u(k),         &mut primary.u(j));
-                swap_f32(&mut primary.v(k),         &mut primary.v(j));
-                swap_u32(&mut primary.rnd(k),       &mut primary.rnd(j));
-                swap_f32(&mut primary.mis(k),       &mut primary.mis(j));
-                swap_f32(&mut primary.contrib_r(k), &mut primary.contrib_r(j));
-                swap_f32(&mut primary.contrib_g(k), &mut primary.contrib_g(j));
-                swap_f32(&mut primary.contrib_b(k), &mut primary.contrib_b(j));
-                swap_i32(&mut primary.depth(k),     &mut primary.depth(j));
+                swap(&mut primary.geom_id(k),   &mut primary.geom_id(j));
+                swap(&mut primary.prim_id(k),   &mut primary.prim_id(j));
+                swap(&mut primary.t(k),         &mut primary.t(j));
+                swap(&mut primary.u(k),         &mut primary.u(j));
+                swap(&mut primary.v(k),         &mut primary.v(j));
+                swap(&mut primary.rnd(k),       &mut primary.rnd(j));
+                swap(&mut primary.mis(k),       &mut primary.mis(j));
+                swap(&mut primary.contrib_r(k), &mut primary.contrib_r(j));
+                swap(&mut primary.contrib_g(k), &mut primary.contrib_g(j));
+                swap(&mut primary.contrib_b(k), &mut primary.contrib_b(j));
+                swap(&mut primary.depth(k),     &mut primary.depth(j));
             } else {
                 j++;
             }
@@ -117,7 +112,7 @@ fn @cpu_compact_primary(primary: &PrimaryStream, vector_width: i32, vector_compa
         let mut k = 0;
         if vector_compact {
             for i in range_step(0, primary.size, vector_width) {
-                for j in vectorize(vector_width) {
+                vectorize(vector_width, |j| { 
                     let id = primary.rays.id(i + j);
                     let mask = (id >= 0) & (i + j < primary.size);
 
@@ -133,7 +128,7 @@ fn @cpu_compact_primary(primary: &PrimaryStream, vector_width: i32, vector_compa
                     primary.depth(k + j)     = bitcast[i32](rv_compact(bitcast[f32](primary.depth(i + j)), mask));
 
                     k += cpu_popcount32(rv_ballot(mask));
-                }
+                });
             }
         } else {
             for i in range(0, primary.size) {
@@ -153,7 +148,7 @@ fn @cpu_compact_primary(primary: &PrimaryStream, vector_width: i32, vector_compa
         }
         k
     }
-    ($cpu_compact_primary_specialized)(primary)
+    $cpu_compact_primary_specialized(primary)
 }
 
 fn @cpu_compact_secondary(secondary: &SecondaryStream, vector_width: i32, vector_compact: bool) -> i32 {
@@ -161,7 +156,7 @@ fn @cpu_compact_secondary(secondary: &SecondaryStream, vector_width: i32, vector
         let mut k = 0;
         if vector_compact {
             for i in range_step(0, secondary.size, vector_width) {
-                for j in vectorize(vector_width) {
+                vectorize(vector_width, |j| {
                     let id = secondary.rays.id(i + j);
                     let mask = (id >= 0) & (i + j < secondary.size);
 
@@ -175,7 +170,7 @@ fn @cpu_compact_secondary(secondary: &SecondaryStream, vector_width: i32, vector
                     secondary.color_b(k + j) = rv_compact(secondary.color_b(i + j), mask);
 
                     k += cpu_popcount32(rv_ballot(mask));
-                }
+                });
             }
         } else {
             for i in range(0, secondary.size) {
@@ -194,7 +189,7 @@ fn @cpu_compact_secondary(secondary: &SecondaryStream, vector_width: i32, vector
         }
         k
     }
-    ($cpu_compact_secondary_specialized)(secondary)
+    $cpu_compact_secondary_specialized(secondary)
 }
 
 fn @cpu_generate_rays( primary: PrimaryStream
@@ -226,7 +221,8 @@ fn @cpu_generate_rays( primary: PrimaryStream
         let in_tile_x = in_tile_pixel - in_tile_y * tile_width;
         let x = xmin + in_tile_x;
         let y = ymin + in_tile_y;
-        let (ray, state) = @@(path_tracer.on_emit)(sample, x, y, film_width, film_height);
+        let on_emit = path_tracer.on_emit;
+        let (ray, state) = @on_emit(sample, x, y, film_width, film_height);
         let cur_ray = primary.size + i;
         write_ray(cur_ray, 0, ray);
         write_state(cur_ray, 0, state);
@@ -249,7 +245,7 @@ fn @cpu_traverse_primary(scene: Scene, min_max: MinMax, primary: &PrimaryStream,
             false /*any_hit*/
         );
     }
-    ($cpu_traverse_primary_specialized)(primary);
+    $cpu_traverse_primary_specialized(primary);
 }
 
 fn @cpu_traverse_secondary(scene: Scene, min_max: MinMax, secondary: &SecondaryStream, single: bool, vector_width: i32) -> () {
@@ -265,7 +261,7 @@ fn @cpu_traverse_secondary(scene: Scene, min_max: MinMax, secondary: &SecondaryS
             true /*any_hit*/
         );
     }
-    ($cpu_traverse_secondary_specialized)(secondary);
+    $cpu_traverse_secondary_specialized(secondary);
 }
 
 fn @cpu_shade(geom_id: i32, primary: &PrimaryStream, secondary: &SecondaryStream, scene: Scene, path_tracer: PathTracer, accumulate: fn (i32, Color) -> (), begin: i32, end: i32, vector_width: i32) -> () {
@@ -288,16 +284,19 @@ fn @cpu_shade(geom_id: i32, primary: &PrimaryStream, secondary: &SecondaryStream
             let mat    = geom.shader(ray, hit, surf);
 
             // Execute hit point shading, and add the contribution of each lane to the frame buffer
-            let mut hit_color;
-            for once() {
-                @@(path_tracer.on_hit)(ray, hit, &mut state, surf, mat, @ |color| -> ! {
-                    hit_color = color;
-                    break()
-                }, @ || -> ! {
-                    hit_color = make_color(0.0f, 0.0f, 0.0f);
-                    break()
-                })
-            }
+            let mut hit_color: Color;
+            once(|| {
+                let on_hit = path_tracer.on_hit;
+                let hit = @on_hit(ray, hit, &mut state, surf, mat);
+                match hit {
+                    Option[Color]::Some(color) => {
+                        hit_color = color;
+                    },
+                    Option[Color]::None => {
+                        hit_color = make_color(0, 0, 0);
+                    }
+                }
+            });
 
             for lane in unroll(0, vector_width) {
                 let j = bitcast[i32](rv_extract(bitcast[f32](ray_id), lane));
@@ -311,31 +310,37 @@ fn @cpu_shade(geom_id: i32, primary: &PrimaryStream, secondary: &SecondaryStream
             }
 
             // Compute shadow rays
-            for once() {
-                @@(path_tracer.on_shadow)(ray, hit, &mut state, surf, mat, @ |ray, color| -> ! {
-                    write_secondary_ray(i, 0, ray);
-                    secondary.color_r(i) = color.r;
-                    secondary.color_g(i) = color.g;
-                    secondary.color_b(i) = color.b;
-                    secondary.rays.id(i) = ray_id;
-                    break()
-                }, @ || -> ! {
-                    secondary.rays.id(i) = -1;
-                    break()
-                })
-            }
+            once(|| {
+                let on_shadow = path_tracer.on_shadow;
+                let shadow = @on_shadow(ray, hit, &mut state, surf, mat);
+                match shadow {
+                    Option[(Ray, Color)]::Some(ray, color) => {
+                        write_secondary_ray(i, 0, ray);
+                        secondary.color_r(i) = color.r;
+                        secondary.color_g(i) = color.g;
+                        secondary.color_b(i) = color.b;
+                        secondary.rays.id(i) = ray_id;
+                    },
+                    Option[(Ray, Color)]::None => {
+                        secondary.rays.id(i) = -1;
+                    }
+                }
+            });
 
             // Sample new rays
-            for once() {
-                @@(path_tracer.on_bounce)(ray, hit, &mut state, surf, mat, @ |new_ray, new_state| -> ! {
-                    write_primary_ray(i, 0, new_ray);
-                    write_primary_state(i, 0, new_state);
-                    break()
-                }, @ || -> ! {
-                    primary.rays.id(i) = -1;
-                    break()
-                })
-            }
+            once(|| {
+                let on_bounce = path_tracer.on_bounce;
+                let bounce = @on_bounce(ray, hit, &mut state, surf, mat);
+                match bounce {
+                    Option[(Ray, RayState)]::Some(new_ray, new_state) => {
+                        write_primary_ray(i, 0, new_ray);
+                        write_primary_state(i, 0, new_state);
+                    },
+                    Option[(Ray, RayState)]::None => {
+                        primary.rays.id(i) = -1;
+                    }
+                }
+            });
         }
     }
     cpu_shade_specialized(primary, secondary, begin, end);
@@ -363,19 +368,19 @@ fn @cpu_trace( scene: Scene
     let (film_pixels, film_width, film_height) = cpu_get_film_data();
 
     fn @accumulate(pixel: i32, color: Color) -> () {
-        let inv = 1.0f / (spp as f32);
+        let inv = 1 / (spp as f32);
         film_pixels(pixel * 3 + 0) += color.r * inv;
         film_pixels(pixel * 3 + 1) += color.g * inv;
         film_pixels(pixel * 3 + 2) += color.b * inv;
     }
-    let mut primary_counter = 0i64;
-    let mut bounces_counter = 0i64;
-    let mut shadow_counter  = 0i64;
-    let mut shading_counter = 0i64;
-    let mut total_counter   = 0i64;
-    let mut total_rays      = 0i64;
+    let mut primary_counter = 0:i64;
+    let mut bounces_counter = 0:i64;
+    let mut shadow_counter  = 0:i64;
+    let mut shading_counter = 0:i64;
+    let mut total_counter   = 0:i64;
+    let mut total_rays      = 0:i64;
     for xmin, ymin, xmax, ymax in cpu_parallel_tiles(film_width, film_height, tile_size, tile_size, num_cores) {
-        with cpu_profile(&mut total_counter) {
+        cpu_profile(&mut total_counter, || {
             // Get ray streams/states from the CPU driver
             let mut primary   : PrimaryStream;
             let mut secondary : SecondaryStream;
@@ -394,14 +399,14 @@ fn @cpu_trace( scene: Scene
                 }
 
                 // Trace primary rays
-                with cpu_profile(if first { &mut primary_counter } else { &mut bounces_counter }) {
+                cpu_profile(if first { &mut primary_counter } else { &mut bounces_counter }, || {
                     if use_embree {
                         rodent_cpu_intersect_primary_embree(primary, scene.num_geometries, select(first, -1, 0));
                     } else {
                         cpu_traverse_primary(scene, min_max, primary, single, vector_width);
                     }
-                }
-                atomic(1u32, &mut total_rays, primary.size as i64, 7u32, "");
+                });
+                atomic(1:u32, &mut total_rays, primary.size as i64, 7:u32, "");
 
                 // Sort hits by shader id, and filter invalid hits
                 let mut ray_begins : [i32 * 1024];
@@ -409,14 +414,14 @@ fn @cpu_trace( scene: Scene
                 primary.size = cpu_sort_primary(primary, &mut ray_begins, &mut ray_ends, scene.num_geometries);
 
                 // Perform (vectorized) shading
-                with cpu_profile(&mut shading_counter) {
+                cpu_profile(&mut shading_counter, || {
                     let mut begin = 0;
                     for geom_id in unroll(0, scene.num_geometries) {
                         let end = ray_ends(geom_id);
                         cpu_shade(geom_id, primary, secondary, scene, path_tracer, accumulate, begin, end, vector_width);
                         begin = end;
                     }
-                }
+                });
                 // Filter terminated rays
                 secondary.size = primary.size;
                 primary.size   = cpu_compact_primary(primary, vector_width, vector_compact);
@@ -424,13 +429,13 @@ fn @cpu_trace( scene: Scene
                 // Compact and trace secondary rays
                 secondary.size = cpu_compact_secondary(secondary, vector_width, vector_compact);
                 if likely(secondary.size > 0) {
-                    with cpu_profile(&mut shadow_counter) {
+                    cpu_profile(&mut shadow_counter, || {
                         if use_embree {
                             rodent_cpu_intersect_secondary_embree(secondary);
                         } else {
                             cpu_traverse_secondary(scene, min_max, secondary, single, vector_width);
                         }
-                    }
+                    });
                 }
 
                 // Add the contribution for secondary rays to the frame buffer
@@ -447,7 +452,7 @@ fn @cpu_trace( scene: Scene
                     }
                 }
             }
-        }
+        });
     }
 
     if cpu_profiling_enabled {
@@ -456,7 +461,7 @@ fn @cpu_trace( scene: Scene
             print_string(": ");
             print_i64(counter);
             print_string(" (");
-            print_i64(counter * 100i64 / total_counter);
+            print_i64(counter * 100 / total_counter);
             print_string("%)\n");
         }
         let other_counter = total_counter - primary_counter - bounces_counter - shadow_counter - shading_counter;
@@ -474,64 +479,62 @@ fn @cpu_trace( scene: Scene
 
 // CPU device ----------------------------------------------------------------------
 
-fn @make_cpu_device(use_embree: bool, vector_compact: bool, single: bool, min_max: MinMax, vector_width: i32, num_cores: i32, tile_size: i32) -> Device {
-    Device {
-        intrinsics: cpu_intrinsics,
-        trace: @ |scene, path_tracer, spp| {
-            cpu_trace(
-                scene,
-                path_tracer,
-                min_max,
-                single,
-                tile_size,
-                spp,
-                num_cores,
-                vector_width,
-                use_embree,
-                vector_compact
-            )
-        },
-        present: @ || rodent_present(0),
-        load_buffer: @ |filename| {
-            let p = rodent_load_buffer(0, filename);
-            DeviceBuffer {
-                load_f32:  @ |i| (p as &[f32])(i),
-                load_i32:  @ |i| (p as &[i32])(i),
-                load_vec2: @ |i| { let q = p as &[f32]; make_vec2(q(i * 2 + 0), q(i * 2 + 1)) },
-                load_vec3: @ |i| { let q = p as &[f32]; make_vec3(q(i * 3 + 0), q(i * 3 + 1), q(i * 3 + 2)) },
-                load_vec4: @ |i| { let v = (p as &[simd[f32 * 4]])(i); make_vec4(v(0), v(1), v(2), v(3)) },
-                load_int2: @ |i| { let q = p as &[i32]; (q(i * 2 + 0), q(i * 2 + 1)) },
-                load_int3: @ |i| { let q = p as &[i32]; (q(i * 3 + 0), q(i * 3 + 1), q(i * 3 + 2)) },
-                load_int4: @ |i| { let v = (p as &[simd[i32 * 4]])(i); (v(0), v(1), v(2), v(3)) }
-            }
-        },
-        load_bvh: @ |filename| {
-            if vector_width == 8 {
-                let mut nodes;
-                let mut tris;
-                rodent_load_bvh8_tri4(0, filename, &mut nodes, &mut tris);
-                make_cpu_bvh8_tri4(nodes, tris)
-            } else {
-                let mut nodes;
-                let mut tris;
-                rodent_load_bvh4_tri4(0, filename, &mut nodes, &mut tris);
-                make_cpu_bvh4_tri4(nodes, tris)
-            }
-        },
-        load_png: @ |filename| {
-            let mut pixel_data;
-            let mut width;
-            let mut height;
-            rodent_load_png(0, filename, &mut pixel_data, &mut width, &mut height);
-            make_image_rgba32(@ |x, y| (pixel_data as &[u32])(y * width + x), width, height)
-        },
-        load_jpg: @ |filename| {
-            let mut pixel_data;
-            let mut width;
-            let mut height;
-            rodent_load_jpg(0, filename, &mut pixel_data, &mut width, &mut height);
-            make_image_rgba32(@ |x, y| (pixel_data as &[u32])(y * width + x), width, height)
+fn @make_cpu_device(use_embree: bool, vector_compact: bool, single: bool, min_max: MinMax, vector_width: i32, num_cores: i32, tile_size: i32) = Device {
+    intrinsics = cpu_intrinsics,
+    trace = @ |scene, path_tracer, spp| {
+        cpu_trace(
+            scene,
+            path_tracer,
+            min_max,
+            single,
+            tile_size,
+            spp,
+            num_cores,
+            vector_width,
+            use_embree,
+            vector_compact
+        )
+    },
+    present = @ || rodent_present(0),
+    load_buffer = @ |filename| {
+        let p = rodent_load_buffer(0, filename);
+        DeviceBuffer {
+            load_f32  = @ |i| (p as &[f32])(i),
+            load_i32  = @ |i| (p as &[i32])(i),
+            load_vec2 = @ |i| { let q = p as &[f32]; make_vec2(q(i * 2 + 0), q(i * 2 + 1)) },
+            load_vec3 = @ |i| { let q = p as &[f32]; make_vec3(q(i * 3 + 0), q(i * 3 + 1), q(i * 3 + 2)) },
+            load_vec4 = @ |i| { let v = (p as &[simd[f32 * 4]])(i); make_vec4(v(0), v(1), v(2), v(3)) },
+            load_int2 = @ |i| { let q = p as &[i32]; (q(i * 2 + 0), q(i * 2 + 1)) },
+            load_int3 = @ |i| { let q = p as &[i32]; (q(i * 3 + 0), q(i * 3 + 1), q(i * 3 + 2)) },
+            load_int4 = @ |i| { let v = (p as &[simd[i32 * 4]])(i); (v(0), v(1), v(2), v(3)) }
         }
+    },
+    load_bvh = @ |filename| {
+        if vector_width == 8 {
+            let mut nodes: &[Node8];
+            let mut tris: &[Tri4];
+            rodent_load_bvh8_tri4(0, filename, &mut nodes, &mut tris);
+            make_cpu_bvh8_tri4(nodes, tris)
+        } else {
+            let mut nodes: &[Node4];
+            let mut tris: &[Tri4];
+            rodent_load_bvh4_tri4(0, filename, &mut nodes, &mut tris);
+            make_cpu_bvh4_tri4(nodes, tris)
+        }
+    },
+    load_png = @ |filename| {
+        let mut pixel_data: &[u8];
+        let mut width: i32;
+        let mut height: i32;
+        rodent_load_png(0, filename, &mut pixel_data, &mut width, &mut height);
+        make_image_rgba32(@ |x, y| (pixel_data as &[u32])(y * width + x), width, height)
+    },
+    load_jpg = @ |filename| {
+        let mut pixel_data: &[u8];
+        let mut width: i32;
+        let mut height: i32;
+        rodent_load_jpg(0, filename, &mut pixel_data, &mut width, &mut height);
+        make_image_rgba32(@ |x, y| (pixel_data as &[u32])(y * width + x), width, height)
     }
 }
 
@@ -539,18 +542,7 @@ fn @make_avx2_device(use_embree: bool) -> Device {
     make_cpu_device(use_embree, true, true, make_cpu_int_min_max(), 8, 0, 16)
 }
 
-fn @make_avx_device() -> Device {
-    make_cpu_device(false, true, true, make_default_min_max(), 8, 0, 16)
-}
-
-fn @make_sse42_device() -> Device {
-    make_cpu_device(false, false, true, make_cpu_int_min_max(), 4, 0, 16)
-}
-
-fn @make_asimd_device() -> Device {
-    make_cpu_device(false, false, false, make_cpu_int_min_max(), 4, 0, 16)
-}
-
-fn @make_cpu_default_device() -> Device {
-    make_cpu_device(false, false, false, make_default_min_max(), 1, 0, 16)
-}
+fn @make_avx_device() = make_cpu_device(false, true, true, make_default_min_max(), 8, 0, 16)
+fn @make_sse42_device() = make_cpu_device(false, false, true, make_cpu_int_min_max(), 4, 0, 16)
+fn @make_asimd_device() = make_cpu_device(false, false, false, make_cpu_int_min_max(), 4, 0, 16)
+fn @make_cpu_default_device() = make_cpu_device(false, false, false, make_default_min_max(), 1, 0, 16)

@@ -26,22 +26,22 @@ fn @make_small_stack(n: i32) -> SmallStack {
     fn @(?begin & ?end) make_small_stack_helper(begin: i32, end: i32) -> SmallStack {
         if begin == end {
             SmallStack {
-                write: @ |_, _| (),
-                read:  @ |_| undef[(i32, f32)]()
+                write = @ |_, _| (),
+                read  = @ |_| undef[(i32, f32)]()
             }
         } else if begin + 1 == end {
             let mut val : (i32, f32);
             SmallStack {
-                write: @ |i, v| val = v,
-                read:  @ |i| val
+                write = @ |i, v| val = v,
+                read  = @ |i| val
             }
         } else {
             let m = (begin + end) / 2;
             let left  = make_small_stack_helper(begin, m);
             let right = make_small_stack_helper(m, end);
             SmallStack {
-                write: @ |i, v| if i < m { left.write(i, v) } else { right.write(i, v) },
-                read:  @ |i|    if i < m { left.read(i)     } else { right.read(i)     }
+                write = @ |i, v| if i < m { left.write(i, v) } else { right.write(i, v) },
+                read  = @ |i|    if i < m { left.read(i)     } else { right.read(i)     }
             }
         }
     }
@@ -56,32 +56,32 @@ fn @alloc_stack() -> Stack {
     let mut tmin = flt_max;
     let mut ptr = -1;
 
-    let vals_accessor = @ |off| (@ |i| nodes(i + off), @ |i, v| nodes(i + off) = v);
-    let keys_accessor = @ |off| (@ |i| tmins(i + off), @ |i, k| tmins(i + off) = k);
+    let vals_accessor = @ |off: i32| (@ |i: i32| nodes(i + off), @ |i: i32, v: i32| nodes(i + off) = v);
+    let keys_accessor = @ |off: i32| (@ |i: i32| tmins(i + off), @ |i: i32, k: f32| tmins(i + off) = k);
 
     Stack {
-        push: @ |n, t| {
+        push = @ |n, t| {
             ptr++;
             nodes(ptr) = node;
             tmins(ptr) = tmin;
             node = n;
             tmin = t;
         },
-        push_after: @ |n, t| {
+        push_after = @ |n, t| {
             ptr++;
             nodes(ptr) = n;
             tmins(ptr) = t;
         },
-        set_top: @ |n, t| {
+        set_top = @ |n, t| {
             node = n;
             tmin = t;
         },
-        sort_n: @ |n, cmp, sorting_network, branchless| {
+        sort_n = @ |n, cmp, sorting_network, branchless| {
             let (read_val, write_val) = vals_accessor(ptr - n + 1);
             let (read_key, write_key) = keys_accessor(ptr - n + 1);
             if branchless {
                 let tmp = make_small_stack(n);
-                for i in range(0, n) @{
+                for i in range(0, n) {
                     tmp.write(i, (read_val(i), read_key(i)))
                 }
                 sorting_network(n, @ |i, j| {
@@ -91,7 +91,7 @@ fn @alloc_stack() -> Stack {
                     tmp.write(i, select(swp, (v1, k1), (v0, k0)));
                     tmp.write(j, select(swp, (v0, k0), (v1, k1)));
                 });
-                for i in range(0, n) @{
+                for i in range(0, n) {
                     let (v, k) = tmp.read(i);
                     write_val(i, v);
                     write_key(i, k);
@@ -109,15 +109,15 @@ fn @alloc_stack() -> Stack {
                 });
             }
         },
-        pop: @ || {
-            let old = NodeRef { node: node, tmin: tmin };
+        pop = @ || {
+            let old = NodeRef { node = node, tmin = tmin };
             node = nodes(ptr);
             tmin = tmins(ptr);
             ptr--;
             old
         },
-        top: @ || NodeRef { node: node, tmin: tmin },
-        is_empty: @ || node == 0,
-        size: @ || ptr
+        top = @ || NodeRef { node = node, tmin = tmin },
+        is_empty = @ || node == 0,
+        size = @ || ptr
     }
 }

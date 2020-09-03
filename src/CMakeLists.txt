@@ -70,13 +70,13 @@ set(CONVERTER_SRCS
 anydsl_runtime_wrap(RODENT_OBJS
     NAME "rodent"
     CLANG_FLAGS ${CLANG_FLAGS}
-    IMPALA_FLAGS --log-level info
+    IMPALA_FLAGS --log-level info --max-errors 5
     FILES ${RODENT_SRCS} ${CMAKE_CURRENT_BINARY_DIR}/main.impala)
 
-anydsl_runtime_wrap(DISCARD_TMP_OBJS
-    NAME "interface"
-    FILES ${RODENT_SRCS} dummy_main.impala
-    INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/driver/interface)
+#anydsl_runtime_wrap(DISCARD_TMP_OBJS
+#    NAME "interface"
+#    FILES ${RODENT_SRCS} dummy_main.impala
+#    INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/driver/interface)
 
 if (NOT DISABLE_GUI)
     find_package(SDL2 REQUIRED)

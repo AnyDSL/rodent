@@ -1,8 +1,6 @@
 // Misc. ---------------------------------------------------------------------------
 
-extern "C" {
-    fn clock_us() -> i64;
-}
+#[import(cc = "C")] fn clock_us() -> i64;
 
 static cpu_profiling_enabled = false;
 static cpu_profiling_serial  = false;
@@ -11,26 +9,29 @@ static cpu_profiling_serial  = false;
 fn @cpu_profile(counter: &mut i64, body: fn () -> ()) -> () {
     if cpu_profiling_enabled {
         let start = clock_us();
-        body();
+        @body();
         let end = clock_us();
         if cpu_profiling_serial {
             *counter += end - start;
         } else {
-            atomic(1u32, counter, end - start, 7u32, "");
+            atomic(1:u32, counter, end - start, 7:u32, "");
         }
     } else {
-        body()
+        @body()
     }
 }
 
 // Iterate over the bit that are set in a mask (assumes that mask != 0)
-fn cpu_one_bits(mut mask: i32, @body: fn (i32) -> ()) -> () {
-    let lane = cpu_ctz32(mask, true);
-    @@body(lane);
-    mask &= mask - 1;
-    if mask != 0 {
-        cpu_one_bits(mask, body, return)
+fn @cpu_one_bits(body: fn (i32) -> ()) {
+    fn loop(mut mask: i32) -> () {
+        let lane = cpu_ctz32(mask, true);
+        @body(lane);
+        mask &= mask - 1;
+        if mask != 0 {
+            loop(mask)
+        }
     }
+    loop
 }
 
 // Performs a horizontal reduction over vector lanes
@@ -46,7 +47,7 @@ fn @(?n) cpu_reduce(value: f32, n: i32, op: fn (f32, f32) -> f32) -> f32 {
 // Prefetches a chunk of memory
 fn @cpu_prefetch_bytes(ptr: &[u8], bytes: i32) -> () {
     for i in unroll_step(0, bytes, 64) {
-        cpu_prefetch(&ptr(i),  0 /* read */, 3 /* closest locality */, 1 /* data */);
+        cpu_prefetch(&ptr(i),  0 /* read */, 3 /* closest locality */, 1 /* data */)
     }
 }
 
@@ -56,20 +57,18 @@ fn @cpu_index_of(value: f32, lane: f32) -> i32 {
 }
 
 // Vectorizes an arbitrary range
-fn @vectorized_range(vector_width: i32, a: i32, b: i32, body: fn (i32, i32) -> ()) -> () {
+fn @vectorized_range(body: fn (i32, i32) -> ()) = @|vector_width: i32, a: i32, b: i32| {
     if vector_width == 1 {
         for i in range(a, b) {
-            body(i, 1);
+            body(i, 1)
         }
     } else {
         let n_vec = round_down(b - a, vector_width);
         for i in range_step(a, a + n_vec, vector_width) {
-            for j in vectorize(vector_width) {
-                @@body(i + j, vector_width)
-            }
+            vectorize(vector_width, |j| @body(i + j, vector_width))
         }
         for i in range(a + n_vec, b) {
-            @@body(i, 1)
+            @body(i, 1)
         }
     }
 }

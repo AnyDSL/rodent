@@ -17,19 +17,19 @@ struct Tri1 {
 
 fn @make_gpu_bvh2_tri1(nodes: &[Node2], tris: &[Tri1], is_nvvm: bool) -> Bvh {
     // Use texture cache when generating code with NVVM
-    let load4_f32 = @ |p, i| if is_nvvm { nvvm_ldg4_f32(&p(i)) } else { p(i) };
-    let load4_i32 = @ |p, i| if is_nvvm { nvvm_ldg4_i32(&p(i)) } else { p(i) };
+    let load4_f32 = @ |p: &addrspace(1)[simd[f32 * 4]], i: i32| if is_nvvm { nvvm_ldg4_f32(&p(i)) } else { p(i) };
+    let load4_i32 = @ |p: &addrspace(1)[simd[i32 * 4]], i: i32| if is_nvvm { nvvm_ldg4_i32(&p(i)) } else { p(i) };
 
     Bvh {
-        node: @ |j| {
-            let simd_ptr = &nodes(j) as &[1][simd[f32 * 4]];
+        node = @ |j| {
+            let simd_ptr = &nodes(j) as &addrspace(1)[simd[f32 * 4]];
             let bb0 = load4_f32(simd_ptr, 0);
             let bb1 = load4_f32(simd_ptr, 1);
             let bb2 = load4_f32(simd_ptr, 2);
-            let children = load4_i32(simd_ptr as &[1][simd[i32 * 4]], 3);
+            let children = load4_i32(simd_ptr as &addrspace(1)[simd[i32 * 4]], 3);
 
             Node {
-                bbox: @ |i| {
+                bbox = @ |i| {
                     if i == 0 {
                         make_bbox(make_vec3(bb0(0), bb0(2), bb1(0)),
                                   make_vec3(bb0(1), bb0(3), bb1(1)))
@@ -38,55 +38,55 @@ fn @make_gpu_bvh2_tri1(nodes: &[Node2], tris: &[Tri1], is_nvvm: bool) -> Bvh {
                                   make_vec3(bb1(3), bb2(1), bb2(3)))
                     }
                 },
-                ordered_bbox: @ |i, _| undef[BBox](), // Not implemented
-                child: @ |i| children(i)
+                ordered_bbox = @ |i, _| undef[BBox](), // Not implemented
+                child = @ |i| children(i)
             }
         },
-        prim: @ |j| {
-            let simd_ptr = &tris(j) as &[1][simd[f32 * 4]];
+        prim = @ |j| {
+            let simd_ptr = &tris(j) as &addrspace(1)[simd[f32 * 4]];
             let tri0 = load4_f32(simd_ptr, 0);
             let tri1 = load4_f32(simd_ptr, 1);
             let tri2 = load4_f32(simd_ptr, 2);
             let prim_id = bitcast[i32](tri2(3));
             let geom_id = bitcast[i32](tri1(3));
             Prim {
-                intersect: @ |_, math, ray, no_hit| {
+                intersect = @ |_, math, ray| {
                     let v0  = make_vec3(tri0(0), tri0(1), tri0(2));
                     let e1  = make_vec3(tri1(0), tri1(1), tri1(2));
                     let e2  = make_vec3(tri2(0), tri2(1), tri2(2));
                     let n   = vec3_cross(e1, e2);
                     let tri = make_tri(v0, e1, e2, n);
-                    let (t, u, v) = intersect_ray_tri(math, false /*backface_culling*/, ray, tri, no_hit);
-                    make_hit(geom_id, prim_id & 0x7FFFFFFF, t, make_vec2(u, v))
+                    match intersect_ray_tri(math, false /*backface_culling*/, ray, tri) {
+                        Option[(f32, f32, f32)]::Some((t, u, v)) => {
+                            make_option(make_hit(geom_id, prim_id & 0x7FFFFFFF, t, make_vec2(u, v)))
+                        },
+                        _ => Option[Hit]::None
+                    }
                 },
-                is_valid: @ |_| true,
-                is_last: prim_id < 0,
-                size: 1
+                is_valid = @ |_| true,
+                is_last = prim_id < 0,
+                size = 1
             }
         },
-        prefetch: @ |_| (), // Not implemented
-        arity: 2
+        prefetch = @ |_| (), // Not implemented
+        arity = 2
     }
 }
 
 // Min/Max functions  --------------------------------------------------------------
 
-fn @make_nvvm_min_max() -> MinMax {
+fn @make_nvvm_min_max() = MinMax {
     // Use video instructions to speed-up the ray-box test
-    MinMax {
-        fminf: nvvm_fminf,
-        fmaxf: nvvm_fmaxf,
-        fminminf: @ |a, b, c| bitcast[f32](nvvm_minmin(bitcast[i32](a), bitcast[i32](b), bitcast[i32](c))),
-        fmaxmaxf: @ |a, b, c| bitcast[f32](nvvm_maxmax(bitcast[i32](a), bitcast[i32](b), bitcast[i32](c))),
-        fminmaxf: @ |a, b, c| bitcast[f32](nvvm_minmax(bitcast[i32](a), bitcast[i32](b), bitcast[i32](c))),
-        fmaxminf: @ |a, b, c| bitcast[f32](nvvm_maxmin(bitcast[i32](a), bitcast[i32](b), bitcast[i32](c))),
-        is_integer: true
-    }
+    fminf = nvvm_fminf,
+    fmaxf = nvvm_fmaxf,
+    fminminf = @ |a, b, c| bitcast[f32](nvvm_minmin(bitcast[i32](a), bitcast[i32](b), bitcast[i32](c))),
+    fmaxmaxf = @ |a, b, c| bitcast[f32](nvvm_maxmax(bitcast[i32](a), bitcast[i32](b), bitcast[i32](c))),
+    fminmaxf = @ |a, b, c| bitcast[f32](nvvm_minmax(bitcast[i32](a), bitcast[i32](b), bitcast[i32](c))),
+    fmaxminf = @ |a, b, c| bitcast[f32](nvvm_maxmin(bitcast[i32](a), bitcast[i32](b), bitcast[i32](c))),
+    is_integer = true
 }
 
-fn @make_amdgpu_min_max() -> MinMax {
-    make_min_max(ocml_fminf, ocml_fmaxf, false)
-}
+fn @make_amdgpu_min_max() = make_min_max(ocml_fminf, ocml_fmaxf, false)
 
 // Traversal kernel  ---------------------------------------------------------------
 
@@ -99,9 +99,8 @@ fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
                               , root: i32
                               ) -> Hit {
     let mut hit = empty_hit(ray.tmax);
-    let early_exit = || -> ! return(hit);
     let stack = alloc_stack();
-    stack.push(1, undef());
+    stack.push(1, undef[f32]());
 
     while !stack.is_empty() {
         let node_ref = stack.top();
@@ -127,10 +126,10 @@ fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
                 if mask == 3 {
                     let first  = select(t0 < t1, child0, child1);
                     let second = select(t0 < t1, child1, child0); 
-                    stack.set_top(first, undef());
-                    stack.push_after(second, undef());
+                    stack.set_top(first, undef[f32]());
+                    stack.push_after(second, undef[f32]());
                 } else {
-                    stack.set_top(select(mask == 1, child0, child1), undef());
+                    stack.set_top(select(mask == 1, child0, child1), undef[f32]());
                 }
             }
         } else {
@@ -143,10 +142,10 @@ fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
                     if mask & (1 << k) != 0 {
                         let (child, t) = small_stack.read(k);
                         if any_hit || t < tmin {
-                            stack.push(child, undef());
+                            stack.push(child, undef[f32]());
                             tmin = t
                         } else {
-                            stack.push_after(child, undef())
+                            stack.push_after(child, undef[f32]())
                         }
                     }
                 }
@@ -159,14 +158,18 @@ fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
             while true {
                 let prim = bvh.prim(prim_id++);
 
-                for k in unroll(0, prim.size) @{
+                for k in unroll(0, prim.size) {
                     if !prim.is_valid(k) { break() }
 
-                    let prim_hit = prim.intersect(k, gpu_intrinsics, ray, continue);
-                    hit = prim_hit;
-                    ray.tmax = prim_hit.distance;
+                    let prim_hit = prim.intersect(k, gpu_intrinsics, ray);
+                    match prim_hit {
+                        Option[Hit]::Some(prim_hit_some) => {
+                            hit = prim_hit_some;
+                            ray.tmax = prim_hit_some.distance;
 
-                    if any_hit && hit.prim_id >= 0 { early_exit() }
+                            if any_hit && hit.prim_id >= 0 { return(hit) }
+                        }
+                    }
                 }
 
                 if prim.is_last { break() }

@@ -14,41 +14,23 @@ struct Mat4x4 {
     col: [Vec4 * 4]
 }
 
-fn @make_mat2x2(c0: Vec2, c1: Vec2) -> Mat2x2 {
-    Mat2x2 {
-        col: [c0, c1]
-    }
-}
-
-fn @make_mat3x3(c0: Vec3, c1: Vec3, c2: Vec3) -> Mat3x3 {
-    Mat3x3 {
-        col: [c0, c1, c2]
-    }
-}
+fn @make_mat2x2(c0: Vec2, c1: Vec2) = Mat2x2 { col = [c0, c1] }
+fn @make_mat3x3(c0: Vec3, c1: Vec3, c2: Vec3) = Mat3x3 { col = [c0, c1, c2] }
 
 fn @make_orthonormal_mat3x3(n: Vec3) -> Mat3x3 {
-    let sign = select(n.z >= 0.0f, 1.0f, -1.0f);
-    let a = -1.0f / (sign + n.z);
+    let sign = select(n.z >= 0:f32, 1:f32, -1:f32);
+    let a = -1:f32 / (sign + n.z);
     let b = n.x * n.y * a;
 
-    let t  = make_vec3(1.0f + sign * n.x * n.x * a, sign * b, -sign * n.x);
+    let t  = make_vec3(1 + sign * n.x * n.x * a, sign * b, -sign * n.x);
     let bt = make_vec3(b, sign + n.y * n.y * a, -n.y);
     Mat3x3 {
-        col: [t, bt, n]
+        col = [t, bt, n]
     }
 }
 
-fn @make_mat3x4(c0: Vec3, c1: Vec3, c2: Vec3, c3: Vec3) -> Mat3x4 {
-    Mat3x4 {
-        col: [c0, c1, c2, c3]
-    }
-}
-
-fn @make_mat4x4(c0: Vec4, c1: Vec4, c2: Vec4, c3: Vec4) -> Mat4x4 {
-    Mat4x4 {
-        col: [c0, c1, c2, c3]
-    }
-}
+fn @make_mat3x4(c0: Vec3, c1: Vec3, c2: Vec3, c3: Vec3) = Mat3x4 { col = [c0, c1, c2, c3] }
+fn @make_mat4x4(c0: Vec4, c1: Vec4, c2: Vec4, c3: Vec4) = Mat4x4 { col = [c0, c1, c2, c3] }
 
 fn @mat2x2_row(m: Mat2x2, i: i32) -> Vec2 {
     [make_vec2(m.col(0).x, m.col(1).x),
@@ -74,69 +56,58 @@ fn @mat4x4_row(m: Mat4x4, i: i32) -> Vec4 {
      make_vec4(m.col(0).w, m.col(1).w, m.col(2).w, m.col(3).w)](i)
 } 
 
-fn @mat2x2_identity() -> Mat2x2 {
-    make_mat2x2(make_vec2(1.0f, 0.0f),
-                make_vec2(0.0f, 1.0f))
-}
+fn @mat2x2_identity() = make_mat2x2(
+    make_vec2(1, 0),
+    make_vec2(0, 1))
 
-fn @mat3x3_identity() -> Mat3x3 {
-    make_mat3x3(make_vec3(1.0f, 0.0f, 0.0f),
-                make_vec3(0.0f, 1.0f, 0.0f),
-                make_vec3(0.0f, 0.0f, 1.0f))
-}
+fn @mat3x3_identity() = make_mat3x3(
+    make_vec3(1, 0, 0),
+    make_vec3(0, 1, 0),
+    make_vec3(0, 0, 1))
 
-fn @mat3x4_identity() -> Mat3x4 {
-    make_mat3x4(make_vec3(1.0f, 0.0f, 0.0f),
-                make_vec3(0.0f, 1.0f, 0.0f),
-                make_vec3(0.0f, 0.0f, 1.0f),
-                make_vec3(0.0f, 0.0f, 0.0f))
-}
+fn @mat3x4_identity() = make_mat3x4(
+    make_vec3(1, 0, 0),
+    make_vec3(0, 1, 0),
+    make_vec3(0, 0, 1),
+    make_vec3(0, 0, 0))
 
-fn @mat4x4_identity() -> Mat4x4 {
-    make_mat4x4(make_vec4(1.0f, 0.0f, 0.0f, 0.0f),
-                make_vec4(0.0f, 1.0f, 0.0f, 0.0f),
-                make_vec4(0.0f, 0.0f, 1.0f, 0.0f),
-                make_vec4(0.0f, 0.0f, 0.0f, 1.0f))
-}
+fn @mat4x4_identity() = make_mat4x4(
+    make_vec4(1, 0, 0, 0),
+    make_vec4(0, 1, 0, 0),
+    make_vec4(0, 0, 1, 0),
+    make_vec4(0, 0, 0, 1))
 
-fn @mat2x2_mul(m: Mat2x2, v: Vec2) -> Vec2 {
-    make_vec2(vec2_dot(mat2x2_row(m, 0), v),
-              vec2_dot(mat2x2_row(m, 1), v))
-}
+fn @mat2x2_mul(m: Mat2x2, v: Vec2) = make_vec2(
+    vec2_dot(mat2x2_row(m, 0), v),
+    vec2_dot(mat2x2_row(m, 1), v))
 
-fn @mat3x3_mul(m: Mat3x3, v: Vec3) -> Vec3 {
-    make_vec3(vec3_dot(mat3x3_row(m, 0), v),
-              vec3_dot(mat3x3_row(m, 1), v),
-              vec3_dot(mat3x3_row(m, 2), v))
-}
+fn @mat3x3_mul(m: Mat3x3, v: Vec3) = make_vec3(
+    vec3_dot(mat3x3_row(m, 0), v),
+    vec3_dot(mat3x3_row(m, 1), v),
+    vec3_dot(mat3x3_row(m, 2), v))
 
-fn @mat3x4_mul(m: Mat3x4, v: Vec4) -> Vec3 {
-    make_vec3(vec4_dot(mat3x4_row(m, 0), v),
-              vec4_dot(mat3x4_row(m, 1), v),
-              vec4_dot(mat3x4_row(m, 2), v))
-}
+fn @mat3x4_mul(m: Mat3x4, v: Vec4) = make_vec3(
+    vec4_dot(mat3x4_row(m, 0), v),
+    vec4_dot(mat3x4_row(m, 1), v),
+    vec4_dot(mat3x4_row(m, 2), v))
 
-fn @mat4x4_mul(m: Mat4x4, v: Vec4) -> Vec4 {
-    make_vec4(vec4_dot(mat4x4_row(m, 0), v),
-              vec4_dot(mat4x4_row(m, 1), v),
-              vec4_dot(mat4x4_row(m, 2), v),
-              vec4_dot(mat4x4_row(m, 3), v))
-}
+fn @mat4x4_mul(m: Mat4x4, v: Vec4) = make_vec4(
+    vec4_dot(mat4x4_row(m, 0), v),
+    vec4_dot(mat4x4_row(m, 1), v),
+    vec4_dot(mat4x4_row(m, 2), v),
+    vec4_dot(mat4x4_row(m, 3), v))
 
-fn @mat2x2_matmul(a: Mat2x2, b: Mat2x2) -> Mat2x2 {
-    make_mat2x2(mat2x2_mul(a, b.col(0)),
-                mat2x2_mul(a, b.col(1)))
-}
+fn @mat2x2_matmul(a: Mat2x2, b: Mat2x2) = make_mat2x2(
+    mat2x2_mul(a, b.col(0)),
+    mat2x2_mul(a, b.col(1)))
 
-fn @mat3x3_matmul(a: Mat3x3, b: Mat3x3) -> Mat3x3 {
-    make_mat3x3(mat3x3_mul(a, b.col(0)),
-                mat3x3_mul(a, b.col(1)),
-                mat3x3_mul(a, b.col(2)))
-}
+fn @mat3x3_matmul(a: Mat3x3, b: Mat3x3) = make_mat3x3(
+    mat3x3_mul(a, b.col(0)),
+    mat3x3_mul(a, b.col(1)),
+    mat3x3_mul(a, b.col(2)))
 
-fn @mat4x4_matmul(a: Mat4x4, b: Mat4x4) -> Mat4x4 {
-    make_mat4x4(mat4x4_mul(a, b.col(0)),
-                mat4x4_mul(a, b.col(1)),
-                mat4x4_mul(a, b.col(2)),
-                mat4x4_mul(a, b.col(3)))
-}
+fn @mat4x4_matmul(a: Mat4x4, b: Mat4x4) = make_mat4x4(
+    mat4x4_mul(a, b.col(0)),
+    mat4x4_mul(a, b.col(1)),
+    mat4x4_mul(a, b.col(2)),
+    mat4x4_mul(a, b.col(3)))

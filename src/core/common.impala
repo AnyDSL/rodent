@@ -1,12 +1,12 @@
 // Constants -----------------------------------------------------------------------
 
-static flt_eps = 1.1920928955e-07f;
-static flt_max = 3.4028234664e+38f;
-static flt_min = 1.1754943509e-38f;
-static flt_inf = 1.0f / 0.0f;
-static flt_pi = 3.14159265359f;
-static flt_sqrt2 = 1.41421356237f;
-static flt_sqrt3 = 1.73205080757f;
+static flt_eps = 1.1920928955e-07:f32;
+static flt_max = 3.4028234664e+38:f32;
+static flt_min = 1.1754943509e-38:f32;
+static flt_inf = 1:f32 / 0:f32;
+static flt_pi = 3.14159265359:f32;
+static flt_sqrt2 = 1.41421356237:f32;
+static flt_sqrt3 = 1.73205080757:f32;
 
 // Fast division -------------------------------------------------------------------
 
@@ -18,19 +18,19 @@ struct FastDiv {
 
 fn @make_fast_div(div: u32) -> FastDiv {
     let log = ilog2(div as i32) as u32;
-    let max = 1u64 << 32u64;
-    let m = (max << log as u64) / (div as u64) - max + 1u64;
-    let s1 = select(log < 1u32, log, 1u32);
-    let s2 = select(log > 1u32, log - 1u32, 0u32);
+    let max = 1:u64 << 32:u64;
+    let m = (max << log as u64) / (div as u64) - max + 1;
+    let s1 = select(log < 1, log, 1:u32);
+    let s2 = select(log > 1, log - 1, 0:u32);
     FastDiv {
-        m: m as u32,
-        s1: s1,
-        s2: s2
+        m = m as u32,
+        s1 = s1,
+        s2 = s2
     }
 }
 
 fn @fast_div(fd: FastDiv, i: u32) -> u32 {
-    let t = (((fd.m as u64) * (i as u64)) >> 32u64) as u32;
+    let t = (((fd.m as u64) * (i as u64)) >> 32) as u32;
     (t + ((i - t) >> fd.s1)) >> fd.s2
 }
 
@@ -41,18 +41,18 @@ fn @fast_div(fd: FastDiv, i: u32) -> u32 {
 
 fn @fastlog2(x: f32) -> f32 {
     let vx = bitcast[u32](x);
-    let mx = (vx & 0x007FFFFFu) | 0x3f000000u;
-    let y = (vx as f32) * 1.1920928955078125e-7f;
+    let mx = (vx & 0x007FFFFF:u32) | 0x3f000000:u32;
+    let y = (vx as f32) * 1.1920928955078125e-7:f32;
     let z = bitcast[f32](mx);
-    y - 124.22551499f - 1.498030302f * z - 1.72587999f / (0.3520887068f + z)
+    y - 124.22551499 - 1.498030302 * z - 1.72587999 / (0.3520887068 + z)
 }
 
 fn @fastpow2(p: f32) -> f32 {
-    let offset = select(p < 0.0f, 1.0f, 0.0f);
-    let clipp  = select(p < -126.0f, -126.0f, p);
+    let offset = select(p < 0:f32, 1:f32, 0:f32);
+    let clipp  = select(p < -126:f32, -126:f32, p);
     let w = clipp as i32;
     let z = clipp - (w as f32) + offset;
-    let v = ((1u << 23u) as f32 * (clipp + 121.2740575f + 27.7280233f / (4.84252568f - z) - 1.49012907f * z)) as i32;
+    let v = ((1:u32 << 23:u32) as f32 * (clipp + 121.2740575 + 27.7280233 / (4.84252568 - z) - 1.49012907 * z)) as i32;
     bitcast[f32](v)
 }
 
@@ -62,9 +62,7 @@ fn @fastpow(x: f32, p: f32) -> f32 {
 
 // Likely/unlikely -----------------------------------------------------------------
 
-extern "device" {
-    fn "llvm.expect.i1" expect(bool, bool) -> bool;
-}
+#[import(cc = "device", name = "llvm.expect.i1")] fn expect(bool, bool) -> bool;
 
 fn @  likely(cond: bool) -> bool { expect(cond,  true) }
 fn @unlikely(cond: bool) -> bool { expect(cond, false) }
@@ -72,16 +70,16 @@ fn @unlikely(cond: bool) -> bool { expect(cond, false) }
 // Misc. ---------------------------------------------------------------------------
 
 fn @once(body: fn () -> ()) -> () {
-    @@body()
+    @body()
 }
 
 fn @prodsign(x: f32, y: f32) -> f32 {
-    bitcast[f32](bitcast[i32](x) ^ (bitcast[i32](y) & bitcast[i32](0x80000000u)))
+    bitcast[f32](bitcast[i32](x) ^ (bitcast[i32](y) & bitcast[i32](0x80000000:u32)))
 }
 
 fn @safe_rcp(x: f32) -> f32 {
-    let min_rcp = 1e-8f;
-    if select(x > 0.0f, x, -x) < min_rcp { prodsign(flt_max, x) } else { 1.0f / x }
+    let min_rcp = 1e-8:f32;
+    if select(x > 0, x, -x) < min_rcp { prodsign(flt_max, x) } else { 1 / x }
 }
 
 fn @round_up(n: i32, d: i32) -> i32 {
@@ -96,12 +94,12 @@ fn @round_down(n: i32, d: i32) -> i32 {
 fn @sqrt_newton(y: f32, p: f32) -> f32 {
     fn @(?x) newton(x: f32) -> f32 {
         if (x * x - y) > p {
-            newton(x - (x * x - y) / (2.0f * x))
+            newton(x - (x * x - y) / (2 * x))
         } else {
             x
         }
     }
-    newton(1.0f)
+    newton(1)
 }
 
 fn @ilog2(i: i32) -> i32 {
@@ -116,38 +114,26 @@ fn @ilog2(i: i32) -> i32 {
 }
 
 fn @lerp(a: f32, b: f32, k: f32) -> f32 {
-    (1.0f - k) * a + k * b
+    (1 - k) * a + k * b
 }
 
 fn @lerp2(a: f32, b: f32, c: f32, k1: f32, k2: f32) -> f32 {
-    (1.0f - k1 - k2) * a + k1 * b + k2 * c
+    (1 - k1 - k2) * a + k1 * b + k2 * c
 }
 
 fn @triangle_area(math: Intrinsics, v0: Vec3, v1: Vec3, v2: Vec3) -> f32 {
     let e1 = vec3_sub(v1, v0);
     let e2 = vec3_sub(v2, v0);
     let  n = vec3_cross(e1, e2);
-    0.5f * vec3_len(math, n)
+    0.5 * vec3_len(math, n)
 }
 
 fn @positive_cos(a: Vec3, b: Vec3) -> f32 {
     let cos = vec3_dot(a, b);
-    if cos >= 0.0f { cos } else { 0.0f }
+    if cos >= 0 { cos } else { 0 }
 }
 
-fn @swap_f32(a: &mut f32, b: &mut f32) -> () {
-    let tmp = *a;
-    *a = *b;
-    *b = tmp;
-}
-
-fn @swap_i32(a: &mut i32, b: &mut i32) -> () {
-    let tmp = *a;
-    *a = *b;
-    *b = tmp;
-}
-
-fn @swap_u32(a: &mut u32, b: &mut u32) -> () {
+fn @swap[T](a: &mut T, b: &mut T) -> () {
     let tmp = *a;
     *a = *b;
     *b = tmp;

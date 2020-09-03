@@ -7,24 +7,24 @@ static randi = xorshift;
 fn @randf(rnd: &mut RndState) -> f32 {
     // Assumes IEEE 754 floating point format
     let x = randi(rnd) as u32;
-    bitcast[f32]((127u32 << 23u32) | (x & 0x7FFFFFu32)) - 1.0f
+    bitcast[f32]((127:u32 << 23:u32) | (x & 0x7FFFFF:u32)) - 1
 }
 
 // MWC64X: http://cas.ee.ic.ac.uk/people/dt10/research/rngs-gpu-mwc64x.html
 fn @mwc64x(seed: &mut u64) -> i32 {
-    let c = *seed >> 32u64;
-    let x = *seed & 0xFFFFFFFFu64;
-    *seed = x * 4294883355u64 + c;
+    let c = *seed >> 32;
+    let x = *seed & 0xFFFFFFFF:u64;
+    *seed = x * 4294883355:u64 + c;
     (x as i32)^(c as i32)
 }
 
 // 32-bit version of the xorshift random number generator
 fn @xorshift(seed: &mut u32) -> i32 {
     let mut x = *seed;
-    x = select(x == 0u32, 1u32, x);
-    x ^= x << 13u32;
-    x ^= x >> 17u32;
-    x ^= x << 5u32;
+    x = select(x == 0, 1:u32, x);
+    x ^= x << 13:u32;
+    x ^= x >> 17:u32;
+    x ^= x <<  5:u32;
     *seed = x;
     x as i32
 }
@@ -40,92 +40,92 @@ fn @make_dir_sample(math: Intrinsics, c: f32, s: f32, phi: f32, pdf: f32) -> Dir
     let y = s * math.sinf(phi);
     let z = c;
     DirSample {
-        dir: make_vec3(x, y, z),
-        pdf: pdf
+        dir = make_vec3(x, y, z),
+        pdf = pdf
     }
 }
 
 // Samples a point uniformly on a triangle
 fn @sample_triangle(mut u: f32, mut v: f32, v0: Vec3, v1: Vec3, v2: Vec3) -> Vec3 {
-    if (u + v > 1.0f) {
-        u = 1.0f - u;
-        v = 1.0f - v;
+    if (u + v > 1) {
+        u = 1 - u;
+        v = 1 - v;
     }
     vec3_add(
-        vec3_add(vec3_mulf(v0, 1.0f - v - u),
+        vec3_add(vec3_mulf(v0, 1 - v - u),
                  vec3_mulf(v1, u)),
         vec3_mulf(v2, v)
     )
 }
 
 // Probability density function for uniform sphere sampling
-fn @uniform_sphere_pdf() -> f32 { 1.0f / (4.0f * flt_pi) }
+fn @uniform_sphere_pdf() -> f32 { 1 / (4 * flt_pi) }
 
 // Samples a direction uniformly on a sphere
 fn @sample_uniform_sphere(math: Intrinsics, u: f32, v: f32) -> DirSample {
-    let c = 2.0f * v - 1.0f;
-    let s = math.sqrtf(1.0f - c * c);
-    let phi = 2.0f * flt_pi * u;
+    let c = 2 * v - 1;
+    let s = math.sqrtf(1 - c * c);
+    let phi = 2 * flt_pi * u;
     make_dir_sample(math, c, s, phi, uniform_sphere_pdf())
 }
 
 // Probability density function for cosine weighted hemisphere sampling
-fn @cosine_hemisphere_pdf(c: f32) -> f32 { c * (1.0f / flt_pi) }
+fn @cosine_hemisphere_pdf(c: f32) -> f32 { c * (1 / flt_pi) }
 
 // Samples a direction on a hemisphere proportionally to the cosine with the surface normal
 fn @sample_cosine_hemisphere(math: Intrinsics, u: f32, v: f32) -> DirSample {
-    let c = math.sqrtf(1.0f - v);
+    let c = math.sqrtf(1 - v);
     let s = math.sqrtf(v);
-    let phi = 2.0f * flt_pi * u;
+    let phi = 2 * flt_pi * u;
     make_dir_sample(math, c, s, phi, cosine_hemisphere_pdf(c))
 }
 
 // Probability density function for cosine-power weighted hemisphere sampling
 fn @cosine_power_hemisphere_pdf(math: Intrinsics, c: f32, k: f32) -> f32 {
-    fastpow/*math.powf*/(c, k) * (k + 1.0f) * (1.0f / (2.0f * flt_pi))
+    fastpow/*math.powf*/(c, k) * (k + 1) * (1 / (2 * flt_pi))
 }
 
 // Samples a direction on a hemisphere proportionally to the power of the cosine with the surface normal
 fn @sample_cosine_power_hemisphere(math: Intrinsics, k: f32, u: f32, v: f32) -> DirSample {
-    let c = math.fminf(fastpow/*math.powf*/(v, 1.0f / (k + 1.0f)), 1.0f);
-    let s = math.sqrtf(1.0f - c * c);
-    let phi = 2.0f * flt_pi * u;
+    let c = math.fminf(fastpow/*math.powf*/(v, 1 / (k + 1)), 1);
+    let s = math.sqrtf(1 - c * c);
+    let phi = 2 * flt_pi * u;
     // We have:
     // pow(c, k) = pow(pow(v, 1 / (k + 1)), k)
     //           = pow(v, k / (k + 1))
     //           = v * pow(v, -1 / (k + 1))
     //           = v / c
-    let pow_c_k = select(c != 0.0f, v / c, 0.0f);
-    let pdf = pow_c_k * (k + 1.0f) * (1.0f / (2.0f * flt_pi));
+    let pow_c_k = select(c != 0, v / c, 0:f32);
+    let pdf = pow_c_k * (k + 1) * (1 / (2 * flt_pi));
     make_dir_sample(math, c, s, phi, pdf)
 }
 
 // Initializer for Bernstein's hash function
-fn @bernstein_init() -> u32 { 5381u32 }
+fn @bernstein_init() -> u32 { 5381:u32 }
 
 // Bernstein's hash function
 fn @bernstein_hash(mut h: u32, d: u32) -> u32 {
-    h = (h * 33u32) ^ ( d           & 0xFFu32);
-    h = (h * 33u32) ^ ((d >>  8u32) & 0xFFu32);
-    h = (h * 33u32) ^ ((d >> 16u32) & 0xFFu32);
-    h = (h * 33u32) ^ ((d >> 24u32) & 0xFFu32);
+    h = (h * 33:u32) ^ ( d            & 0xFF:u32);
+    h = (h * 33:u32) ^ ((d >>  8:u32) & 0xFF:u32);
+    h = (h * 33:u32) ^ ((d >> 16:u32) & 0xFF:u32);
+    h = (h * 33:u32) ^ ((d >> 24:u32) & 0xFF:u32);
     h
 }
 
 // Initializer for the FNV hash function
-fn @fnv_init() -> u32 { 0x811C9DC5u32 }
+fn @fnv_init() -> u32 { 0x811C9DC5:u32 }
 
 // FNV hash function
 fn @fnv_hash(mut h: u32, d: u32) -> u32 {
-    h = (h * 16777619u32) ^ ( d           & 0xFFu32);
-    h = (h * 16777619u32) ^ ((d >>  8u32) & 0xFFu32);
-    h = (h * 16777619u32) ^ ((d >> 16u32) & 0xFFu32);
-    h = (h * 16777619u32) ^ ((d >> 24u32) & 0xFFu32);
+    h = (h * 16777619:u32) ^ ( d            & 0xFF:u32);
+    h = (h * 16777619:u32) ^ ((d >>  8:u32) & 0xFF:u32);
+    h = (h * 16777619:u32) ^ ((d >> 16:u32) & 0xFF:u32);
+    h = (h * 16777619:u32) ^ ((d >> 24:u32) & 0xFF:u32);
     h
 }
 
 // Returns the probability to continue given the contribution of a path
 fn @russian_roulette(c: Color, clamp: f32) -> f32 {
-    let prob = 2.0f * color_luminance(c);
+    let prob = 2 * color_luminance(c);
     if prob > clamp { clamp } else { prob }
 }
