@@ -8,6 +8,24 @@ static flt_pi = 3.14159265359:f32;
 static flt_sqrt2 = 1.41421356237:f32;
 static flt_sqrt3 = 1.73205080757:f32;
 
+// Option --------------------------------------------------------------------------
+
+enum Option[T] {
+    Some(T),
+    None
+}
+
+fn @make_option[T](t: T) = Option[T]::Some(t)
+fn @is_some[T](opt: Option[T]) = match opt {
+    Option[T]::Some(_) => true,
+    _ => false
+}
+fn @is_none[T](opt: Option[T]) = !is_some(opt)
+fn @from_option[T](opt: Option[T], def: T) = match opt {
+    Option[T]::Some(x) => x,
+    _ => def
+}
+
 // Fast division -------------------------------------------------------------------
 
 struct FastDiv {

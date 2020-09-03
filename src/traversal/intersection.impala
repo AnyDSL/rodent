@@ -77,13 +77,13 @@ fn @make_min_max( fminf: fn (f32, f32) -> f32
 }
 
 // Floating point min/max, works on every ISA, but might not be optimal
-fn @make_default_min_max() -> MinMax {
+fn @make_default_min_max() {
     let fminf = @ |x: f32, y: f32| select(x < y, x, y);
     let fmaxf = @ |x: f32, y: f32| select(x > y, x, y);
     make_min_max(fminf, fmaxf, false)
 }
 
-fn @make_ray(org: Vec3, dir: Vec3, tmin: f32, tmax: f32) -> Ray {
+fn @make_ray(org: Vec3, dir: Vec3, tmin: f32, tmax: f32) {
     let inv_dir = make_vec3(safe_rcp(dir.x), safe_rcp(dir.y), safe_rcp(dir.z));
     let inv_org = vec3_neg(vec3_mul(org, inv_dir));
     Ray {

@@ -102,7 +102,7 @@ fn @make_emission_value(intensity: Color, pdf_area: f32, pdf_dir: f32) -> Emissi
 }
 
 fn @make_point_light(math: Intrinsics, pos: Vec3, color: Color) = Light {
-    sample_direct = @ |rnd, from| {
+    sample_direct = @ |_, _| {
         let intensity = color_mulf(color, 1 / (4 * flt_pi));
         make_direct_sample(pos, intensity, 1, uniform_sphere_pdf(), 1)
     },
@@ -144,7 +144,7 @@ fn @make_precomputed_triangle_light(math: Intrinsics, v0: Vec3, v1: Vec3, v2: Ve
     let emitter = AreaEmitter {
         sample = @ |uv| (sample_triangle(uv.x, uv.y, v0, v1, v2), n, inv_area),
         normal = @ |_| n,
-        pdf = @ |uv| inv_area
+        pdf = @ |_| inv_area
     };
     make_area_light(math, emitter, color)
 }

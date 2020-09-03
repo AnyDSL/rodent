@@ -46,7 +46,7 @@ fn @make_perspective_camera(math: Intrinsics, eye: Vec3, view: Mat3x3, w: f32, h
                       vec3_dot(d, up) / h,
                       -vec3_dot(d, dir))
         },
-        unproject = @ |p| eye,
+        unproject = @ |_| eye,
         geometry = @ |x, y| {
             let d = math.sqrtf(1 + x * x * w * w + y * y * h * h);
             make_camera_geometry(1 / d, d, 1 / (4 * w * h))

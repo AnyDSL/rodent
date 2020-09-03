@@ -38,7 +38,7 @@ fn @make_gpu_bvh2_tri1(nodes: &[Node2], tris: &[Tri1], is_nvvm: bool) -> Bvh {
                                   make_vec3(bb1(3), bb2(1), bb2(3)))
                     }
                 },
-                ordered_bbox = @ |i, _| undef[BBox](), // Not implemented
+                ordered_bbox = @ |_, _| undef[BBox](), // Not implemented
                 child = @ |i| children(i)
             }
         },
@@ -100,7 +100,7 @@ fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
                               ) -> Hit {
     let mut hit = empty_hit(ray.tmax);
     let stack = alloc_stack();
-    stack.push(1, undef[f32]());
+    stack.push(root, undef[f32]());
 
     while !stack.is_empty() {
         let node_ref = stack.top();
@@ -168,7 +168,8 @@ fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
                             ray.tmax = prim_hit_some.distance;
 
                             if any_hit && hit.prim_id >= 0 { return(hit) }
-                        }
+                        },
+                        _ => ()
                     }
                 }
 

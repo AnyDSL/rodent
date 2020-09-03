@@ -32,8 +32,8 @@ fn @make_small_stack(n: i32) -> SmallStack {
         } else if begin + 1 == end {
             let mut val : (i32, f32);
             SmallStack {
-                write = @ |i, v| val = v,
-                read  = @ |i| val
+                write = @ |_, v| val = v,
+                read  = @ |_| val
             }
         } else {
             let m = (begin + end) / 2;

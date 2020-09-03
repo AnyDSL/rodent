@@ -81,7 +81,7 @@ fn @sample_cosine_hemisphere(math: Intrinsics, u: f32, v: f32) -> DirSample {
 }
 
 // Probability density function for cosine-power weighted hemisphere sampling
-fn @cosine_power_hemisphere_pdf(math: Intrinsics, c: f32, k: f32) -> f32 {
+fn @cosine_power_hemisphere_pdf(_math: Intrinsics, c: f32, k: f32) -> f32 {
     fastpow/*math.powf*/(c, k) * (k + 1) * (1 / (2 * flt_pi))
 }
 

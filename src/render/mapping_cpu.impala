@@ -28,8 +28,6 @@ fn @cpu_parallel_tiles(body: fn (i32, i32, i32, i32) -> ()) = @|width: i32, heig
 
 #[export]
 fn cpu_sort_primary(primary: &PrimaryStream, ray_begins: &mut [i32], ray_ends: &mut[i32], num_geometries: i32) -> i32 {
-    let read_primary_hit = make_primary_stream_hit_reader(*primary, 1);
-
     // Count the number of rays per shader
     for i in range(0, num_geometries + 1) {
         ray_ends(i) = 0;

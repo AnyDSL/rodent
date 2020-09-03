@@ -44,7 +44,7 @@ fn @fresnel_factor(k: f32, cos_i: f32, cos_t: f32) -> f32 {
 // Creates a material with no emission
 fn @make_material(bsdf: Bsdf) = Material {
     bsdf =        bsdf,
-    emission =    @ |in_dir| make_emission_value(black, 1, 1),
+    emission =    @ |_| make_emission_value(black, 1, 1),
     is_emissive = false
 }
 
@@ -61,9 +61,9 @@ fn @make_bsdf_sample(surf: SurfaceElement, in_dir: Vec3, pdf: f32, cos: f32, col
     let valid = (pdf > 0) && (inverted ^ (vec3_dot(in_dir, surf.face_normal) > 0));
     BsdfSample {
         in_dir = in_dir,
-        pdf = if valid { pdf } else { 1 },
-        cos = cos,
-        color = if valid { color } else { black }
+        pdf    = if valid { pdf } else { 1 },
+        cos    = cos,
+        color  = if valid { color } else { black }
     }
 }
 
@@ -77,13 +77,13 @@ fn @make_black_bsdf() = Bsdf {
 
 // Creates a purely diffuse BSDF
 fn @make_diffuse_bsdf(math: Intrinsics, surf: SurfaceElement, kd: Color) = Bsdf {
-    eval = @ |in_dir, out_dir| {
+    eval = @ |_, _| {
         color_mulf(kd, 1 / flt_pi)
     },
-    pdf = @ |in_dir, out_dir| {
+    pdf = @ |in_dir, _| {
         cosine_hemisphere_pdf(positive_cos(in_dir, surf.local.col(2)))
     },
-    sample = @ |rnd, out_dir, _| {
+    sample = @ |rnd, _, _| {
         let sample = sample_cosine_hemisphere(math, randf(rnd), randf(rnd));
         let color = color_mulf(kd, 1 / flt_pi);
         make_bsdf_sample(surf, mat3x3_mul(surf.local, sample.dir), sample.pdf, sample.dir.z, color, false)
@@ -113,10 +113,10 @@ fn @make_phong_bsdf(math: Intrinsics, surf: SurfaceElement, ks: Color, ns: f32) 
 }
 
 // Creates a perfect mirror BSDF
-fn @make_mirror_bsdf(math: Intrinsics, surf: SurfaceElement, ks: Color) = Bsdf {
-    eval = @ |in_dir, out_dir| black,
-    pdf  = @ |in_dir, out_dir| 0,
-    sample = @ |rnd, out_dir, _| {
+fn @make_mirror_bsdf(_math: Intrinsics, surf: SurfaceElement, ks: Color) = Bsdf {
+    eval   = @ |_, _| black,
+    pdf    = @ |_, _| 0,
+    sample = @ |_, out_dir, _| {
         make_bsdf_sample(surf, vec3_reflect(out_dir, surf.local.col(2)), 1, 1, ks, false)
     },
     is_specular = true
@@ -124,8 +124,8 @@ fn @make_mirror_bsdf(math: Intrinsics, surf: SurfaceElement, ks: Color) = Bsdf {
 
 // Creates a perfect glass BSDF
 fn @make_glass_bsdf(math: Intrinsics, surf: SurfaceElement, n1: f32, n2: f32, ks: Color, kt: Color) = Bsdf {
-    eval = @ |in_dir, out_dir| black,
-    pdf  = @ |in_dir, out_dir| 0,
+    eval   = @ |_, _| black,
+    pdf    = @ |_, _| 0,
     sample = @ |rnd, out_dir, adjoint| {
         let k = if surf.is_entering { n1 / n2 } else { n2 / n1 };
         let n = surf.local.col(2);
