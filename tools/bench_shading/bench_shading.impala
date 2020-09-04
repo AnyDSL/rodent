@@ -1,38 +1,38 @@
 static vector_width = 8;
 static num_geoms = 4;
-static offset = 0.0001f;
+static offset = 0.0001:f32;
 static sorted = true;
 static specialized = true;
 
-fn @iterate_rays(primary: &PrimaryStream, begins: &[i32], ends: &[i32], num_geoms: i32, body: fn(i32, i32) -> ()) -> () {
+fn @iterate_rays(body: fn(i32, i32) -> ()) = @|primary: &PrimaryStream, begins: &[i32], ends: &[i32], num_geoms: i32| {
     if ?num_geoms & sorted & specialized {
         for geom_id in unroll(0, num_geoms) {
             let (begin, end) = (begins(geom_id), ends(geom_id));
-            for i, vector_width in vectorized_range(vector_width, begin, end) {
-                @@body(i, geom_id);
+            for i, _vector_width in vectorized_range(vector_width, begin, end) {
+                @body(i, geom_id);
             }
         }
     } else {
-        for i, vector_width in vectorized_range(vector_width, begins(0), ends(num_geoms - 1)) {
-            @@body(i, primary.geom_id(i))
+        for i, _vector_width in vectorized_range(vector_width, begins(0), ends(num_geoms - 1)) {
+            @body(i, primary.geom_id(i))
         }
     }
 }
 
-extern fn cpu_bench_shading( primary_in: &PrimaryStream
-                           , primary_out: &PrimaryStream
-                           , vertices: &[Vec3]
-                           , normals: &[Vec3]
-                           , face_normals: &[Vec3]
-                           , texcoords: &[Vec2]
-                           , indices: &[i32]
-                           , pixels: &[u32]
-                           , width: i32
-                           , height: i32
-                           , begins: &[i32]
-                           , ends: &[i32]
-                           , num_tris: i32
-                           , num_iters: i32) -> () {
+#[export] fn cpu_bench_shading( primary_in: &PrimaryStream
+                              , primary_out: &PrimaryStream
+                              , vertices: &[Vec3]
+                              , normals: &[Vec3]
+                              , face_normals: &[Vec3]
+                              , texcoords: &[Vec2]
+                              , indices: &[i32]
+                              , pixels: &[u32]
+                              , width: i32
+                              , height: i32
+                              , begins: &[i32]
+                              , ends: &[i32]
+                              , num_tris: i32
+                              , num_iters: i32) -> () {
     let read_primary_ray    = make_ray_stream_reader(primary_in.rays, 1);
     let read_primary_hit    = make_primary_stream_hit_reader(*primary_in, 1);
     let read_primary_state  = make_primary_stream_state_reader(*primary_in, 1);
@@ -46,32 +46,32 @@ extern fn cpu_bench_shading( primary_in: &PrimaryStream
     fn @shader(geom_id: i32, surf: SurfaceElement) -> Material {
         let texture = make_texture(math, make_repeat_border(), make_bilinear_filter(), image);
         let kd = if geom_id & 1 == 0 {
-            make_color(0.0f, 1.0f, 0.0f)
+            make_color(0, 1, 0)
         } else {
             texture(vec4_to_2(surf.attr(0)))
         };
         let diffuse = make_diffuse_bsdf(math, surf, kd);
         let (ks, ns) = if geom_id & 2 == 0 {
-            (make_color(0.0f, 1.0f, 0.0f), 96.0f)
+            (make_color(0, 1, 0), 96:f32)
         } else {
-            (texture(vec4_to_2(surf.attr(0))), 12.0f)
+            (texture(vec4_to_2(surf.attr(0))), 12:f32)
         };
         let specular = make_phong_bsdf(math, surf, ks, ns);
         let lum_ks = color_luminance(ks);
         let lum_kd = color_luminance(kd);
-        let k = select(lum_ks + lum_kd == 0.0f, 0.0f, lum_ks / (lum_ks + lum_kd));
+        let k = select(lum_ks + lum_kd == 0, 0:f32, lum_ks / (lum_ks + lum_kd));
         let bsdf = make_mix_bsdf(diffuse, specular, k);
         make_material(bsdf)
     }
 
     let tri_mesh = TriMesh {
-        vertices:     @ |i| vertices(i),
-        normals:      @ |i| normals(i),
-        face_normals: @ |i| face_normals(i),
-        triangles:    @ |i| (indices(i * 4 + 0), indices(i * 4 + 1), indices(i * 4 + 2)),
-        attrs:        @ |_| (false, @ |i| vec2_to_4(texcoords(i), 0.0f, 0.0f)),
-        num_attrs:    1,
-        num_tris:     num_tris
+        vertices     = @ |i| vertices(i),
+        normals      = @ |i| normals(i),
+        face_normals = @ |i| face_normals(i),
+        triangles    = @ |i| (indices(i * 4 + 0), indices(i * 4 + 1), indices(i * 4 + 2)),
+        attrs        = @ |_| (false, @ |i| vec2_to_4(texcoords(i), 0, 0)),
+        num_attrs    = 1,
+        num_tris     = num_tris
     };
 
     for iter in range(0, num_iters) {
@@ -88,7 +88,7 @@ extern fn cpu_bench_shading( primary_in: &PrimaryStream
             let sample = mat.bsdf.sample(&mut state.rnd, out_dir, false);
 
             let contrib = color_mulf(color_mul(state.contrib, sample.color), sample.cos / sample.pdf);
-            let mis = if mat.bsdf.is_specular { 0.0f } else { 1.0f / sample.pdf };
+            let mis = if mat.bsdf.is_specular { 0:f32 } else { 1:f32 / sample.pdf };
             let new_ray = make_ray(surf.point, sample.in_dir, offset, flt_max);
             let new_state = make_ray_state(
                 state.rnd,
