@@ -11,6 +11,12 @@ struct Settings {
 
 #[export] fn get_spp() -> i32 { 1 }
 #[export] fn render(settings: &Settings, iter: i32) -> () {
+    // Force the export of the primary and secondary stream types
+    let mut primary : PrimaryStream;
+    let mut secondary : SecondaryStream;
+    rodent_cpu_get_primary_stream(&mut primary, 0);
+    rodent_cpu_get_secondary_stream(&mut secondary, 0);
+
     // Force the export of BVH types
     let (mut node2 : &[Node2], mut tri1 : &[Tri1]);
     let (mut node4 : &[Node4], mut tri4 : &[Tri4]);

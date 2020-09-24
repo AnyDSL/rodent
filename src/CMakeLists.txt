@@ -64,7 +64,6 @@ set(CONVERTER_SRCS
     driver/obj.cpp
     driver/obj.h
     driver/file_path.h
-    driver/interface.h
     driver/bvh.h)
 
 anydsl_runtime_wrap(RODENT_OBJS
@@ -76,7 +75,8 @@ anydsl_runtime_wrap(RODENT_OBJS
 anydsl_runtime_wrap(DISCARD_TMP_OBJS
     NAME "interface"
     FILES ${RODENT_SRCS} dummy_main.impala
-    INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/driver/interface)
+    INTERFACE ${CMAKE_CURRENT_BINARY_DIR}/interface)
+add_custom_target(rodent_c_interface ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/interface.h)
 
 if (NOT DISABLE_GUI)
     find_package(SDL2 REQUIRED)
@@ -87,7 +87,8 @@ find_package(TBB REQUIRED)
 find_package(LZ4 REQUIRED)
 
 add_executable(converter ${CONVERTER_SRCS})
-target_include_directories(converter PUBLIC ${LZ4_INCLUDE_DIR})
+add_dependencies(converter rodent_c_interface)
+target_include_directories(converter PUBLIC ${CMAKE_CURRENT_BINARY_DIR} ${LZ4_INCLUDE_DIR})
 target_link_libraries(converter ${LZ4_LIBRARY})
 target_compile_definitions(converter PUBLIC -DCPUINFO_PATH="${CPUINFO_PATH}")
 if (COLORIZE)
@@ -99,18 +100,18 @@ if (EMBREE_FOUND)
     target_compile_definitions(converter PUBLIC ${EMBREE_DEFINITIONS} -DENABLE_EMBREE_BVH)
 endif()
 
-add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/main.impala
+add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/main.impala
     COMMAND converter ${SCENE_FILE} ${CONVERTER_OPTIONS} --max-path-len ${MAX_PATH_LEN} --samples-per-pixel ${SPP}
     COMMAND ${CMAKE_COMMAND} -E rename ${CMAKE_BINARY_DIR}/main.impala ${CMAKE_CURRENT_BINARY_DIR}/main.impala
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     DEPENDS ${SCENE_FILE} converter)
-
 add_custom_target(convert DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/main.impala)
-
 set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/main.impala PROPERTIES GENERATED TRUE)
 
 add_library(driver ${DRIVER_SRCS})
-target_include_directories(driver PUBLIC ${LZ4_INCLUDE_DIR})
+target_include_directories(driver PUBLIC ${CMAKE_CURRENT_BINARY_DIR} ${LZ4_INCLUDE_DIR})
+add_dependencies(driver rodent_c_interface)
 if (EMBREE_FOUND)
     target_include_directories(driver PUBLIC ${EMBREE_ROOT_DIR}/include ${EMBREE_ROOT_DIR} ${EMBREE_LIBRARY_DIR} ${PNG_INCLUDE_DIRS} ${JPEG_INCLUDE_DIRS} ${TBB_INCLUDE_DIRS} ${LZ4_INCLUDE_DIR})
     target_link_libraries(driver ${EMBREE_DEPENDENCIES})

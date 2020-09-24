@@ -370,9 +370,9 @@ private:
                 auto n = cross(e1, e2);
                 int geom_id = indices[ref * 4 + 3];
                 tris.emplace_back(Tri1 {
-                    { tri.v0.x, tri.v0.y, tri.v0.z}, 0,
-                    { e1.x, e1.y, e1.z }, geom_id,
-                    { e2.x, e2.y, e2.z }, ref
+                    { { tri.v0.x, tri.v0.y, tri.v0.z } }, 0,
+                    { { e1.x, e1.y, e1.z } }, geom_id,
+                    { { e2.x, e2.y, e2.z } }, ref
                 });
             }
 
