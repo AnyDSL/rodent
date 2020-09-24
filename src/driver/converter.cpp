@@ -166,32 +166,32 @@ private:
             if (parent >= 0 && child >= 0) {
                 assert(parent >= 0 && parent < nodes.size());
                 assert(child >= 0 && child < N);
-                nodes[parent].child[child] = i + 1;
+                nodes[parent].child.e[child] = i + 1;
             }
 
             assert(count >= 2 && count <= N);
 
             for (size_t j = 0; j < count; j++) {
                 const BBox& bbox = bboxes(j);
-                nodes[i].bounds[0][j] = bbox.min.x;
-                nodes[i].bounds[2][j] = bbox.min.y;
-                nodes[i].bounds[4][j] = bbox.min.z;
+                nodes[i].bounds.e[0].e[j] = bbox.min.x;
+                nodes[i].bounds.e[2].e[j] = bbox.min.y;
+                nodes[i].bounds.e[4].e[j] = bbox.min.z;
 
-                nodes[i].bounds[1][j] = bbox.max.x;
-                nodes[i].bounds[3][j] = bbox.max.y;
-                nodes[i].bounds[5][j] = bbox.max.z;
+                nodes[i].bounds.e[1].e[j] = bbox.max.x;
+                nodes[i].bounds.e[3].e[j] = bbox.max.y;
+                nodes[i].bounds.e[5].e[j] = bbox.max.z;
             }
 
             for (size_t j = count; j < N; ++j) {
-                nodes[i].bounds[0][j] = std::numeric_limits<float>::infinity();
-                nodes[i].bounds[2][j] = std::numeric_limits<float>::infinity();
-                nodes[i].bounds[4][j] = std::numeric_limits<float>::infinity();
+                nodes[i].bounds.e[0].e[j] = std::numeric_limits<float>::infinity();
+                nodes[i].bounds.e[2].e[j] = std::numeric_limits<float>::infinity();
+                nodes[i].bounds.e[4].e[j] = std::numeric_limits<float>::infinity();
 
-                nodes[i].bounds[1][j] = -std::numeric_limits<float>::infinity();
-                nodes[i].bounds[3][j] = -std::numeric_limits<float>::infinity();
-                nodes[i].bounds[5][j] = -std::numeric_limits<float>::infinity();
+                nodes[i].bounds.e[1].e[j] = -std::numeric_limits<float>::infinity();
+                nodes[i].bounds.e[3].e[j] = -std::numeric_limits<float>::infinity();
+                nodes[i].bounds.e[5].e[j] = -std::numeric_limits<float>::infinity();
 
-                nodes[i].child[j] = 0;
+                nodes[i].child.e[j] = 0;
             }
 
             return i;
@@ -214,7 +214,7 @@ private:
             auto& nodes   = adapter.nodes_;
             auto& tris    = adapter.tris_;
 
-            nodes[parent].child[child] = ~tris.size();
+            nodes[parent].child.e[child] = ~tris.size();
 
             // Group triangles by packets of M
             for (size_t i = 0; i < ref_count; i += M) {
@@ -228,33 +228,33 @@ private:
                     const float3 e1 = in_tri.v0 - in_tri.v1;
                     const float3 e2 = in_tri.v2 - in_tri.v0;
                     const float3 n = cross(e1, e2);
-                    tri.v0[0][j] = in_tri.v0.x;
-                    tri.v0[1][j] = in_tri.v0.y;
-                    tri.v0[2][j] = in_tri.v0.z;
+                    tri.v0.e[0].e[j] = in_tri.v0.x;
+                    tri.v0.e[1].e[j] = in_tri.v0.y;
+                    tri.v0.e[2].e[j] = in_tri.v0.z;
 
-                    tri.e1[0][j] = e1.x;
-                    tri.e1[1][j] = e1.y;
-                    tri.e1[2][j] = e1.z;
+                    tri.e1.e[0].e[j] = e1.x;
+                    tri.e1.e[1].e[j] = e1.y;
+                    tri.e1.e[2].e[j] = e1.z;
 
-                    tri.e2[0][j] = e2.x;
-                    tri.e2[1][j] = e2.y;
-                    tri.e2[2][j] = e2.z;
+                    tri.e2.e[0].e[j] = e2.x;
+                    tri.e2.e[1].e[j] = e2.y;
+                    tri.e2.e[2].e[j] = e2.z;
 
-                    tri.n[0][j] = n.x;
-                    tri.n[1][j] = n.y;
-                    tri.n[2][j] = n.z;
+                    tri.n.e[0].e[j] = n.x;
+                    tri.n.e[1].e[j] = n.y;
+                    tri.n.e[2].e[j] = n.z;
 
-                    tri.prim_id[j] = id;
-                    tri.geom_id[j] = indices[id * 4 + 3];
+                    tri.prim_id.e[j] = id;
+                    tri.geom_id.e[j] = indices[id * 4 + 3];
                 }
 
                 for (size_t j = c; j < 4; j++)
-                    tri.prim_id[j] = 0xFFFFFFFF;
+                    tri.prim_id.e[j] = 0xFFFFFFFF;
 
                 tris.emplace_back(tri);
             }
             assert(ref_count > 0);
-            tris.back().prim_id[M - 1] |= 0x80000000;
+            tris.back().prim_id.e[M - 1] |= 0x80000000;
         }
     };
 };
@@ -310,34 +310,34 @@ private:
             if (parent >= 0 && child >= 0) {
                 assert(parent >= 0 && parent < nodes.size());
                 assert(child >= 0 && child < 2);
-                nodes[parent].child[child] = i + 1;
+                nodes[parent].child.e[child] = i + 1;
             }
 
             assert(count >= 1 && count <= 2);
 
             const BBox& bbox1 = bboxes(0);
-            nodes[i].bounds[0] = bbox1.min.x;
-            nodes[i].bounds[2] = bbox1.min.y;
-            nodes[i].bounds[4] = bbox1.min.z;
-            nodes[i].bounds[1] = bbox1.max.x;
-            nodes[i].bounds[3] = bbox1.max.y;
-            nodes[i].bounds[5] = bbox1.max.z;
+            nodes[i].bounds.e[0] = bbox1.min.x;
+            nodes[i].bounds.e[2] = bbox1.min.y;
+            nodes[i].bounds.e[4] = bbox1.min.z;
+            nodes[i].bounds.e[1] = bbox1.max.x;
+            nodes[i].bounds.e[3] = bbox1.max.y;
+            nodes[i].bounds.e[5] = bbox1.max.z;
 
             if (count == 2) {
                 const BBox& bbox2 = bboxes(1);
-                nodes[i].bounds[ 6] = bbox2.min.x;
-                nodes[i].bounds[ 8] = bbox2.min.y;
-                nodes[i].bounds[10] = bbox2.min.z;
-                nodes[i].bounds[ 7] = bbox2.max.x;
-                nodes[i].bounds[ 9] = bbox2.max.y;
-                nodes[i].bounds[11] = bbox2.max.z;
+                nodes[i].bounds.e[ 6] = bbox2.min.x;
+                nodes[i].bounds.e[ 8] = bbox2.min.y;
+                nodes[i].bounds.e[10] = bbox2.min.z;
+                nodes[i].bounds.e[ 7] = bbox2.max.x;
+                nodes[i].bounds.e[ 9] = bbox2.max.y;
+                nodes[i].bounds.e[11] = bbox2.max.z;
             } else {
-                nodes[i].bounds[ 6] =  std::numeric_limits<float>::infinity();
-                nodes[i].bounds[ 8] =  std::numeric_limits<float>::infinity();
-                nodes[i].bounds[10] =  std::numeric_limits<float>::infinity();
-                nodes[i].bounds[ 7] = -std::numeric_limits<float>::infinity();
-                nodes[i].bounds[ 9] = -std::numeric_limits<float>::infinity();
-                nodes[i].bounds[11] = -std::numeric_limits<float>::infinity();
+                nodes[i].bounds.e[ 6] =  std::numeric_limits<float>::infinity();
+                nodes[i].bounds.e[ 8] =  std::numeric_limits<float>::infinity();
+                nodes[i].bounds.e[10] =  std::numeric_limits<float>::infinity();
+                nodes[i].bounds.e[ 7] = -std::numeric_limits<float>::infinity();
+                nodes[i].bounds.e[ 9] = -std::numeric_limits<float>::infinity();
+                nodes[i].bounds.e[11] = -std::numeric_limits<float>::infinity();
             }
 
             return i;
@@ -360,7 +360,7 @@ private:
             auto& nodes   = adapter.nodes_;
             auto& tris    = adapter.tris_;
 
-            nodes[parent].child[child] = ~tris.size();
+            nodes[parent].child.e[child] = ~tris.size();
 
             for (int i = 0; i < ref_count; i++) {
                 const int ref = refs(i);
@@ -371,8 +371,8 @@ private:
                 int geom_id = indices[ref * 4 + 3];
                 tris.emplace_back(Tri1 {
                     { tri.v0.x, tri.v0.y, tri.v0.z}, 0,
-                    { e1.x, e1.y, e1.z}, geom_id,
-                    { e2.x, e2.y, e2.z}, ref
+                    { e1.x, e1.y, e1.z }, geom_id,
+                    { e2.x, e2.y, e2.z }, ref
                 });
             }
 
