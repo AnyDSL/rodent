@@ -367,7 +367,6 @@ private:
                 auto& tri = in_tris[ref];
                 auto e1 = tri.v0 - tri.v1;
                 auto e2 = tri.v2 - tri.v0;
-                auto n = cross(e1, e2);
                 int geom_id = indices[ref * 4 + 3];
                 tris.emplace_back(Tri1 {
                     { { tri.v0.x, tri.v0.y, tri.v0.z } }, 0,
