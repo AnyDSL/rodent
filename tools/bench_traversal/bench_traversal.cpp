@@ -355,25 +355,25 @@ int main(int argc, char** argv) {
     } else if (ray_width == 4) {
         for (auto& hit : hits4) {
             for (int i = 0; i < 4; i++)
-                intr += hit.tri_id[i] >= 0;
+                intr += hit.tri_id.e[i] >= 0;
         }
         if (out_file != "") {
             std::ofstream of(out_file, std::ofstream::binary);
             for (auto& hit : hits4) {
                 for (int i = 0; i < 4; i++)
-                    of.write((char*)&hit.t[i], sizeof(float));
+                    of.write((char*)&hit.t.e[i], sizeof(float));
             }
         }
     } else {
         for (auto& hit : hits8) {
             for (int i = 0; i < 8; i++)
-                intr += hit.tri_id[i] >= 0;
+                intr += hit.tri_id.e[i] >= 0;
         }
         if (out_file != "") {
             std::ofstream of(out_file, std::ofstream::binary);
             for (auto& hit : hits8) {
                 for (int i = 0; i < 8; i++)
-                    of.write((char*)&hit.t[i], sizeof(float));
+                    of.write((char*)&hit.t.e[i], sizeof(float));
             }
         }
     }

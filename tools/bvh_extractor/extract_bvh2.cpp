@@ -43,25 +43,25 @@ private:
             nodes.emplace_back();
 
             if (parent >= 0 && child >= 0)
-                nodes[parent].child[child] = i + 1;
+                nodes[parent].child.e[child] = i + 1;
 
             assert(count == 2);
 
             const BBox& bbox1 = bboxes(0);
-            nodes[i].bounds[0] = bbox1.min.x;
-            nodes[i].bounds[2] = bbox1.min.y;
-            nodes[i].bounds[4] = bbox1.min.z;
-            nodes[i].bounds[1] = bbox1.max.x;
-            nodes[i].bounds[3] = bbox1.max.y;
-            nodes[i].bounds[5] = bbox1.max.z;
+            nodes[i].bounds.e[0] = bbox1.min.x;
+            nodes[i].bounds.e[2] = bbox1.min.y;
+            nodes[i].bounds.e[4] = bbox1.min.z;
+            nodes[i].bounds.e[1] = bbox1.max.x;
+            nodes[i].bounds.e[3] = bbox1.max.y;
+            nodes[i].bounds.e[5] = bbox1.max.z;
 
             const BBox& bbox2 = bboxes(1);
-            nodes[i].bounds[ 6] = bbox2.min.x;
-            nodes[i].bounds[ 8] = bbox2.min.y;
-            nodes[i].bounds[10] = bbox2.min.z;
-            nodes[i].bounds[ 7] = bbox2.max.x;
-            nodes[i].bounds[ 9] = bbox2.max.y;
-            nodes[i].bounds[11] = bbox2.max.z;
+            nodes[i].bounds.e[ 6] = bbox2.min.x;
+            nodes[i].bounds.e[ 8] = bbox2.min.y;
+            nodes[i].bounds.e[10] = bbox2.min.z;
+            nodes[i].bounds.e[ 7] = bbox2.max.x;
+            nodes[i].bounds.e[ 9] = bbox2.max.y;
+            nodes[i].bounds.e[11] = bbox2.max.z;
 
             return i;
         }
@@ -80,7 +80,7 @@ private:
             auto& nodes = builder->nodes_;
             auto& tris  = builder->tris_;
 
-            nodes[parent].child[child] = ~tris.size();
+            nodes[parent].child.e[child] = ~tris.size();
 
             for (int i = 0; i < ref_count; i++) {
                 const int ref = refs(i);
@@ -89,9 +89,9 @@ private:
                 auto e2 = tri.v2 - tri.v0;
                 auto n = cross(e1, e2);
                 tris.emplace_back(Tri1 {
-                    { tri.v0.x, tri.v0.y, tri.v0.z}, 0,
-                    { e1.x, e1.y, e1.z}, 0,
-                    { e2.x, e2.y, e2.z}, ref
+                    { { tri.v0.x, tri.v0.y, tri.v0.z } }, 0,
+                    { { e1.x, e1.y, e1.z } }, 0,
+                    { { e2.x, e2.y, e2.z } }, ref
                 });
             }
 

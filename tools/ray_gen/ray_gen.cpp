@@ -19,12 +19,13 @@ public:
 
 class PrimaryRayGen : public RayGen {
 public:
-    PrimaryRayGen(const float3& eye,
-                  const float3& dir,
-                  const float3& up,
-                  float fov,
-                  int width,
-                  int height)
+    PrimaryRayGen(
+        const float3& eye,
+        const float3& dir,
+        const float3& up,
+        float fov,
+        int width,
+        int height)
         : eye_(eye)
         , dir_(normalize(dir))
         , width_(width)
@@ -59,9 +60,10 @@ private:
 
 class ShadowRayGen : public RayGen {
 public:
-    ShadowRayGen(const float3& light,
-                 const anydsl::Array<Ray1>& rays,
-                 const std::vector<float>& float_buffer)
+    ShadowRayGen(
+        const float3& light,
+        const anydsl::Array<Ray1>& rays,
+        const std::vector<float>& float_buffer)
         : light_(light)
         , rays_(rays)
         , float_buffer_(float_buffer)
@@ -69,8 +71,8 @@ public:
 
     void generate_rays(std::ofstream& os) override {
         for (int i = 0; i < rays_.size(); i++) {
-            auto org = float3(rays_[i].org[0], rays_[i].org[1], rays_[i].org[2]);
-            auto dir = float3(rays_[i].dir[0], rays_[i].dir[1], rays_[i].dir[2]);
+            auto org = float3(rays_[i].org.e[0], rays_[i].org.e[1], rays_[i].org.e[2]);
+            auto dir = float3(rays_[i].dir.e[0], rays_[i].dir.e[1], rays_[i].dir.e[2]);
             auto hit = org + float_buffer_[i] * dir;
             auto new_dir = hit - light_;
             os.write((char*)&light_, sizeof(float3));
@@ -137,8 +139,8 @@ static bool extract_bounds(const std::string& bvh_file, BBox& bounds) {
     if (!load_bvh(bvh_file, nodes, tris, BvhType::BVH4_TRI4, anydsl::Platform::Host, anydsl::Device(0))) return false;
     bounds = BBox::empty();
     for (int i = 0; i < 4; i++) {
-        bounds.min = min(bounds.min, float3(nodes[0].bounds[0][i], nodes[0].bounds[2][i], nodes[0].bounds[4][i]));
-        bounds.max = max(bounds.max, float3(nodes[0].bounds[1][i], nodes[0].bounds[3][i], nodes[0].bounds[5][i]));
+        bounds.min = min(bounds.min, float3(nodes[0].bounds.e[0].e[i], nodes[0].bounds.e[2].e[i], nodes[0].bounds.e[4].e[i]));
+        bounds.max = max(bounds.max, float3(nodes[0].bounds.e[1].e[i], nodes[0].bounds.e[3].e[i], nodes[0].bounds.e[5].e[i]));
     }
     return true;
 }

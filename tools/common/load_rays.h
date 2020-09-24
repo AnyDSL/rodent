@@ -3,64 +3,63 @@
 
 #include <fstream>
 #include <anydsl_runtime.hpp>
+#include "traversal.h"
 
 template <typename Ray>
 struct RayTraits {};
 
-struct Ray1;
 template <>
 struct RayTraits<Ray1> {
     enum { RayPerPacket = 1 };
     static void write_ray(const float* org_dir, float tmin, float tmax, int /*j*/, Ray1& ray) {
-        ray.org[0] = org_dir[0];
-        ray.org[1] = org_dir[1];
-        ray.org[2] = org_dir[2];
-        ray.dir[0] = org_dir[3];
-        ray.dir[1] = org_dir[4];
-        ray.dir[2] = org_dir[5];
+        ray.org.e[0] = org_dir[0];
+        ray.org.e[1] = org_dir[1];
+        ray.org.e[2] = org_dir[2];
+        ray.dir.e[0] = org_dir[3];
+        ray.dir.e[1] = org_dir[4];
+        ray.dir.e[2] = org_dir[5];
         ray.tmin = tmin;
         ray.tmax = tmax;
     }
 };
 
-struct Ray4;
 template <>
 struct RayTraits<Ray4> {
     enum { RayPerPacket = 4 };
     static void write_ray(const float* org_dir, float tmin, float tmax, int j, Ray4& ray) {
-        ray.org[0][j] = org_dir[0];
-        ray.org[1][j] = org_dir[1];
-        ray.org[2][j] = org_dir[2];
-        ray.dir[0][j] = org_dir[3];
-        ray.dir[1][j] = org_dir[4];
-        ray.dir[2][j] = org_dir[5];
-        ray.tmin[j] = tmin;
-        ray.tmax[j] = tmax;
+        ray.org.e[0].e[j] = org_dir[0];
+        ray.org.e[1].e[j] = org_dir[1];
+        ray.org.e[2].e[j] = org_dir[2];
+        ray.dir.e[0].e[j] = org_dir[3];
+        ray.dir.e[1].e[j] = org_dir[4];
+        ray.dir.e[2].e[j] = org_dir[5];
+        ray.tmin.e[j] = tmin;
+        ray.tmax.e[j] = tmax;
     }
 };
 
-struct Ray8;
 template <>
 struct RayTraits<Ray8> {
     enum { RayPerPacket = 8 };
     static void write_ray(const float* org_dir, float tmin, float tmax, int j, Ray8& ray) {
-        ray.org[0][j] = org_dir[0];
-        ray.org[1][j] = org_dir[1];
-        ray.org[2][j] = org_dir[2];
-        ray.dir[0][j] = org_dir[3];
-        ray.dir[1][j] = org_dir[4];
-        ray.dir[2][j] = org_dir[5];
-        ray.tmin[j] = tmin;
-        ray.tmax[j] = tmax;
+        ray.org.e[0].e[j] = org_dir[0];
+        ray.org.e[1].e[j] = org_dir[1];
+        ray.org.e[2].e[j] = org_dir[2];
+        ray.dir.e[0].e[j] = org_dir[3];
+        ray.dir.e[1].e[j] = org_dir[4];
+        ray.dir.e[2].e[j] = org_dir[5];
+        ray.tmin.e[j] = tmin;
+        ray.tmax.e[j] = tmax;
     }
 };
 
 template <typename Ray>
-inline bool load_rays(const std::string& filename,
-                      anydsl::Array<Ray>& rays,
-                      float tmin, float tmax,
-                      anydsl::Platform platform,
-                      anydsl::Device device) {
+inline bool load_rays(
+    const std::string& filename,
+    anydsl::Array<Ray>& rays,
+    float tmin, float tmax,
+    anydsl::Platform platform,
+    anydsl::Device device) {
     std::ifstream in(filename, std::ifstream::binary);
     if (!in) return false;
 
