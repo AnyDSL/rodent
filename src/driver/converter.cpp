@@ -748,7 +748,7 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
     // Generate images
     info("Generating images for '", file_name, "'");
     os << "\n    // Images\n"
-       << "    let dummy_image = make_image(@ |x, y| make_color(0, 0, 0), 1, 1);\n";
+       << "    let dummy_image = make_image(@ |_x, _y| make_color(0, 0, 0), 1, 1);\n";
     for (size_t i = 0; i < images.size(); i++) {
         auto name = fix_file(image_names[i]);
         copy_file(path.base_name() + "/" + name, "data/" + name);
@@ -793,9 +793,9 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
         if (has_map_ke) {
             os << "    let light" << num_lights - 1 << " = make_triangle_light(\n"
                << "        math,\n"
-               << "        make_vec3(" << v0.x << "f, " << v0.y << "f, " << v0.z << "f),\n"
-               << "        make_vec3(" << v1.x << "f, " << v1.y << "f, " << v1.z << "f),\n"
-               << "        make_vec3(" << v2.x << "f, " << v2.y << "f, " << v2.z << "f),\n";
+               << "        make_vec3(" << v0.x << ", " << v0.y << ", " << v0.z << "),\n"
+               << "        make_vec3(" << v1.x << ", " << v1.y << ", " << v1.z << "),\n"
+               << "        make_vec3(" << v2.x << ", " << v2.y << ", " << v2.z << "),\n";
             if (mat.map_ke != "") {
                 os << "        make_texture(math, make_repeat_border(), make_bilinear_filter(), image_" << make_id(image_names[images[mat.map_ke]]) <<")\n";
             } else {

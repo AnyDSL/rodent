@@ -39,12 +39,12 @@ inline void usage() {
 static void transform_nodes(Node2* nodes, size_t size) {
     for (size_t i = 0; i < size; ++i) {
         Node2 copy = nodes[i];
-        nodes[i].bounds[4] = copy.bounds[6];
-        nodes[i].bounds[5] = copy.bounds[7];
-        nodes[i].bounds[6] = copy.bounds[8];
-        nodes[i].bounds[7] = copy.bounds[9];
-        nodes[i].bounds[8] = copy.bounds[4];
-        nodes[i].bounds[9] = copy.bounds[5];
+        nodes[i].bounds.e[4] = copy.bounds.e[6];
+        nodes[i].bounds.e[5] = copy.bounds.e[7];
+        nodes[i].bounds.e[6] = copy.bounds.e[8];
+        nodes[i].bounds.e[7] = copy.bounds.e[9];
+        nodes[i].bounds.e[8] = copy.bounds.e[4];
+        nodes[i].bounds.e[9] = copy.bounds.e[5];
     }
 }
 

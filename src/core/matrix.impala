@@ -18,8 +18,8 @@ fn @make_mat2x2(c0: Vec2, c1: Vec2) = Mat2x2 { col = [c0, c1] }
 fn @make_mat3x3(c0: Vec3, c1: Vec3, c2: Vec3) = Mat3x3 { col = [c0, c1, c2] }
 
 fn @make_orthonormal_mat3x3(n: Vec3) -> Mat3x3 {
-    let sign = select(n.z >= 0:f32, 1:f32, -1:f32);
-    let a = -1:f32 / (sign + n.z);
+    let sign : f32 = if n.z >= 0 { 1 } else { -1 };
+    let a = -1 / (sign + n.z);
     let b = n.x * n.y * a;
 
     let t  = make_vec3(1 + sign * n.x * n.x * a, sign * b, -sign * n.x);

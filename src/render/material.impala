@@ -138,7 +138,7 @@ fn @make_glass_bsdf(math: Intrinsics, surf: SurfaceElement, n1: f32, n2: f32, ks
             let F = fresnel_factor(k, cos_i, cos_t);
             if (randf(rnd) > F) {
                 let t = vec3_sub(vec3_mulf(n, k * cos_i - cos_t), vec3_mulf(out_dir, k));
-                let adjoint_term = if adjoint { k * k } else { 1:f32 };
+                let adjoint_term = if adjoint { k * k } else { 1 };
                 return(make_bsdf_sample(surf, t, 1, 1, color_mulf(kt, adjoint_term), true))
             }
         }

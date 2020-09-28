@@ -26,9 +26,9 @@ fn @make_image_rgba32(pixels: fn (i32, i32) -> u32, width: i32, height: i32) -> 
             let r = pixel & 0xFF:u32;
             let g = (pixel >>  8:u32) & 0xFF:u32;
             let b = (pixel >> 16:u32) & 0xFF:u32;
-            make_color((r as f32) * (1:f32 / 255:f32),
-                       (g as f32) * (1:f32 / 255:f32),
-                       (b as f32) * (1:f32 / 255:f32))
+            make_color((r as f32) * (1 / 255),
+                       (g as f32) * (1 / 255),
+                       (b as f32) * (1 / 255))
         },
         width  = width,
         height = height

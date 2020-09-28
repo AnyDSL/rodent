@@ -56,7 +56,7 @@ fn @make_debug_renderer() -> Renderer {
 
 fn @make_path_tracing_renderer(max_path_len: i32, spp: i32) -> Renderer {
     @ |scene, device, iter| {
-        let offset = 0.001:f32;
+        let offset : f32 = 0.001;
         let pdf_lightpick = 1 / (scene.num_lights as f32);
 
         let on_emit = make_camera_emitter(scene, device, iter);
@@ -88,14 +88,14 @@ fn @make_path_tracing_renderer(max_path_len: i32, spp: i32) -> Renderer {
                 let in_dir = vec3_mulf(light_dir, inv_d);
                 let out_dir = vec3_neg(ray.dir);
 
-                let pdf_e = if light.has_area { mat.bsdf.pdf(in_dir, out_dir) } else { 0:f32 };
+                let pdf_e = if light.has_area { mat.bsdf.pdf(in_dir, out_dir) } else { 0 };
                 let pdf_l = light_sample.pdf_area * pdf_lightpick;
                 let inv_pdf_l = 1 / pdf_l;
 
                 let cos_e = vis * inv_d;
                 let cos_l = light_sample.cos;
 
-                let mis = if light.has_area { 1:f32 / (1:f32 + pdf_e * cos_l * inv_d2 * inv_pdf_l) } else { 1:f32 };
+                let mis = if light.has_area { 1 / (1 + pdf_e * cos_l * inv_d2 * inv_pdf_l) } else { 1 };
                 let geom_factor = cos_e * cos_l * inv_d2 * inv_pdf_l;
 
                 let contrib = color_mul(light_sample.intensity, color_mul(state.contrib, mat.bsdf.eval(in_dir, out_dir)));
@@ -141,7 +141,7 @@ fn @make_path_tracing_renderer(max_path_len: i32, spp: i32) -> Renderer {
             let out_dir = vec3_neg(ray.dir);
             let mat_sample = mat.bsdf.sample(&mut state.rnd, out_dir, false);
             let contrib = color_mul(state.contrib, mat_sample.color);
-            let mis = if mat.bsdf.is_specular { 0:f32 } else { 1:f32 / mat_sample.pdf };
+            let mis = if mat.bsdf.is_specular { 0 } else { 1 / mat_sample.pdf };
             make_option(
                 make_ray(surf.point, mat_sample.in_dir, offset, flt_max),
                 make_ray_state(state.rnd, color_mulf(contrib, mat_sample.cos / (mat_sample.pdf * rr_prob)), mis, state.depth + 1)
