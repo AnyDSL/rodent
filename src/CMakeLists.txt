@@ -46,7 +46,6 @@ set(RODENT_SRCS
 set(DRIVER_SRCS
     driver/driver.cpp
     driver/interface.cpp
-    driver/interface.h
     driver/obj.cpp
     driver/obj.h
     driver/image.cpp

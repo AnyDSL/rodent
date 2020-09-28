@@ -672,7 +672,7 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
        << "        normals      = @ |i| normals.load_vec3(i),\n"
        << "        face_normals = @ |i| face_normals.load_vec3(i),\n"
        << "        triangles    = @ |i| { let (i, j, k, _) = indices.load_int4(i); (i, j, k) },\n"
-       << "        attrs        = @ |_| (false, @ |j| vec2_to_4(texcoords.load_vec2(j), 0:f32, 0:f32)),\n"
+       << "        attrs        = @ |_| (false, @ |j| vec2_to_4(texcoords.load_vec2(j), 0, 0)),\n"
        << "        num_attrs    = 1,\n"
        << "        num_tris     = " << tri_mesh.indices.size() / 4 << "\n"
        << "    };\n"
@@ -748,7 +748,7 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
     // Generate images
     info("Generating images for '", file_name, "'");
     os << "\n    // Images\n"
-       << "    let dummy_image = make_image(@ |x, y| make_color(0:f32, 0:f32, 0:f32), 1, 1);\n";
+       << "    let dummy_image = make_image(@ |x, y| make_color(0, 0, 0), 1, 1);\n";
     for (size_t i = 0; i < images.size(); i++) {
         auto name = fix_file(image_names[i]);
         copy_file(path.base_name() + "/" + name, "data/" + name);
@@ -799,7 +799,7 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
             if (mat.map_ke != "") {
                 os << "        make_texture(math, make_repeat_border(), make_bilinear_filter(), image_" << make_id(image_names[images[mat.map_ke]]) <<")\n";
             } else {
-                os << "        make_color(" << mat.ke.x << ":f32, " << mat.ke.y << ":f32, " << mat.ke.z << ":f32)\n";
+                os << "        make_color(" << mat.ke.x << ", " << mat.ke.y << ", " << mat.ke.z << ")\n";
             }
             os << "    );\n";
         } else {
@@ -825,7 +825,7 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
             }
             os << "    };\n";
         } else {
-            os << "    let lights = @ |_: i32| make_point_light(math, make_vec3(0:f32, 0:f32, 0:f32), black);\n";
+            os << "    let lights = @ |_: i32| make_point_light(math, make_vec3(0, 0, 0), black);\n";
         }
     } else {
         write_buffer("data/light_verts.bin",  pad_buffer(light_verts,  enable_padding, sizeof(float) * 4));
@@ -869,30 +869,34 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
         bool has_emission = mat.ke != rgb(0.0f) || mat.map_ke != "";
         os << "    let shader_" << make_id(mtl_name) << " : Shader = @ |ray, hit, surf| {\n";
         if (mat.illum == 5) {
-            os << "        let bsdf = make_mirror_bsdf(math, surf, make_color(" << mat.ks.x << ":f32, " << mat.ks.y << ":f32, " << mat.ks.z << ":f32));\n";
+            os << "        let bsdf = make_mirror_bsdf(math, surf, make_color(" << mat.ks.x << ", " << mat.ks.y << ", " << mat.ks.z << "));\n";
         } else if (mat.illum == 7) {
-            os << "        let bsdf = make_glass_bsdf(math, surf, 1:f32, " << mat.ni << "f, " << "make_color(" << mat.ks.x << ":f32, " << mat.ks.y << ":f32, " << mat.ks.z << ":f32), make_color(" << mat.tf.x << ":f32, " << mat.tf.y << ":f32, " << mat.tf.z << ":f32));\n";
+            os << "        let bsdf = make_glass_bsdf(math, surf, 1, " << mat.ni << "f, "
+               << "make_color(" << mat.ks.x << ", " << mat.ks.y << ", " << mat.ks.z
+               << "), make_color(" << mat.tf.x << ", " << mat.tf.y << ", " << mat.tf.z << "));\n";
         } else {
             bool has_diffuse  = mat.kd != rgb(0.0f) || mat.map_kd != "";
             bool has_specular = mat.ks != rgb(0.0f) || mat.map_ks != "";
 
             if (has_diffuse) {
                 if (mat.map_kd != "") {
-                    os << "        let diffuse_texture = make_texture(math, make_repeat_border(), make_bilinear_filter(), image_" << make_id(image_names[images[mat.map_kd]]) << ");\n";
-                    os << "        let kd = diffuse_texture(vec4_to_2(surf.attr(0)));\n";
+                    os << "        let diffuse_texture = make_texture(math, make_repeat_border(), make_bilinear_filter(), image_"
+                       << make_id(image_names[images[mat.map_kd]]) << ");\n"
+                       << "        let kd = diffuse_texture(vec4_to_2(surf.attr(0)));\n";
                 } else {
-                    os << "        let kd = make_color(" << mat.kd.x << ":f32, " << mat.kd.y << ":f32, " << mat.kd.z << ":f32);\n";
+                    os << "        let kd = make_color(" << mat.kd.x << ", " << mat.kd.y << ", " << mat.kd.z << ");\n";
                 }
                 os << "        let diffuse = make_diffuse_bsdf(math, surf, kd);\n";
             }
             if (has_specular) {
                 if (mat.map_ks != "") {
-                    os << "        let specular_texture = make_texture(math, make_repeat_border(), make_bilinear_filter(), image_" << make_id(image_names[images[mat.map_ks]]) << ");\n";
-                    os << "        let ks = specular_texture(vec4_to_2(surf.attr(0)));\n";
+                    os << "        let specular_texture = make_texture(math, make_repeat_border(), make_bilinear_filter(), image_"
+                       << make_id(image_names[images[mat.map_ks]]) << ");\n"
+                       << "        let ks = specular_texture(vec4_to_2(surf.attr(0)));\n";
                 } else {
-                    os << "        let ks = make_color(" << mat.ks.x << ":f32, " << mat.ks.y << ":f32, " << mat.ks.z << ":f32);\n";
+                    os << "        let ks = make_color(" << mat.ks.x << ", " << mat.ks.y << ", " << mat.ks.z << ");\n";
                 }
-                os << "        let ns = " << mat.ns << ":f32;\n";
+                os << "        let ns = " << mat.ns << ";\n";
                 os << "        let specular = make_phong_bsdf(math, surf, ks, ns);\n";
             }
             os << "        let bsdf = ";
@@ -900,7 +904,7 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
                 os << "{\n"
                    << "            let lum_ks = color_luminance(ks);\n"
                    << "            let lum_kd = color_luminance(kd);\n"
-                   << "            let k = select(lum_ks + lum_kd == 0:f32, 0:f32, lum_ks / (lum_ks + lum_kd));\n"
+                   << "            let k = select(lum_ks + lum_kd == 0, 0, lum_ks / (lum_ks + lum_kd));\n"
                    << "            make_mix_bsdf(diffuse, specular, k)\n"
                    << "        };\n";
             } else if (has_diffuse || has_specular) {
