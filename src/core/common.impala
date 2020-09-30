@@ -87,10 +87,6 @@ fn @unlikely(cond: bool) -> bool { expect(cond, false) }
 
 // Misc. ---------------------------------------------------------------------------
 
-fn @once(body: fn () -> ()) -> () {
-    @body()
-}
-
 fn @prodsign(x: f32, y: f32) -> f32 {
     bitcast[f32](bitcast[i32](x) ^ (bitcast[i32](y) & bitcast[i32](0x80000000:u32)))
 }

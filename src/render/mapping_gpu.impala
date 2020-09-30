@@ -117,45 +117,36 @@ fn @gpu_shade( acc: Accelerator
         let surf  = geom.surface_element(ray, hit);
         let mat   = geom.shader(ray, hit, surf);
 
-        once(|| {
-            let on_hit = path_tracer.on_hit;
-            let hit = @on_hit(ray, hit, &mut state, surf, mat);
-            match hit {
-                Option[Color]::Some(color) => gpu_accumulate(atomics, film_pixels, pixel, color, spp),
-                _ => ()
-            }
-        });
+        let on_hit = path_tracer.on_hit;
+        match @on_hit(ray, hit, &mut state, surf, mat) {
+            Option[Color]::Some(color) => gpu_accumulate(atomics, film_pixels, pixel, color, spp),
+            _ => ()
+        }
 
-        once(|| {
-            let on_shadow = path_tracer.on_shadow;
-            let shadow = @on_shadow(ray, hit, &mut state, surf, mat);
-            match shadow {
-                Option[(Ray, Color)]::Some(ray, color) => {
-                    make_ray_stream_writer(secondary.rays, 1)(ray_id, 0, ray);
-                    secondary.color_r(ray_id) = color.r;
-                    secondary.color_g(ray_id) = color.g;
-                    secondary.color_b(ray_id) = color.b;
-                    secondary.rays.id(ray_id) = pixel;
-                },
-                _ => {
-                    secondary.rays.id(ray_id) = -1;
-                }
+        let on_shadow = path_tracer.on_shadow;
+        match @on_shadow(ray, hit, &mut state, surf, mat) {
+            Option[(Ray, Color)]::Some(ray, color) => {
+                make_ray_stream_writer(secondary.rays, 1)(ray_id, 0, ray);
+                secondary.color_r(ray_id) = color.r;
+                secondary.color_g(ray_id) = color.g;
+                secondary.color_b(ray_id) = color.b;
+                secondary.rays.id(ray_id) = pixel;
+            },
+            _ => {
+                secondary.rays.id(ray_id) = -1;
             }
-        });
+        }
 
-        once(|| {
-            let on_bounce = path_tracer.on_bounce;
-            let bounce = @on_bounce(ray, hit, &mut state, surf, mat);
-            match bounce {
-                Option[(Ray, RayState)]::Some(new_ray, new_state) => {
-                    make_ray_stream_writer(primary.rays, 1)(ray_id, 0, new_ray);
-                    make_primary_stream_state_writer(primary, 1)(ray_id, 0, new_state);
-                },
-                _ => {
-                    primary.rays.id(ray_id) = -1;
-                }
+        let on_bounce = path_tracer.on_bounce;
+        match @on_bounce(ray, hit, &mut state, surf, mat) {
+            Option[(Ray, RayState)]::Some(new_ray, new_state) => {
+                make_ray_stream_writer(primary.rays, 1)(ray_id, 0, new_ray);
+                make_primary_stream_state_writer(primary, 1)(ray_id, 0, new_state);
+            },
+            _ => {
+                primary.rays.id(ray_id) = -1;
             }
-        });
+        }
     });
 }
 
@@ -470,42 +461,33 @@ fn @gpu_mega_kernel_trace( dev_id: i32
                     let surf = geom.surface_element(ray, hit);
                     let mat  = geom.shader(ray, hit, surf);
 
-                    once(|| {
-                        let on_hit = path_tracer.on_hit;
-                        let hit = @on_hit(ray, hit, &mut state, surf, mat);
-                        match hit {
-                            Option[Color]::Some(color) => {
-                                final_color = color_add(final_color, color);
-                            },
-                            _ => ()
-                        }
-                    });
+                    let on_hit = path_tracer.on_hit;
+                    match @on_hit(ray, hit, &mut state, surf, mat) {
+                        Option[Color]::Some(color) => {
+                            final_color = color_add(final_color, color);
+                        },
+                        _ => ()
+                    }
 
-                    once(|| {
-                        let on_shadow = path_tracer.on_shadow;
-                        let shadow = @on_shadow(ray, hit, &mut state, surf, mat);
-                        match shadow {
-                            Option[(Ray, Color)]::Some(ray, color) => {
-                                shadow_color = color;
-                                shadow_ray   = ray;
-                                trace_shadow = true;
-                            },
-                            _ => ()
-                        }
-                    });
+                    let on_shadow = path_tracer.on_shadow;
+                    match @on_shadow(ray, hit, &mut state, surf, mat) {
+                        Option[(Ray, Color)]::Some(ray, color) => {
+                            shadow_color = color;
+                            shadow_ray   = ray;
+                            trace_shadow = true;
+                        },
+                        _ => ()
+                    }
 
-                    once(|| {
-                        let on_bounce = path_tracer.on_bounce;
-                        let bounce = @on_bounce(ray, hit, &mut state, surf, mat);
-                        match bounce {
-                            Option[(Ray, RayState)]::Some(new_ray, new_state) => {
-                                ray   = new_ray;
-                                state = new_state;
-                                pixel &= pixel_mask;
-                            },
-                            _ => ()
-                        }
-                    });
+                    let on_bounce = path_tracer.on_bounce;
+                    match @on_bounce(ray, hit, &mut state, surf, mat) {
+                        Option[(Ray, RayState)]::Some(new_ray, new_state) => {
+                            ray   = new_ray;
+                            state = new_state;
+                            pixel &= pixel_mask;
+                        },
+                        _ => ()
+                    }
                     break()
                 }
             }

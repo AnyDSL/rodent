@@ -282,19 +282,11 @@ fn @cpu_shade(geom_id: i32, primary: &PrimaryStream, secondary: &SecondaryStream
             let mat    = geom.shader(ray, hit, surf);
 
             // Execute hit point shading, and add the contribution of each lane to the frame buffer
-            let mut hit_color: Color;
-            once(|| {
-                let on_hit = path_tracer.on_hit;
-                let hit = @on_hit(ray, hit, &mut state, surf, mat);
-                match hit {
-                    Option[Color]::Some(color) => {
-                        hit_color = color;
-                    },
-                    Option[Color]::None => {
-                        hit_color = make_color(0, 0, 0);
-                    }
-                }
-            });
+            let on_hit = path_tracer.on_hit;
+            let hit_color = match @on_hit(ray, hit, &mut state, surf, mat) {
+                Option[Color]::Some(color) => color,
+                Option[Color]::None => black
+            };
 
             for lane in unroll(0, vector_width) {
                 let j = bitcast[i32](rv_extract(bitcast[f32](ray_id), lane));
@@ -308,37 +300,31 @@ fn @cpu_shade(geom_id: i32, primary: &PrimaryStream, secondary: &SecondaryStream
             }
 
             // Compute shadow rays
-            once(|| {
-                let on_shadow = path_tracer.on_shadow;
-                let shadow = @on_shadow(ray, hit, &mut state, surf, mat);
-                match shadow {
-                    Option[(Ray, Color)]::Some(ray, color) => {
-                        write_secondary_ray(i, 0, ray);
-                        secondary.color_r(i) = color.r;
-                        secondary.color_g(i) = color.g;
-                        secondary.color_b(i) = color.b;
-                        secondary.rays.id(i) = ray_id;
-                    },
-                    Option[(Ray, Color)]::None => {
-                        secondary.rays.id(i) = -1;
-                    }
+            let on_shadow = path_tracer.on_shadow;
+            match @on_shadow(ray, hit, &mut state, surf, mat) {
+                Option[(Ray, Color)]::Some(ray, color) => {
+                    write_secondary_ray(i, 0, ray);
+                    secondary.color_r(i) = color.r;
+                    secondary.color_g(i) = color.g;
+                    secondary.color_b(i) = color.b;
+                    secondary.rays.id(i) = ray_id;
+                },
+                Option[(Ray, Color)]::None => {
+                    secondary.rays.id(i) = -1;
                 }
-            });
+            }
 
             // Sample new rays
-            once(|| {
-                let on_bounce = path_tracer.on_bounce;
-                let bounce = @on_bounce(ray, hit, &mut state, surf, mat);
-                match bounce {
-                    Option[(Ray, RayState)]::Some(new_ray, new_state) => {
-                        write_primary_ray(i, 0, new_ray);
-                        write_primary_state(i, 0, new_state);
-                    },
-                    Option[(Ray, RayState)]::None => {
-                        primary.rays.id(i) = -1;
-                    }
+            let on_bounce = path_tracer.on_bounce;
+            match @on_bounce(ray, hit, &mut state, surf, mat) {
+                Option[(Ray, RayState)]::Some(new_ray, new_state) => {
+                    write_primary_ray(i, 0, new_ray);
+                    write_primary_state(i, 0, new_state);
+                },
+                Option[(Ray, RayState)]::None => {
+                    primary.rays.id(i) = -1;
                 }
-            });
+            }
         }
     }
     cpu_shade_specialized(primary, secondary, begin, end);

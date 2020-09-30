@@ -161,11 +161,10 @@ fn @gpu_traverse_single_helper( gpu_intrinsics: Intrinsics
                 for k in unroll(0, prim.size) {
                     if !prim.is_valid(k) { break() }
 
-                    let prim_hit = prim.intersect(k, gpu_intrinsics, ray);
-                    match prim_hit {
-                        Option[Hit]::Some(prim_hit_some) => {
-                            hit = prim_hit_some;
-                            ray.tmax = prim_hit_some.distance;
+                    match prim.intersect(k, gpu_intrinsics, ray) {
+                        Option[Hit]::Some(prim_hit) => {
+                            hit = prim_hit;
+                            ray.tmax = prim_hit.distance;
 
                             if any_hit && hit.prim_id >= 0 { return(hit) }
                         },
