@@ -61,7 +61,7 @@ fn @gpu_traverse_secondary( secondary: SecondaryStream
                           , film_pixels: &mut [f32]
                           , spp: i32
                           ) -> () {
-    gpu_exec_1d(acc, secondary.size, 64 /* block_size */, |work_item| {
+    gpu_exec_1d(acc, secondary.size, 64 /*block_size*/, |work_item| {
         let gid = work_item.gidx();
         if gid >= secondary.size {
             return()
@@ -102,7 +102,7 @@ fn @gpu_shade( acc: Accelerator
              , secondary: SecondaryStream
              , first: i32, last: i32, geom_id: i32) -> () {
     let n = last - first;
-    gpu_exec_1d(acc, n, 64 /* block_size */, |work_item| {
+    gpu_exec_1d(acc, n, 64 /*block_size*/, |work_item| {
         let ray_id = first + work_item.gidx();
         if ray_id >= last {
             return()
@@ -266,7 +266,7 @@ fn @gpu_generate_rays( primary: PrimaryStream
     let write_state = make_primary_stream_state_writer(primary, 1);
     let write_id    = @ |i: i32, _: i32, id: i32| ray_ids(i) = id;
 
-    gpu_exec_1d(acc, num_rays, 64 /* block_size */, |work_item| {
+    gpu_exec_1d(acc, num_rays, 64 /*block_size*/, |work_item| {
         let gid = work_item.gidx();
         if gid >= num_rays {
             return()
@@ -303,7 +303,7 @@ fn @gpu_compact_primary( primary: PrimaryStream
     runtime_copy(0, &size as &[i8], 0, dev_id, gpu_tmp as &mut [i8], 0, sizeof[i32]());
 
     // Compact primary rays into another queue
-    gpu_exec_1d(acc, primary.size, 64 /* block_size */, |work_item| {
+    gpu_exec_1d(acc, primary.size, 64 /*block_size*/, |work_item| {
         let src_id = work_item.gidx();
         if src_id >= primary.size {
             return()
