@@ -7,14 +7,14 @@ static randi = xorshift;
 fn @randf(rnd: &mut RndState) -> f32 {
     // Assumes IEEE 754 floating point format
     let x = randi(rnd) as u32;
-    bitcast[f32]((127:u32 << 23:u32) | (x & 0x7FFFFF:u32)) - 1
+    bitcast[f32]((127:u32 << 23) | (x & 0x7FFFFF)) - 1
 }
 
 // MWC64X: http://cas.ee.ic.ac.uk/people/dt10/research/rngs-gpu-mwc64x.html
 fn @mwc64x(seed: &mut u64) -> i32 {
     let c = *seed >> 32;
-    let x = *seed & 0xFFFFFFFF:u64;
-    *seed = x * 4294883355:u64 + c;
+    let x = *seed & 0xFFFFFFFF;
+    *seed = x * 4294883355 + c;
     (x as i32)^(c as i32)
 }
 
@@ -22,9 +22,9 @@ fn @mwc64x(seed: &mut u64) -> i32 {
 fn @xorshift(seed: &mut u32) -> i32 {
     let mut x = *seed;
     x = select(x == 0, 1:u32, x);
-    x ^= x << 13:u32;
-    x ^= x >> 17:u32;
-    x ^= x <<  5:u32;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x <<  5;
     *seed = x;
     x as i32
 }
@@ -52,8 +52,9 @@ fn @sample_triangle(mut u: f32, mut v: f32, v0: Vec3, v1: Vec3, v2: Vec3) -> Vec
         v = 1 - v;
     }
     vec3_add(
-        vec3_add(vec3_mulf(v0, 1 - v - u),
-                 vec3_mulf(v1, u)),
+        vec3_add(
+            vec3_mulf(v0, 1 - v - u),
+            vec3_mulf(v1, u)),
         vec3_mulf(v2, v)
     )
 }
@@ -105,22 +106,22 @@ fn @bernstein_init() -> u32 { 5381:u32 }
 
 // Bernstein's hash function
 fn @bernstein_hash(mut h: u32, d: u32) -> u32 {
-    h = (h * 33:u32) ^ ( d            & 0xFF:u32);
-    h = (h * 33:u32) ^ ((d >>  8:u32) & 0xFF:u32);
-    h = (h * 33:u32) ^ ((d >> 16:u32) & 0xFF:u32);
-    h = (h * 33:u32) ^ ((d >> 24:u32) & 0xFF:u32);
+    h = (h * 33) ^ ( d        & 0xFF);
+    h = (h * 33) ^ ((d >>  8) & 0xFF);
+    h = (h * 33) ^ ((d >> 16) & 0xFF);
+    h = (h * 33) ^ ((d >> 24) & 0xFF);
     h
 }
 
 // Initializer for the FNV hash function
-fn @fnv_init() -> u32 { 0x811C9DC5:u32 }
+fn @fnv_init() -> u32 { 0x811C9DC5 }
 
 // FNV hash function
 fn @fnv_hash(mut h: u32, d: u32) -> u32 {
-    h = (h * 16777619:u32) ^ ( d            & 0xFF:u32);
-    h = (h * 16777619:u32) ^ ((d >>  8:u32) & 0xFF:u32);
-    h = (h * 16777619:u32) ^ ((d >> 16:u32) & 0xFF:u32);
-    h = (h * 16777619:u32) ^ ((d >> 24:u32) & 0xFF:u32);
+    h = (h * 16777619) ^ ( d        & 0xFF);
+    h = (h * 16777619) ^ ((d >>  8) & 0xFF);
+    h = (h * 16777619) ^ ((d >> 16) & 0xFF);
+    h = (h * 16777619) ^ ((d >> 24) & 0xFF);
     h
 }
 
