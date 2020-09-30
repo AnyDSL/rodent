@@ -24,7 +24,7 @@ This section assumes that the current directory is the build directory. To run r
 
 You may want to change the initial camera parameters using the command line options `--eye`, `--dir` and `--up`. Run `bin/rodent --help` to get a full list of options.
 
-When ImageMagick is found by Cmake, use the following commands to test the traversal code with the provided test scene:
+When ImageMagick is found by CMake, use the following commands to test the traversal code with the provided test scene:
 
     make test
 
