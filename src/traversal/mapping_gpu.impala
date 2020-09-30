@@ -198,10 +198,10 @@ fn @gpu_traverse_single( acc: Accelerator
     let grid  = (round_up(num_packets, block_size), packet_size, 1);
     let block = (block_size, packet_size, 1);
 
-    for work_item in acc.exec(grid, block) {
+    acc.exec(|work_item| {
         let (i, j) = (work_item.tidx() + work_item.bidx() * block_size, work_item.tidy());
-        if (i + j) >= ray_count { continue() }
+        if (i + j) >= ray_count { return() }
 
         hits(i, j, gpu_traverse_single_helper(gpu_intrinsics, min_max, rays(i, j), bvh, any_hit, 1 /*root*/));
-    }
+    })(grid, block);
 }

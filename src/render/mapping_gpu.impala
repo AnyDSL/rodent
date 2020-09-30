@@ -44,19 +44,32 @@ fn @gpu_accumulate(atomics: Atomics, film_pixels: &mut [f32], pixel: i32, color:
     }
 }
 
-fn @gpu_traverse_secondary(secondary: SecondaryStream, acc: Accelerator, intrinsics: Intrinsics, atomics: Atomics, min_max: MinMax, scene: Scene, film_pixels: &mut [f32], spp: i32) -> () {
-    let block_w = 64;
-    let grid  = (round_up(secondary.size, block_w), 1, 1);
-    let block = (block_w, 1, 1);
-    for work_item in acc.exec(grid, block) {
+fn @gpu_exec_1d(acc: Accelerator, dim: i32, block_size: i32, body: fn (WorkItem) -> ()) {
+    // Helper function that deduces the appropriate grid size that is at least larger
+    // or equal to `dim`x1x1, and that is a multiple of the block size.
+    let grid  = (round_up(dim, block_size), 1, 1);
+    let block = (block_size, 1, 1);
+    acc.exec(body)(grid, block);
+}
+
+fn @gpu_traverse_secondary( secondary: SecondaryStream
+                          , acc: Accelerator
+                          , intrinsics: Intrinsics
+                          , atomics: Atomics
+                          , min_max: MinMax
+                          , scene: Scene
+                          , film_pixels: &mut [f32]
+                          , spp: i32
+                          ) -> () {
+    gpu_exec_1d(acc, secondary.size, 64 /* block_size */, |work_item| {
         let gid = work_item.gidx();
         if gid >= secondary.size {
-            break()
+            return()
         }
 
         let pixel = secondary.rays.id(gid);
         if pixel < 0 {
-            break()
+            return()
         }
 
         let ray = make_ray_stream_reader(secondary.rays, 1)(gid, 0);
@@ -76,7 +89,7 @@ fn @gpu_traverse_secondary(secondary: SecondaryStream, acc: Accelerator, intrins
             );
             gpu_accumulate(atomics, film_pixels, pixel, color, spp);
         }
-    }
+    });
 }
 
 fn @gpu_shade( acc: Accelerator
@@ -89,13 +102,10 @@ fn @gpu_shade( acc: Accelerator
              , secondary: SecondaryStream
              , first: i32, last: i32, geom_id: i32) -> () {
     let n = last - first;
-    let block_w = 64;
-    let grid  = (round_up(n, block_w), 1, 1);
-    let block = (block_w, 1, 1);
-    for work_item in acc.exec(grid, block) {
+    gpu_exec_1d(acc, n, 64 /* block_size */, |work_item| {
         let ray_id = first + work_item.gidx();
         if ray_id >= last {
-            break()
+            return()
         }
 
         let mut state = make_primary_stream_state_reader(primary, 1)(ray_id, 0);
@@ -146,7 +156,7 @@ fn @gpu_shade( acc: Accelerator
                 }
             }
         });
-    }
+    });
 }
 
 fn @copy_primary_ray( primary: PrimaryStream
@@ -189,27 +199,27 @@ fn @gpu_sort_primary( primary: PrimaryStream
                     , gpu_tmp:  &mut [i32]
                     , ray_ends: &mut [i32]
                     ) -> () {
-    let block_w = 64;
+    let block_size = 64;
 
     // Fill ray_ends with 0s
-    for work_item in acc.exec((round_up(scene.num_geometries + 1, block_w), 1, 1), (block_w, 1, 1)) {
+    gpu_exec_1d(acc, scene.num_geometries + 1, block_size, |work_item| {
         let geom_id = work_item.gidx();
         if geom_id > scene.num_geometries {
-            break()
+            return()
         }
         gpu_tmp(geom_id) = 0;
-    }
+    });
     acc.sync();
 
     // Count number of rays for each geometry
-    for work_item in acc.exec((round_up(primary.size, block_w), 1, 1), (block_w, 1, 1)) {
+    gpu_exec_1d(acc, primary.size, block_size, |work_item| {
         let ray_id = work_item.gidx();
         if ray_id >= primary.size {
-            break()
+            return()
         }
 
         atomics.add_global_i32(&mut gpu_tmp(primary.geom_id(ray_id)), 1);
-    }
+    });
     acc.sync();
 
     // Perform a scan on the CPU (there are very few elements to scan)
@@ -224,15 +234,15 @@ fn @gpu_sort_primary( primary: PrimaryStream
     runtime_copy(0, &ray_begins as &[i8], 0, dev_id, gpu_tmp as &mut [i8], 0, sizeof[i32]() * (scene.num_geometries + 1) as i64);
 
     // Sort rays
-    for work_item in acc.exec((round_up(primary.size, block_w), 1, 1), (block_w, 1, 1)) {
+    gpu_exec_1d(acc, primary.size, block_size, |work_item| {
         let src_id = work_item.gidx();
         if src_id >= primary.size {
-            break()
+            return()
         }
         let geom_id = primary.geom_id(src_id);
         let dst_id  = atomics.add_global_i32(&mut gpu_tmp(geom_id), 1);
         copy_primary_ray(primary, other_primary, src_id, dst_id, true);
-    }
+    });
     acc.sync();
 }
 
@@ -246,7 +256,6 @@ fn @gpu_generate_rays( primary: PrimaryStream
                      , film_height: i32
                      , spp: i32
                      ) -> i32 {
-    let block_w  = 64;
     let first_ray_id = *id;
     let first_dst_id = primary.size;
     let num_rays = cpu_intrinsics.min(spp * film_width * film_height - first_ray_id, capacity - first_dst_id);
@@ -257,10 +266,10 @@ fn @gpu_generate_rays( primary: PrimaryStream
     let write_state = make_primary_stream_state_writer(primary, 1);
     let write_id    = @ |i: i32, _: i32, id: i32| ray_ids(i) = id;
 
-    for work_item in acc.exec((round_up(num_rays, block_w), 1, 1), (block_w, 1, 1)) {
+    gpu_exec_1d(acc, num_rays, 64 /* block_size */, |work_item| {
         let gid = work_item.gidx();
         if gid >= num_rays {
-            break()
+            return()
         }
 
         let ray_id = first_ray_id + gid;
@@ -274,7 +283,7 @@ fn @gpu_generate_rays( primary: PrimaryStream
         write_ray(dst_id, 0, ray);
         write_state(dst_id, 0, state);
         write_id(dst_id, 0, pixel);
-    }
+    });
     acc.sync();
 
     *id += num_rays;
@@ -289,27 +298,25 @@ fn @gpu_compact_primary( primary: PrimaryStream
                        , atomics: Atomics
                        , gpu_tmp: &mut [i32]
                        ) -> i32 {
-    let block_w = 64;
-
     // reset temporary memory
     let mut size = 0;
     runtime_copy(0, &size as &[i8], 0, dev_id, gpu_tmp as &mut [i8], 0, sizeof[i32]());
 
     // Compact primary rays into another queue
-    for work_item in acc.exec((round_up(primary.size, block_w), 1, 1), (block_w, 1, 1)) {
+    gpu_exec_1d(acc, primary.size, 64 /* block_size */, |work_item| {
         let src_id = work_item.gidx();
         if src_id >= primary.size {
-            break()
+            return()
         }
 
         let ray_id = primary.rays.id(src_id);
         if ray_id < 0 {
-            break()
+            return()
         }
 
         let dst_id = atomics.add_global_i32(&mut gpu_tmp(0), 1);
         copy_primary_ray(primary, other_primary, src_id, dst_id, false);
-    }
+    });
     acc.sync();
 
     runtime_copy(dev_id, gpu_tmp as &[i8], 0, 0, &mut size as &mut [i8], 0, sizeof[i32]());
@@ -385,7 +392,15 @@ fn @gpu_streaming_trace( dev_id: i32
     }
 }
 
-fn @gpu_mega_kernel_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics, atomics: Atomics, min_max: MinMax, scene: Scene, path_tracer: PathTracer, spp: i32) -> () {
+fn @gpu_mega_kernel_trace( dev_id: i32
+                         , acc: Accelerator
+                         , intrinsics: Intrinsics
+                         , atomics: Atomics
+                         , min_max: MinMax
+                         , scene: Scene
+                         , path_tracer: PathTracer
+                         , spp: i32
+                         ) -> () {
     let (film_pixels, film_width, film_height) = gpu_get_film_data(dev_id);
 
     // Make tiles of 2^10 = 1024 total samples
@@ -397,7 +412,7 @@ fn @gpu_mega_kernel_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics,
     let gx = bx * ((film_width  + tile_size - 1) >> log2_tile_size);
     let gy = by * ((film_height + tile_size - 1) >> log2_tile_size);
     let gz = 1;
-    for work_item in acc.exec((gx, gy, gz), (bx, by, bz)) {
+    acc.exec(|work_item| {
         let tile_x = work_item.bidx() * tile_size;
         let tile_y = work_item.bidy() * tile_size;
         let tile_w = intrinsics.min(film_width  - tile_x, tile_size);
@@ -499,7 +514,7 @@ fn @gpu_mega_kernel_trace(dev_id: i32, acc: Accelerator, intrinsics: Intrinsics,
                 final_color = color_add(final_color, shadow_color);
             }
         }
-    }
+    })((gx, gy, gz), (bx, by, bz));
     acc.sync()
 }
 
