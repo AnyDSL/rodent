@@ -871,7 +871,7 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
         if (mat.illum == 5) {
             os << "        let bsdf = make_mirror_bsdf(math, surf, make_color(" << mat.ks.x << ", " << mat.ks.y << ", " << mat.ks.z << "));\n";
         } else if (mat.illum == 7) {
-            os << "        let bsdf = make_glass_bsdf(math, surf, 1, " << mat.ni << "f, "
+            os << "        let bsdf = make_glass_bsdf(math, surf, 1, " << mat.ni << ", "
                << "make_color(" << mat.ks.x << ", " << mat.ks.y << ", " << mat.ks.z
                << "), make_color(" << mat.tf.x << ", " << mat.tf.y << ", " << mat.tf.z << "));\n";
         } else {
@@ -896,7 +896,7 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
                 } else {
                     os << "        let ks = make_color(" << mat.ks.x << ", " << mat.ks.y << ", " << mat.ks.z << ");\n";
                 }
-                os << "        let ns = " << mat.ns << ";\n";
+                os << "        let ns: f32 = " << mat.ns << ";\n";
                 os << "        let specular = make_phong_bsdf(math, surf, ks, ns);\n";
             }
             os << "        let bsdf = ";
@@ -904,7 +904,7 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
                 os << "{\n"
                    << "            let lum_ks = color_luminance(ks);\n"
                    << "            let lum_kd = color_luminance(kd);\n"
-                   << "            let k = select(lum_ks + lum_kd == 0, 0, lum_ks / (lum_ks + lum_kd));\n"
+                   << "            let k: f32 = select(lum_ks + lum_kd == 0, 0 as f32, lum_ks / (lum_ks + lum_kd));\n"
                    << "            make_mix_bsdf(diffuse, specular, k)\n"
                    << "        };\n";
             } else if (has_diffuse || has_specular) {
