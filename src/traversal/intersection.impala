@@ -74,7 +74,7 @@ fn @make_min_max( fminf: fn (f32, f32) -> f32
     fminf      = fminf,
     fmaxf      = fmaxf,
     is_integer = is_integer
-}
+};
 
 // Floating point min/max, works on every ISA, but might not be optimal
 fn @make_default_min_max() {
@@ -101,7 +101,7 @@ fn @make_hit(geom_id: i32, prim_id: i32, t: f32, uv: Vec2) = Hit {
     uv_coords = uv,
     prim_id   = prim_id,
     geom_id   = geom_id
-}
+};
 
 fn @make_tri(v0: Vec3, e1: Vec3, e2: Vec3, n: Vec3) = Tri {
     v0 = v0,
@@ -110,12 +110,12 @@ fn @make_tri(v0: Vec3, e1: Vec3, e2: Vec3, n: Vec3) = Tri {
     e1 = e1,
     e2 = e2,
     n  = n
-}
+};
 
 fn @make_bbox(min: Vec3, max: Vec3) = BBox {
     min = min,
     max = max
-}
+};
 
 fn @ray_octant(ray: Ray) -> RayOctant {
     select(ray.dir.x > 0, 1, 0) |
@@ -123,19 +123,19 @@ fn @ray_octant(ray: Ray) -> RayOctant {
     select(ray.dir.z > 0, 4, 0)
 }
 
-fn @empty_hit(tmax: f32) = make_hit(-1, -1, tmax, undef[Vec2]())
+fn @empty_hit(tmax: f32) = make_hit(-1, -1, tmax, undef[Vec2]());
 
 fn @empty_bbox() = make_bbox(
     make_vec3( flt_max,  flt_max,  flt_max),
-    make_vec3(-flt_max, -flt_max, -flt_max))
+    make_vec3(-flt_max, -flt_max, -flt_max));
 
 fn @bbox_extend(a: BBox, b: BBox) = make_bbox(
     vec3_min(a.min, b.min),
-    vec3_max(a.max, b.max))
+    vec3_max(a.max, b.max));
 
 fn @bbox_append(a: BBox, b: Vec3) = make_bbox(
     vec3_min(a.min, b),
-    vec3_max(a.max, b))
+    vec3_max(a.max, b));
 
 fn @bbox_half_area(a: BBox) -> f32 {
     let ext = vec3_sub(a.max, a.min);

@@ -25,7 +25,7 @@ fn @cpu_parallel_tiles(body: fn (i32, i32, i32, i32) -> ()) =
             @body(xmin, ymin, xmax, ymax)
         }
     }
-}
+};
 
 #[export]
 fn cpu_sort_primary(primary: &PrimaryStream, ray_begins: &mut [i32], ray_ends: &mut[i32], num_geometries: i32) -> i32 {
@@ -263,7 +263,15 @@ fn @cpu_traverse_secondary(scene: Scene, min_max: MinMax, secondary: &SecondaryS
     $cpu_traverse_secondary_specialized(secondary);
 }
 
-fn @cpu_shade(geom_id: i32, primary: &PrimaryStream, secondary: &SecondaryStream, scene: Scene, path_tracer: PathTracer, accumulate: fn (i32, Color) -> (), begin: i32, end: i32, vector_width: i32) -> () {
+fn @cpu_shade( geom_id: i32
+             , primary: &PrimaryStream
+             , secondary: &SecondaryStream
+             , scene: Scene
+             , path_tracer: PathTracer
+             , accumulate: fn (i32, Color) -> ()
+             , begin: i32, end: i32
+             , vector_width: i32
+             ) -> () {
     fn cpu_shade_specialized(primary: &PrimaryStream, secondary: &SecondaryStream, begin: i32, end: i32) -> () {
         let read_primary_ray    = make_ray_stream_reader(primary.rays, 1);
         let read_primary_hit    = make_primary_stream_hit_reader(*primary, 1);
@@ -521,13 +529,13 @@ fn @make_cpu_device(use_embree: bool, vector_compact: bool, single: bool, min_ma
         rodent_load_jpg(0, filename, &mut pixel_data, &mut width, &mut height);
         make_image_rgba32(@ |x, y| (pixel_data as &[u32])(y * width + x), width, height)
     }
-}
+};
 
 fn @make_avx2_device(use_embree: bool) -> Device {
     make_cpu_device(use_embree, true, true, make_cpu_int_min_max(), 8, 0, 16)
 }
 
-fn @make_avx_device() = make_cpu_device(false, true, true, make_default_min_max(), 8, 0, 16)
-fn @make_sse42_device() = make_cpu_device(false, false, true, make_cpu_int_min_max(), 4, 0, 16)
-fn @make_asimd_device() = make_cpu_device(false, false, false, make_cpu_int_min_max(), 4, 0, 16)
-fn @make_cpu_default_device() = make_cpu_device(false, false, false, make_default_min_max(), 1, 0, 16)
+fn @make_avx_device() = make_cpu_device(false, true, true, make_default_min_max(), 8, 0, 16);
+fn @make_sse42_device() = make_cpu_device(false, false, true, make_cpu_int_min_max(), 4, 0, 16);
+fn @make_asimd_device() = make_cpu_device(false, false, false, make_cpu_int_min_max(), 4, 0, 16);
+fn @make_cpu_default_device() = make_cpu_device(false, false, false, make_default_min_max(), 1, 0, 16);

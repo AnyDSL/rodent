@@ -84,9 +84,9 @@ fn @make_nvvm_min_max() = MinMax {
     fminmaxf = @ |a, b, c| bitcast[f32](nvvm_minmax(bitcast[i32](a), bitcast[i32](b), bitcast[i32](c))),
     fmaxminf = @ |a, b, c| bitcast[f32](nvvm_maxmin(bitcast[i32](a), bitcast[i32](b), bitcast[i32](c))),
     is_integer = true
-}
+};
 
-fn @make_amdgpu_min_max() = make_min_max(ocml_fminf, ocml_fmaxf, false)
+fn @make_amdgpu_min_max() = make_min_max(ocml_fminf, ocml_fmaxf, false);
 
 // Traversal kernel  ---------------------------------------------------------------
 

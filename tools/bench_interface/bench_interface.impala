@@ -1,9 +1,9 @@
-static border_clamp    = 0:u32;
-static border_repeat   = 1:u32;
-static border_constant = 2:u32;
+static border_clamp    : u32 = 0;
+static border_repeat   : u32 = 1;
+static border_constant : u32 = 2;
 
-static sampler_nearest  = 0:u32;
-static sampler_bilinear = 1:u32;
+static sampler_nearest  : u32 = 0;
+static sampler_bilinear : u32 = 1;
 
 struct Tex {
     pixels:  &[Color],
@@ -62,9 +62,9 @@ fn gpu_iterate(body: fn (i32) -> ()) = @|n: i32| {
         body(work_item.gidx());
     }
     acc.sync();
-}
+};
 
-#[export] fn @(opt) lookup_tex(opt: bool, tex: Tex, mut uv: Vec2) -> Color {
+fn @(opt) lookup_tex(opt: bool, tex: Tex, mut uv: Vec2) -> Color {
     if tex.border == border_clamp {
         let border = make_clamp_border();
         uv.x = border.horz(math, uv.x);
@@ -89,7 +89,7 @@ fn gpu_iterate(body: fn (i32) -> ()) = @|n: i32| {
     }
 }
 
-#[export] fn @(opt) compute_shader_input(opt: bool, mesh: ShadedMesh, tri_hit: TriHit) -> ShaderInput {
+fn @(opt) compute_shader_input(opt: bool, mesh: ShadedMesh, tri_hit: TriHit) -> ShaderInput {
     let i0 = mesh.indices(tri_hit.id * 4 + 0);
     let i1 = mesh.indices(tri_hit.id * 4 + 1);
     let i2 = mesh.indices(tri_hit.id * 4 + 2);
@@ -121,7 +121,7 @@ fn gpu_iterate(body: fn (i32) -> ()) = @|n: i32| {
     }
 }
 
-#[export] fn @(opt) shade(opt: bool, input: ShaderInput, in_dir: Vec3, out_dir: Vec3) -> Color {
+fn @(opt) shade(opt: bool, input: ShaderInput, in_dir: Vec3, out_dir: Vec3) -> Color {
     let surf = SurfaceElement {
         is_entering = true,
         point       = input.point,
@@ -134,7 +134,8 @@ fn gpu_iterate(body: fn (i32) -> ()) = @|n: i32| {
     bsdf.eval(in_dir, out_dir)
 }
 
-#[export] fn bench_interface(mesh_ptr: &ShadedMesh, tri_hits: &[TriHit], in_dirs: &[Vec3], out_dirs: &[Vec3], colors: &mut [Color], n: i32) -> () {
+#[export]
+fn bench_interface(mesh_ptr: &ShadedMesh, tri_hits: &[TriHit], in_dirs: &[Vec3], out_dirs: &[Vec3], colors: &mut [Color], n: i32) -> () {
     let mesh = *mesh_ptr;
     for i in iterate(n) {
         let input = compute_shader_input(opt_interface, mesh, tri_hits(i));

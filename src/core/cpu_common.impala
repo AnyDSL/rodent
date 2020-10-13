@@ -71,4 +71,4 @@ fn @vectorized_range(body: fn (i32, i32) -> ()) = @|vector_width: i32, a: i32, b
             @body(i, 1)
         }
     }
-}
+};

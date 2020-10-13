@@ -49,4 +49,4 @@ fn @make_tri_mesh_geometry(math: Intrinsics, tri_mesh: TriMesh, shader: Shader) 
         }
     },
     shader = shader
-}
+};

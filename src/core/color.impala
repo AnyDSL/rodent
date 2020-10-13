@@ -4,22 +4,22 @@ struct Color {
     b: f32
 }
 
-fn @make_color(r: f32, g: f32, b: f32) = Color { r = r, g = g, b = b }
+fn @make_color(r: f32, g: f32, b: f32) = Color { r = r, g = g, b = b };
 
-fn @color_add(a: Color, b: Color) = make_color(a.r + b.r, a.g + b.g, a.b + b.b)
-fn @color_mul(a: Color, b: Color) = make_color(a.r * b.r, a.g * b.g, a.b * b.b)
-fn @color_mulf(c: Color, f: f32)  = make_color(c.r * f, c.g * f, c.b * f)
+fn @color_add(a: Color, b: Color) = make_color(a.r + b.r, a.g + b.g, a.b + b.b);
+fn @color_mul(a: Color, b: Color) = make_color(a.r * b.r, a.g * b.g, a.b * b.b);
+fn @color_mulf(c: Color, f: f32)  = make_color(c.r * f, c.g * f, c.b * f);
 fn @color_lerp(a: Color, b: Color, t: f32) = make_color(
     (1 - t) * a.r + t * b.r,
     (1 - t) * a.g + t * b.g,
-    (1 - t) * a.b + t * b.b)
+    (1 - t) * a.b + t * b.b);
 
-fn @color_luminance(c: Color) = c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722
+fn @color_luminance(c: Color) = c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722;
 
-fn @is_black(c: Color) -> bool { c.r == 0 && c.g == 0 && c.b == 0 }
+fn @is_black(c: Color) = c.r == 0 && c.g == 0 && c.b == 0;
 
-fn @vec3_to_color(v: Vec3) = make_color(v.x, v.y, v.z)
-fn @color_to_vec3(c: Color) = make_vec3(c.r, c.g, c.b)
+fn @vec3_to_color(v: Vec3) = make_color(v.x, v.y, v.z);
+fn @color_to_vec3(c: Color) = make_vec3(c.r, c.g, c.b);
 
 static black = Color { r = 0, g = 0, b = 0 };
 static white = Color { r = 1, g = 1, b = 1 };

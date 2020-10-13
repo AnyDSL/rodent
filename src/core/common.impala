@@ -15,16 +15,16 @@ enum Option[T] {
     None
 }
 
-fn @make_option[T](t: T) = Option[T]::Some(t)
+fn @make_option[T](t: T) = Option[T]::Some(t);
 fn @is_some[T](opt: Option[T]) = match opt {
     Option[T]::Some(_) => true,
     _ => false
-}
-fn @is_none[T](opt: Option[T]) = !is_some(opt)
+};
+fn @is_none[T](opt: Option[T]) = !is_some(opt);
 fn @from_option[T](opt: Option[T], def: T) = match opt {
     Option[T]::Some(x) => x,
     _ => def
-}
+};
 
 // Fast division -------------------------------------------------------------------
 
@@ -74,16 +74,14 @@ fn @fastpow2(p: f32) -> f32 {
     bitcast[f32](v)
 }
 
-fn @fastpow(x: f32, p: f32) -> f32 {
-    fastpow2(p * fastlog2(x))
-}
+fn @fastpow(x: f32, p: f32) = fastpow2(p * fastlog2(x));
 
 // Likely/unlikely -----------------------------------------------------------------
 
 #[import(cc = "device", name = "llvm.expect.i1")] fn expect(bool, bool) -> bool;
 
-fn @  likely(cond: bool) -> bool { expect(cond,  true) }
-fn @unlikely(cond: bool) -> bool { expect(cond, false) }
+fn @  likely(cond: bool) = expect(cond,  true);
+fn @unlikely(cond: bool) = expect(cond, false);
 
 // Misc. ---------------------------------------------------------------------------
 

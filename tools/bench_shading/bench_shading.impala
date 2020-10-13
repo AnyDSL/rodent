@@ -1,6 +1,6 @@
 static vector_width = 8;
 static num_geoms = 4;
-static offset = 0.0001:f32;
+static offset : f32 = 0.0001;
 static sorted = true;
 static specialized = true;
 
@@ -17,22 +17,23 @@ fn @iterate_rays(body: fn(i32, i32) -> ()) = @|primary: &PrimaryStream, begins: 
             @body(i, primary.geom_id(i))
         }
     }
-}
+};
 
-#[export] fn cpu_bench_shading( primary_in: &PrimaryStream
-                              , primary_out: &PrimaryStream
-                              , vertices: &[Vec3]
-                              , normals: &[Vec3]
-                              , face_normals: &[Vec3]
-                              , texcoords: &[Vec2]
-                              , indices: &[i32]
-                              , pixels: &[u32]
-                              , width: i32
-                              , height: i32
-                              , begins: &[i32]
-                              , ends: &[i32]
-                              , num_tris: i32
-                              , num_iters: i32) -> () {
+#[export]
+fn cpu_bench_shading( primary_in: &PrimaryStream
+                    , primary_out: &PrimaryStream
+                    , vertices: &[Vec3]
+                    , normals: &[Vec3]
+                    , face_normals: &[Vec3]
+                    , texcoords: &[Vec2]
+                    , indices: &[i32]
+                    , pixels: &[u32]
+                    , width: i32
+                    , height: i32
+                    , begins: &[i32]
+                    , ends: &[i32]
+                    , num_tris: i32
+                    , num_iters: i32) -> () {
     let read_primary_ray    = make_ray_stream_reader(primary_in.rays, 1);
     let read_primary_hit    = make_primary_stream_hit_reader(*primary_in, 1);
     let read_primary_state  = make_primary_stream_state_reader(*primary_in, 1);

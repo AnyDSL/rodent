@@ -557,7 +557,7 @@ fn @make_gpu_device( dev_id: i32
         let (ptr, stride) = (pixel_data, width);
         make_image_rgba32(@ |x, y| read_pixel(ptr as &[u32], y * stride + x), width, height)
     }
-}
+};
 
 fn @make_nvvm_device(dev: i32, streaming: bool) -> Device {
     let dev_id = runtime_device(1, dev);

@@ -21,7 +21,7 @@ fn @make_camera_geometry(cos_dir: f32, dist: f32, area: f32) = CameraGeometry {
     cos_dir = cos_dir,
     dist = dist,
     area = area
-}
+};
 
 // Creates a perspective camera
 fn @make_perspective_camera(math: Intrinsics, eye: Vec3, view: Mat3x3, w: f32, h: f32) -> Camera {
