@@ -226,25 +226,35 @@ fn @cpu_traverse_single_helper( mut ray: Ray
             while true {
                 let prim = bvh.prim(prim_id++);
 
+                // Workaround for a currently unsolved bug in RV: Extract the option and use a boolean flag to guide RV into emitting correct code
                 // Intersect primitives
                 vectorize(prim.size, |j| {
-                    if !prim.is_valid(j) { return() }
-                    match prim.intersect(j, cpu_intrinsics, ray) {
-                        Option[Hit]::Some(prim_hit) => {
+                    if prim.is_valid(j) {
+                        let mut hit2: Hit = empty_hit(flt_max);
+                        let mut did_hit = false;
+
+                        match prim.intersect(j, cpu_intrinsics, ray) {
+                            Option[Hit]::Some(prim_hit) => {
+                                hit2 = prim_hit;
+                                did_hit = true;
+                            },
+                            _ => {}
+                        }
+
+                        if rv_ballot(did_hit) != 0 {
                             if any_hit {
                                 // Early exit mode
-                                let lane = cpu_ctz32(rv_ballot(true), true);
-                                hit = extract_hit(prim_hit, lane);
-                                terminated = true;
+                                let lane = cpu_ctz32(rv_ballot(did_hit), true);
+                                hit = extract_hit(hit2, lane);
+                                terminated = true;      
                             } else {
-                                let hit_distance = select(rv_mask(), prim_hit.distance, flt_max);
+                                let hit_distance = select(rv_mask(), hit2.distance, flt_max);
                                 let min_distance = cpu_reduce(hit_distance, prim.size, min_max.fminf);
                                 let lane = cpu_index_of(hit_distance, min_distance);
-                                hit = extract_hit(prim_hit, lane);
+                                hit = extract_hit(hit2, lane);
                                 ray.tmax = hit.distance;
                             }
-                        },
-                        _ => ()
+                        }
                     }
                 });
 
