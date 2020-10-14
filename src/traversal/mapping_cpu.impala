@@ -246,7 +246,7 @@ fn @cpu_traverse_single_helper( mut ray: Ray
                                 // Early exit mode
                                 let lane = cpu_ctz32(rv_ballot(did_hit), true);
                                 hit = extract_hit(hit2, lane);
-                                terminated = true;      
+                                terminated = true;
                             } else {
                                 let hit_distance = select(rv_mask(), hit2.distance, flt_max);
                                 let min_distance = cpu_reduce(hit_distance, prim.size, min_max.fminf);
