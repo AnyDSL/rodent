@@ -12,6 +12,7 @@ set(TRAVERSAL_SRCS
 
 anydsl_runtime_wrap(TRAVERSAL_OBJS
     NAME "bench_traversal"
+    FRONTEND "artic"
     CLANG_FLAGS ${CLANG_FLAGS}
     FILES ${TRAVERSAL_SRCS}
     INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/../common/traversal)

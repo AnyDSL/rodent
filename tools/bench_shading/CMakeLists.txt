@@ -23,6 +23,7 @@ set(SHADING_SRCS
 
 anydsl_runtime_wrap(SHADING_OBJS
     NAME "bench_shading"
+    FRONTEND "artic"
     CLANG_FLAGS ${CLANG_FLAGS}
     FILES ${SHADING_SRCS}
     INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/../common/shading)

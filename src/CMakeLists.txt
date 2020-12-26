@@ -67,12 +67,14 @@ set(CONVERTER_SRCS
 
 anydsl_runtime_wrap(RODENT_OBJS
     NAME "rodent"
+    FRONTEND "artic"
     CLANG_FLAGS ${CLANG_FLAGS}
     IMPALA_FLAGS --log-level info --max-errors 5
     FILES ${RODENT_SRCS} ${CMAKE_CURRENT_BINARY_DIR}/main.impala)
 
 anydsl_runtime_wrap(DISCARD_TMP_OBJS
     NAME "interface"
+    FRONTEND "artic"
     FILES ${RODENT_SRCS} dummy_main.impala
     INTERFACE ${CMAKE_CURRENT_BINARY_DIR}/interface)
 add_custom_target(rodent_c_interface ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/interface.h)

@@ -11,6 +11,7 @@ set(INTERFACE_SRCS
 
 anydsl_runtime_wrap(INTERFACE_OBJS
     NAME "bench_interface"
+    FRONTEND "artic"
     CLANG_FLAGS ${CLANG_FLAGS}
     FILES ${INTERFACE_SRCS}
     INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/../common/interface)
