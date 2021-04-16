@@ -69,7 +69,7 @@ anydsl_runtime_wrap(RODENT_OBJS
     NAME "rodent"
     FRONTEND "artic"
     CLANG_FLAGS ${CLANG_FLAGS}
-    IMPALA_FLAGS --log-level info --max-errors 5
+    ARTIC_FLAGS --log-level info --max-errors 5
     FILES ${RODENT_SRCS} ${CMAKE_CURRENT_BINARY_DIR}/main.impala)
 
 anydsl_runtime_wrap(DISCARD_TMP_OBJS
