@@ -564,7 +564,7 @@ inline void get_secondary_stream(SecondaryStream& secondary, float* ptr, size_t 
 
 extern "C" {
 
-void rodent_get_film_data(int32_t dev, float** pixels, int32_t* width, int32_t* height) {
+void rodent_get_film_data(int dev, float** pixels, int* width, int* height) {
     if (dev != 0) {
         auto& device = interface->devices[dev];
         if (!device.film_pixels.size()) {
@@ -581,74 +581,74 @@ void rodent_get_film_data(int32_t dev, float** pixels, int32_t* width, int32_t* 
     *height = interface->film_height;
 }
 
-void rodent_load_png(int32_t dev, const char* file, uint8_t** pixels, int32_t* width, int32_t* height) {
-    auto& img = interface->load_png(dev, file);
+void rodent_load_png(int dev, unsigned char* file, uint8_t** pixels, int* width, int* height) {
+    auto& img = interface->load_png(dev, reinterpret_cast<const char*>(file));
     *pixels = const_cast<uint8_t*>(std::get<0>(img).data());
     *width  = std::get<1>(img);
     *height = std::get<2>(img);
 }
 
-void rodent_load_jpg(int32_t dev, const char* file, uint8_t** pixels, int32_t* width, int32_t* height) {
-    auto& img = interface->load_jpg(dev, file);
+void rodent_load_jpg(int dev, unsigned char* file, uint8_t** pixels, int* width, int* height) {
+    auto& img = interface->load_jpg(dev, reinterpret_cast<const char*>(file));
     *pixels = const_cast<uint8_t*>(std::get<0>(img).data());
     *width  = std::get<1>(img);
     *height = std::get<2>(img);
 }
 
-uint8_t* rodent_load_buffer(int32_t dev, const char* file) {
-    auto& array = interface->load_buffer(dev, file);
+uint8_t* rodent_load_buffer(int dev, unsigned char* file) {
+    auto& array = interface->load_buffer(dev, reinterpret_cast<const char*>(file));
     return const_cast<uint8_t*>(array.data());
 }
 
-void rodent_load_bvh2_tri1(int32_t dev, const char* file, Node2** nodes, Tri1** tris) {
-    auto& bvh = interface->load_bvh2_tri1(dev, file);
+void rodent_load_bvh2_tri1(int dev, unsigned char* file, Node2** nodes, Tri1** tris) {
+    auto& bvh = interface->load_bvh2_tri1(dev, reinterpret_cast<const char*>(file));
     *nodes = const_cast<Node2*>(bvh.nodes.data());
     *tris  = const_cast<Tri1*>(bvh.tris.data());
 }
 
-void rodent_load_bvh4_tri4(int32_t dev, const char* file, Node4** nodes, Tri4** tris) {
-    auto& bvh = interface->load_bvh4_tri4(dev, file);
+void rodent_load_bvh4_tri4(int dev, unsigned char* file, Node4** nodes, Tri4** tris) {
+    auto& bvh = interface->load_bvh4_tri4(dev, reinterpret_cast<const char*>(file));
     *nodes = const_cast<Node4*>(bvh.nodes.data());
     *tris  = const_cast<Tri4*>(bvh.tris.data());
 }
 
-void rodent_load_bvh8_tri4(int32_t dev, const char* file, Node8** nodes, Tri4** tris) {
-    auto& bvh = interface->load_bvh8_tri4(dev, file);
+void rodent_load_bvh8_tri4(int dev, unsigned char* file, Node8** nodes, Tri4** tris) {
+    auto& bvh = interface->load_bvh8_tri4(dev, reinterpret_cast<const char*>(file));
     *nodes = const_cast<Node8*>(bvh.nodes.data());
     *tris  = const_cast<Tri4*>(bvh.tris.data());
 }
 
-void rodent_cpu_get_primary_stream(PrimaryStream* primary, int32_t size) {
+void rodent_cpu_get_primary_stream(PrimaryStream* primary, int size) {
     auto& array = interface->cpu_primary_stream(size);
     get_primary_stream(*primary, array.data(), array.size() / 20);
 }
 
-void rodent_cpu_get_secondary_stream(SecondaryStream* secondary, int32_t size) {
+void rodent_cpu_get_secondary_stream(SecondaryStream* secondary, int size) {
     auto& array = interface->cpu_secondary_stream(size);
     get_secondary_stream(*secondary, array.data(), array.size() / 13);
 }
 
-void rodent_gpu_get_tmp_buffer(int32_t dev, int32_t** buf, int32_t size) {
+void rodent_gpu_get_tmp_buffer(int dev, int** buf, int size) {
     *buf = interface->gpu_tmp_buffer(dev, size).data();
 }
 
-void rodent_gpu_get_first_primary_stream(int32_t dev, PrimaryStream* primary, int32_t size) {
+void rodent_gpu_get_first_primary_stream(int dev, PrimaryStream* primary, int size) {
     auto& array = interface->gpu_first_primary_stream(dev, size);
     get_primary_stream(*primary, array.data(), array.size() / 20);
 }
 
-void rodent_gpu_get_second_primary_stream(int32_t dev, PrimaryStream* primary, int32_t size) {
+void rodent_gpu_get_second_primary_stream(int dev, PrimaryStream* primary, int size) {
     auto& array = interface->gpu_second_primary_stream(dev, size);
     get_primary_stream(*primary, array.data(), array.size() / 20);
 }
 
-void rodent_gpu_get_secondary_stream(int32_t dev, SecondaryStream* secondary, int32_t size) {
+void rodent_gpu_get_secondary_stream(int dev, SecondaryStream* secondary, int size) {
     auto& array = interface->gpu_secondary_stream(dev, size);
     get_secondary_stream(*secondary, array.data(), array.size() / 13);
 }
 
 #ifdef ENABLE_EMBREE_DEVICE
-void rodent_cpu_intersect_primary_embree(PrimaryStream* primary, int32_t invalid_id, int32_t coherent) {
+void rodent_cpu_intersect_primary_embree(PrimaryStream* primary, int invalid_id, int coherent) {
     interface->embree_device.intersect<8>(*primary, invalid_id, coherent != 0);
 }
 
@@ -657,7 +657,7 @@ void rodent_cpu_intersect_secondary_embree(SecondaryStream* secondary) {
 }
 #endif
 
-void rodent_present(int32_t dev) {
+void rodent_present(int dev) {
     if (dev != 0)
         interface->present(dev);
 }
