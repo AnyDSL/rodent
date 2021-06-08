@@ -1,7 +1,9 @@
-# Generate the traversal benchmark utility, and the ../common/traversal.h interface
+# Note: bench_traversal must be the first one, since it also generates a
+# C/C++ header file that is used by some other tools.
 add_subdirectory(bench_traversal)
-add_subdirectory(bench_shading)
+
 add_subdirectory(bench_interface)
+add_subdirectory(bench_shading)
 
 find_package(CUDA QUIET)
 if (CUDA_FOUND)

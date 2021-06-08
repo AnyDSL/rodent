@@ -14,11 +14,8 @@ anydsl_runtime_wrap(INTERFACE_OBJS
     FRONTEND "artic"
     CLANG_FLAGS ${CLANG_FLAGS}
     FILES ${INTERFACE_SRCS}
-    INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/../common/interface)
+    INTERFACE ${CMAKE_CURRENT_BINARY_DIR}/interface)
 
-add_executable(bench_interface
-    ${INTERFACE_OBJS}
-    bench_interface.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../common/interface.h)
-target_include_directories(bench_interface PUBLIC ../common ../../src/driver)
-target_link_libraries(bench_interface ${AnyDSL_runtime_LIBRARIES})
+add_executable(bench_interface ${INTERFACE_OBJS} bench_interface.cpp ${CMAKE_CURRENT_BINARY_DIR}/interface.h)
+target_include_directories(bench_interface PUBLIC ${CMAKE_CURRENT_BINARY_DIR} ../../src/driver)
+target_link_libraries(bench_interface PUBLIC ${AnyDSL_runtime_LIBRARIES})

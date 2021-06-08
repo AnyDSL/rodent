@@ -26,11 +26,8 @@ anydsl_runtime_wrap(SHADING_OBJS
     FRONTEND "artic"
     CLANG_FLAGS ${CLANG_FLAGS}
     FILES ${SHADING_SRCS}
-    INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/../common/shading)
+    INTERFACE ${CMAKE_CURRENT_BINARY_DIR}/shading)
 
-add_executable(bench_shading
-    ${SHADING_OBJS}
-    bench_shading.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../common/shading.h)
-target_include_directories(bench_shading PUBLIC ../common ../../src/driver)
-target_link_libraries(bench_shading ${AnyDSL_runtime_LIBRARIES})
+add_executable(bench_shading ${SHADING_OBJS} bench_shading.cpp ${CMAKE_CURRENT_BINARY_DIR}/shading.h)
+target_include_directories(bench_shading PUBLIC ${CMAKE_CURRENT_BINARY_DIR} ../../src/driver)
+target_link_libraries(bench_shading PUBLIC ${AnyDSL_runtime_LIBRARIES})
