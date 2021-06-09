@@ -40,24 +40,22 @@ fn cpu_bench_shading( primary_in: &PrimaryStream
     let write_primary_ray   = make_ray_stream_writer(primary_out.rays, 1);
     let write_primary_state = make_primary_stream_state_writer(*primary_out, 1);
 
-    let math = cpu_intrinsics;
-
     let image = make_image_rgba32(@ |i, j| pixels(j * width + i), width, height);
 
     fn @shader(geom_id: i32, surf: SurfaceElement) -> Material {
-        let texture = make_texture(math, make_repeat_border(), make_bilinear_filter(), image);
+        let texture = make_texture(make_repeat_border(), make_bilinear_filter(), image);
         let kd = if geom_id & 1 == 0 {
             make_color(0, 1, 0)
         } else {
             texture(vec4_to_2(surf.attr(0)))
         };
-        let diffuse = make_diffuse_bsdf(math, surf, kd);
+        let diffuse = make_diffuse_bsdf(surf, kd);
         let (ks, ns) = if geom_id & 2 == 0 {
             (make_color(0, 1, 0), 96:f32)
         } else {
             (texture(vec4_to_2(surf.attr(0))), 12:f32)
         };
-        let specular = make_phong_bsdf(math, surf, ks, ns);
+        let specular = make_phong_bsdf(surf, ks, ns);
         let lum_ks = color_luminance(ks);
         let lum_kd = color_luminance(kd);
         let k = select(lum_ks + lum_kd == 0, 0:f32, lum_ks / (lum_ks + lum_kd));
@@ -81,7 +79,7 @@ fn cpu_bench_shading( primary_in: &PrimaryStream
             let hit       = read_primary_hit(i, 0);
             let mut state = read_primary_state(i, 0);
 
-            let geom = make_tri_mesh_geometry(math, tri_mesh, @ |_, _, surf| shader(geom_id, surf));
+            let geom = make_tri_mesh_geometry(tri_mesh, @ |_, _, surf| shader(geom_id, surf));
             let surf = geom.surface_element(ray, hit);
             let mat  = geom.shader(ray, hit, surf);
 

@@ -42,7 +42,6 @@ struct ShaderInput {
 }
 
 static iterate = gpu_iterate;
-static math = nvvm_intrinsics;
 static opt_interface = false;
 static opt_tex = false;
 
@@ -67,12 +66,12 @@ fn gpu_iterate(body: fn (i32) -> ()) = @|n: i32| {
 fn @(opt) lookup_tex(opt: bool, tex: Tex, mut uv: Vec2) -> Color {
     if tex.border == border_clamp {
         let border = make_clamp_border();
-        uv.x = border.horz(math, uv.x);
-        uv.y = border.vert(math, uv.y);
+        uv.x = border.horz(uv.x);
+        uv.y = border.vert(uv.y);
     } else if tex.border == border_repeat {
         let border = make_repeat_border();
-        uv.x = border.horz(math, uv.x);
-        uv.y = border.vert(math, uv.y);
+        uv.x = border.horz(uv.x);
+        uv.y = border.vert(uv.y);
     } else /* if tex.border == border_constant */ {
         if uv.x < 0 || uv.x > 1 ||
            uv.y < 0 || uv.y > 1 {
@@ -82,10 +81,10 @@ fn @(opt) lookup_tex(opt: bool, tex: Tex, mut uv: Vec2) -> Color {
     let image = make_image(|x, y| tex.pixels(x + y * tex.width), tex.width, tex.height);
     if tex.sampler == sampler_nearest {
         let filter = make_nearest_filter();
-        filter(math, image, uv)
+        filter(image, uv)
     } else /* if tex.sampler == sampler_bilinear */ {
         let filter = make_bilinear_filter();
-        filter(math, image, uv)
+        filter(image, uv)
     }
 }
 
@@ -99,8 +98,8 @@ fn @(opt) compute_shader_input(opt: bool, mesh: ShadedMesh, tri_hit: TriHit) -> 
     let uv = tri_hit.uv;
 
     let point       = vec3_lerp2(v0, v1, v2, uv.x, uv.y);
-    let face_normal = vec3_normalize(math, vec3_cross(vec3_sub(v1, v0), vec3_sub(v2, v0)));
-    let normal      = vec3_normalize(math, vec3_lerp2(mesh.normals(i0), mesh.normals(i1), mesh.normals(i2), uv.x, uv.y));
+    let face_normal = vec3_normalize(vec3_cross(vec3_sub(v1, v0), vec3_sub(v2, v0)));
+    let normal      = vec3_normalize(vec3_lerp2(mesh.normals(i0), mesh.normals(i1), mesh.normals(i2), uv.x, uv.y));
     let texcoord    = vec2_lerp2(mesh.texcoords(i0), mesh.texcoords(i1), mesh.texcoords(i2), uv.x, uv.y);
 
     let kd = lookup_tex(opt_tex, mesh.tex_kd, texcoord);
@@ -130,7 +129,7 @@ fn @(opt) shade(opt: bool, input: ShaderInput, in_dir: Vec3, out_dir: Vec3) -> C
         attr        = @ |_| make_vec4(0, 0, 0, 0),
         local       = input.local
     };
-    let bsdf = make_diffuse_bsdf(math, surf, input.kd);
+    let bsdf = make_diffuse_bsdf(surf, input.kd);
     bsdf.eval(in_dir, out_dir)
 }
 

@@ -461,7 +461,6 @@ fn @make_cpu_hit8(hits: &mut [Hit8], any_hit: bool) -> fn (i32, i32, Hit) -> () 
         let device = nvvm_accelerator(dev);
         gpu_traverse_single(
             device,
-            nvvm_intrinsics,
             make_nvvm_min_max(),
             make_gpu_bvh2_tri1(nodes, tris, true),
             make_gpu_ray1(rays),
@@ -479,7 +478,6 @@ fn @make_cpu_hit8(hits: &mut [Hit8], any_hit: bool) -> fn (i32, i32, Hit) -> () 
         let device = nvvm_accelerator(dev);
         gpu_traverse_single(
             device,
-            nvvm_intrinsics,
             make_nvvm_min_max(),
             make_gpu_bvh2_tri1(nodes, tris, true),
             make_gpu_ray1(rays),
@@ -497,7 +495,6 @@ fn @make_cpu_hit8(hits: &mut [Hit8], any_hit: bool) -> fn (i32, i32, Hit) -> () 
         let device = amdgpu_accelerator(dev);
         gpu_traverse_single(
             device,
-            amdgpu_intrinsics,
             make_amdgpu_min_max(),
             make_gpu_bvh2_tri1(nodes, tris, false),
             make_gpu_ray1(rays),
@@ -515,7 +512,6 @@ fn @make_cpu_hit8(hits: &mut [Hit8], any_hit: bool) -> fn (i32, i32, Hit) -> () 
         let device = amdgpu_accelerator(dev);
         gpu_traverse_single(
             device,
-            amdgpu_intrinsics,
             make_amdgpu_min_max(),
             make_gpu_bvh2_tri1(nodes, tris, false),
             make_gpu_ray1(rays),
