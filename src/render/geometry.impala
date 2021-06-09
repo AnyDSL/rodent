@@ -18,12 +18,12 @@ struct TriMesh {
 }
 
 // Creates a geometry object from a triangle mesh definition
-fn @make_tri_mesh_geometry(math: Intrinsics, tri_mesh: TriMesh, shader: Shader) = Geometry {
+fn @make_tri_mesh_geometry(tri_mesh: TriMesh, shader: Shader) = Geometry {
     surface_element = @ |ray, hit| {
         let (i0, i1, i2) = tri_mesh.triangles(hit.prim_id);
 
         let face_normal = tri_mesh.face_normals(hit.prim_id);
-        let normal = vec3_normalize(math, vec3_lerp2(tri_mesh.normals(i0), tri_mesh.normals(i1), tri_mesh.normals(i2), hit.uv_coords.x, hit.uv_coords.y));
+        let normal = vec3_normalize(vec3_lerp2(tri_mesh.normals(i0), tri_mesh.normals(i1), tri_mesh.normals(i2), hit.uv_coords.x, hit.uv_coords.y));
         let is_entering = vec3_dot(ray.dir, face_normal) <= 0;
 
         fn @attr(i: i32) -> Vec4 {

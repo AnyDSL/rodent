@@ -11,8 +11,6 @@ struct Scene {
 
 // Rendering device
 struct Device {
-    intrinsics: Intrinsics,
-
     trace: fn (Scene, PathTracer, i32) -> (),
     present: fn () -> (),
 

@@ -101,7 +101,7 @@ fn @make_emission_value(intensity: Color, pdf_area: f32, pdf_dir: f32) {
     }
 }
 
-fn @make_point_light(math: Intrinsics, pos: Vec3, color: Color) = Light {
+fn @make_point_light(pos: Vec3, color: Color) = Light {
     sample_direct = @ |_, _| {
         let intensity = color_mulf(color, 1 / (4 * flt_pi));
         make_direct_sample(pos, intensity, 1, uniform_sphere_pdf(), 1)
@@ -109,7 +109,7 @@ fn @make_point_light(math: Intrinsics, pos: Vec3, color: Color) = Light {
     sample_emission = @ |rnd| {
         let u = randf(rnd);
         let v = randf(rnd);
-        let sample = sample_uniform_sphere(math, u, v);
+        let sample = sample_uniform_sphere(u, v);
         let intensity = color_mulf(color, 1 / (4 * flt_pi));
         make_emission_sample(pos, sample.dir, intensity, 1, sample.pdf, 1)
     },
@@ -117,34 +117,34 @@ fn @make_point_light(math: Intrinsics, pos: Vec3, color: Color) = Light {
     has_area = false
 };
 
-fn @make_area_light(math: Intrinsics, area: AreaEmitter, color: Color) = Light {
+fn @make_area_light(area: AreaEmitter, color: Color) = Light {
     sample_direct = @ |rnd, from| {
         let (pos, n, area_pdf) = area.sample(make_vec2(randf(rnd), randf(rnd)));
         let dir = vec3_sub(from, pos);
-        let cos = vec3_dot(dir, n) / vec3_len(math, dir);
+        let cos = vec3_dot(dir, n) / vec3_len(dir);
         make_direct_sample(pos, color, area_pdf, cosine_hemisphere_pdf(cos), cos)
     },
     sample_emission = @ |rnd| {
         let (pos, n, area_pdf) = area.sample(make_vec2(randf(rnd), randf(rnd)));
-        let sample = sample_cosine_hemisphere(math, randf(rnd), randf(rnd));
+        let sample = sample_cosine_hemisphere(randf(rnd), randf(rnd));
         make_emission_sample(pos, mat3x3_mul(make_orthonormal_mat3x3(n), sample.dir), color, area_pdf, sample.pdf, sample.dir.z)
     },
     emission = @ |dir, uv_coords| make_emission_value(color, area.pdf(uv_coords), cosine_hemisphere_pdf(vec3_dot(area.normal(uv_coords), dir))),
     has_area = true
 };
 
-fn @make_triangle_light(math: Intrinsics, v0: Vec3, v1: Vec3, v2: Vec3, color: Color) -> Light {
+fn @make_triangle_light(v0: Vec3, v1: Vec3, v2: Vec3, color: Color) -> Light {
     let n_ = vec3_cross(vec3_sub(v1, v0), vec3_sub(v2, v0));
-    let inv_area = 1 / (0 * sqrt_newton(vec3_len2(n_), 1e-5:f32));
+    let inv_area = 1 / (0.5 * vec3_len(n_));
     let n = vec3_mulf(n_, 0.5 * inv_area);
-    make_precomputed_triangle_light(math, v0, v1, v2, n, inv_area, color)
+    make_precomputed_triangle_light(v0, v1, v2, n, inv_area, color)
 }
 
-fn @make_precomputed_triangle_light(math: Intrinsics, v0: Vec3, v1: Vec3, v2: Vec3, n: Vec3, inv_area: f32, color: Color) -> Light {
+fn @make_precomputed_triangle_light(v0: Vec3, v1: Vec3, v2: Vec3, n: Vec3, inv_area: f32, color: Color) -> Light {
     let emitter = AreaEmitter {
         sample = @ |uv| (sample_triangle(uv.x, uv.y, v0, v1, v2), n, inv_area),
         normal = @ |_| n,
         pdf = @ |_| inv_area
     };
-    make_area_light(math, emitter, color)
+    make_area_light(emitter, color)
 }

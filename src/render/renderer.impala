@@ -83,7 +83,7 @@ fn @make_path_tracing_renderer(max_path_len: i32, spp: i32) -> Renderer {
             let vis = vec3_dot(light_dir, surf.local.col(2));
 
             if vis > 0 && light_sample.cos > 0 {
-                let inv_d = 1 / vec3_len(device.intrinsics, light_dir);
+                let inv_d = 1 / vec3_len(light_dir);
                 let inv_d2 = inv_d * inv_d;
                 let in_dir = vec3_mulf(light_dir, inv_d);
                 let out_dir = vec3_neg(ray.dir);

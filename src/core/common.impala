@@ -85,6 +85,8 @@ fn @unlikely(cond: bool) = expect(cond, false);
 
 // Misc. ---------------------------------------------------------------------------
 
+fn @select_with[T](x: T, y: T, pred: fn (T, T) -> bool) = select[bool, T](@pred(x, y), x, y);
+
 fn @prodsign(x: f32, y: f32) -> f32 {
     bitcast[f32](bitcast[i32](x) ^ (bitcast[i32](y) & bitcast[i32](0x80000000:u32)))
 }
@@ -101,17 +103,6 @@ fn @round_up(n: i32, d: i32) -> i32 {
 
 fn @round_down(n: i32, d: i32) -> i32 {
     (n / d) * d
-}
-
-fn @sqrt_newton(y: f32, p: f32) -> f32 {
-    fn @(?x) newton(x: f32) -> f32 {
-        if (x * x - y) > p {
-            newton(x - (x * x - y) / (2 * x))
-        } else {
-            x
-        }
-    }
-    newton(1)
 }
 
 fn @ilog2(i: i32) -> i32 {
@@ -133,11 +124,11 @@ fn @lerp2(a: f32, b: f32, c: f32, k1: f32, k2: f32) -> f32 {
     (1 - k1 - k2) * a + k1 * b + k2 * c
 }
 
-fn @triangle_area(math: Intrinsics, v0: Vec3, v1: Vec3, v2: Vec3) -> f32 {
+fn @triangle_area(v0: Vec3, v1: Vec3, v2: Vec3) -> f32 {
     let e1 = vec3_sub(v1, v0);
     let e2 = vec3_sub(v2, v0);
     let  n = vec3_cross(e1, e2);
-    0.5 * vec3_len(math, n)
+    0.5 * vec3_len(n)
 }
 
 fn @positive_cos(a: Vec3, b: Vec3) -> f32 {

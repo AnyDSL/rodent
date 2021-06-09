@@ -24,31 +24,29 @@ fn @make_camera_geometry(cos_dir: f32, dist: f32, area: f32) = CameraGeometry {
 };
 
 // Creates a perspective camera
-fn @make_perspective_camera(math: Intrinsics, eye: Vec3, view: Mat3x3, w: f32, h: f32) -> Camera {
+fn @make_perspective_camera(eye: Vec3, view: Mat3x3, w: f32, h: f32) -> Camera {
     let dir   = view.col(2);
     let right = view.col(0);
     let up    = view.col(1);
 
     Camera {
         generate_ray = @ |x, y| {
-            let d = vec3_normalize(math,
-                vec3_add(
-                    vec3_add(vec3_mulf(right, w * x),
-                             vec3_mulf(up, h * y)),
-                    dir
-                )
-            );
+            let d = vec3_normalize(vec3_add(vec3_add(
+                vec3_mulf(right, w * x),
+                vec3_mulf(up, h * y)),
+                dir));
             make_ray(eye, d, 0, flt_max)
         },
         project = @ |p| {
-            let d = vec3_normalize(math, vec3_sub(p, eye));
-            make_vec3(vec3_dot(d, right) / w,
-                      vec3_dot(d, up) / h,
-                      -vec3_dot(d, dir))
+            let d = vec3_normalize(vec3_sub(p, eye));
+            make_vec3(
+                vec3_dot(d, right) / w,
+                vec3_dot(d, up) / h,
+                -vec3_dot(d, dir))
         },
         unproject = @ |_| eye,
         geometry = @ |x, y| {
-            let d = math.sqrtf(1 + x * x * w * w + y * y * h * h);
+            let d = math_builtins::sqrt(1 + x * x * w * w + y * y * h * h);
             make_camera_geometry(1 / d, d, 1 / (4 * w * h))
         }
     }

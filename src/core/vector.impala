@@ -73,13 +73,13 @@ fn @vec2_reflect(v: Vec2, n: Vec2) = vec2_sub(vec2_mulf(n, 2 * vec2_dot(n, v)), 
 fn @vec3_reflect(v: Vec3, n: Vec3) = vec3_sub(vec3_mulf(n, 2 * vec3_dot(n, v)), v);
 fn @vec4_reflect(v: Vec4, n: Vec4) = vec4_sub(vec4_mulf(n, 2 * vec4_dot(n, v)), v);
 
-fn @vec2_len(math: Intrinsics, v: Vec2) = math.sqrtf(vec2_len2(v));
-fn @vec3_len(math: Intrinsics, v: Vec3) = math.sqrtf(vec3_len2(v));
-fn @vec4_len(math: Intrinsics, v: Vec4) = math.sqrtf(vec4_len2(v));
+fn @vec2_len(v: Vec2) = math_builtins::sqrt(vec2_len2(v));
+fn @vec3_len(v: Vec3) = math_builtins::sqrt(vec3_len2(v));
+fn @vec4_len(v: Vec4) = math_builtins::sqrt(vec4_len2(v));
 
-fn @vec2_normalize(math: Intrinsics, v: Vec2) = vec2_mulf(v, 1 / vec2_len(math, v));
-fn @vec3_normalize(math: Intrinsics, v: Vec3) = vec3_mulf(v, 1 / vec3_len(math, v));
-fn @vec4_normalize(math: Intrinsics, v: Vec4) = vec4_mulf(v, 1 / vec4_len(math, v));
+fn @vec2_normalize(v: Vec2) = vec2_mulf(v, 1 / vec2_len(v));
+fn @vec3_normalize(v: Vec3) = vec3_mulf(v, 1 / vec3_len(v));
+fn @vec4_normalize(v: Vec4) = vec4_mulf(v, 1 / vec4_len(v));
 
 fn @vec2_lerp(a: Vec2, b: Vec2, k: f32) = vec2_zip(a, b, |x, y| lerp(x, y, k));
 fn @vec3_lerp(a: Vec3, b: Vec3, k: f32) = vec3_zip(a, b, |x, y| lerp(x, y, k));

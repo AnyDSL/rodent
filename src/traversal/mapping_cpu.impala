@@ -23,14 +23,14 @@ struct Node8 {
 
 fn @make_cpu_tri4(tris: &[Tri4]) -> fn (i32) -> Prim {
     @ |j| Prim {
-        intersect = @ |i, math, ray| -> Option[Hit] {
+        intersect = @ |i, ray| -> Option[Hit] {
             let tri_ptr = rv_align(&tris(j) as &i8, 32) as &Tri4;
             let v0  = make_vec3(tri_ptr.v0(0)(i), tri_ptr.v0(1)(i), tri_ptr.v0(2)(i));
             let e1  = make_vec3(tri_ptr.e1(0)(i), tri_ptr.e1(1)(i), tri_ptr.e1(2)(i));
             let e2  = make_vec3(tri_ptr.e2(0)(i), tri_ptr.e2(1)(i), tri_ptr.e2(2)(i));
             let n   = make_vec3(tri_ptr.n (0)(i), tri_ptr.n (1)(i), tri_ptr.n (2)(i));
             let tri = make_tri(v0, e1, e2, n);
-            match intersect_ray_tri(math, false /*backface_culling*/, ray, tri) {
+            match intersect_ray_tri(false /*backface_culling*/, ray, tri) {
                 Option[(f32, f32, f32)]::Some(t, u, v) => {
                     let prim_id = tri_ptr.prim_id(i) & 0x7FFFFFFF;
                     let geom_id = tri_ptr.geom_id(i);
@@ -229,7 +229,7 @@ fn @cpu_traverse_single_helper( mut ray: Ray
                 // Intersect primitives
                 vectorize(prim.size, |j| {
                     if !prim.is_valid(j) { return() }
-                    match prim.intersect(j, cpu_intrinsics, ray) {
+                    match prim.intersect(j, ray) {
                         Option[Hit]::Some(prim_hit) => {
                             if any_hit {
                                 // Early exit mode
@@ -366,7 +366,7 @@ fn @cpu_traverse_hybrid_helper( mut ray: Ray
                     if unlikely(!prim.is_valid(i)) { break() }
 
                     if active {
-                        match prim.intersect(i, cpu_intrinsics, ray) {
+                        match prim.intersect(i, ray) {
                             Option[Hit]::Some(prim_hit) => {
                                 hit = prim_hit;
                                 ray.tmax = prim_hit.distance;

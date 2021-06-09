@@ -12,7 +12,7 @@ struct Node {
 }
 
 struct Prim {
-    intersect: fn (i32, Intrinsics, Ray) -> Option[Hit],    // Intersects a primitive in the packet
+    intersect: fn (i32, Ray) -> Option[Hit],    // Intersects a primitive in the packet
     is_valid:  fn (i32) -> bool,                            // Returns true if the primitive in the packet is valid
     is_last:   bool,                                        // True if this is the last primitive packet in the leaf
     size:      i32                                          // Number of primitives in the packet (must be a constant)
@@ -142,11 +142,11 @@ fn @bbox_half_area(a: BBox) -> f32 {
     ext.x * (ext.y + ext.z) + ext.y * ext.z
 }
 
-fn @intersect_ray_tri(math: Intrinsics, backface_culling: bool, ray: Ray, tri: Tri) -> Option[(f32, f32, f32)] {
+fn @intersect_ray_tri(backface_culling: bool, ray: Ray, tri: Tri) -> Option[(f32, f32, f32)] {
     let c = vec3_sub(tri.v0, ray.org);
     let r = vec3_cross(ray.dir, c);
     let det = vec3_dot(tri.n, ray.dir);
-    let abs_det = math.fabsf(det);
+    let abs_det = math_builtins::fabs(det);
 
     let u = prodsign(vec3_dot(r, tri.e2), det);
     let mut mask = u >= 0;

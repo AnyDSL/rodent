@@ -20,8 +20,8 @@ fn @cpu_parallel_tiles(body: fn (i32, i32, i32, i32) -> ()) =
             let x = i - num_tiles_x * y;
             let xmin = x * tile_width;
             let ymin = y * tile_height;
-            let xmax = cpu_intrinsics.min(xmin + tile_width,  width);
-            let ymax = cpu_intrinsics.min(ymin + tile_height, height);
+            let xmax = select_with[i32](xmin + tile_width,  width, |x, y| x < y);
+            let ymax = select_with[i32](ymin + tile_height, height, |x, y| x < y);
             @body(xmin, ymin, xmax, ymax)
         }
     }
@@ -208,7 +208,7 @@ fn @cpu_generate_rays( primary: PrimaryStream
     let write_state = make_primary_stream_state_writer(primary, 1);
     let first_id = *id;
     let (tile_width, tile_height) = (xmax - xmin, ymax - ymin);
-    let num_rays = cpu_intrinsics.min(spp * tile_width * tile_height - first_id, capacity - primary.size);
+    let num_rays = select_with[i32](spp * tile_width * tile_height - first_id, capacity - primary.size, |x, y| x < y);
     let tile_div = make_fast_div(tile_width as u32);
     for i, _ in vectorized_range(vector_width, 0, num_rays) {
         let in_tile_id = first_id + i;
@@ -473,7 +473,6 @@ fn @cpu_trace( scene: Scene
 // CPU device ----------------------------------------------------------------------
 
 fn @make_cpu_device(use_embree: bool, vector_compact: bool, single: bool, min_max: MinMax, vector_width: i32, num_cores: i32, tile_size: i32) = Device {
-    intrinsics = cpu_intrinsics,
     trace = @ |scene, path_tracer, spp| {
         cpu_trace(
             scene,

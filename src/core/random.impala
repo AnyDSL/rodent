@@ -35,9 +35,9 @@ struct DirSample {
     pdf: f32
 }
 
-fn @make_dir_sample(math: Intrinsics, c: f32, s: f32, phi: f32, pdf: f32) -> DirSample {
-    let x = s * math.cosf(phi);
-    let y = s * math.sinf(phi);
+fn @make_dir_sample(c: f32, s: f32, phi: f32, pdf: f32) -> DirSample {
+    let x = s * math_builtins::cos(phi);
+    let y = s * math_builtins::sin(phi);
     let z = c;
     DirSample {
         dir = make_vec3(x, y, z),
@@ -63,33 +63,33 @@ fn @sample_triangle(mut u: f32, mut v: f32, v0: Vec3, v1: Vec3, v2: Vec3) -> Vec
 fn @uniform_sphere_pdf() -> f32 { 1 / (4 * flt_pi) }
 
 // Samples a direction uniformly on a sphere
-fn @sample_uniform_sphere(math: Intrinsics, u: f32, v: f32) -> DirSample {
+fn @sample_uniform_sphere(u: f32, v: f32) -> DirSample {
     let c = 2 * v - 1;
-    let s = math.sqrtf(1 - c * c);
+    let s = math_builtins::sqrt(1 - c * c);
     let phi = 2 * flt_pi * u;
-    make_dir_sample(math, c, s, phi, uniform_sphere_pdf())
+    make_dir_sample(c, s, phi, uniform_sphere_pdf())
 }
 
 // Probability density function for cosine weighted hemisphere sampling
 fn @cosine_hemisphere_pdf(c: f32) -> f32 { c * (1 / flt_pi) }
 
 // Samples a direction on a hemisphere proportionally to the cosine with the surface normal
-fn @sample_cosine_hemisphere(math: Intrinsics, u: f32, v: f32) -> DirSample {
-    let c = math.sqrtf(1 - v);
-    let s = math.sqrtf(v);
+fn @sample_cosine_hemisphere(u: f32, v: f32) -> DirSample {
+    let c = math_builtins::sqrt(1 - v);
+    let s = math_builtins::sqrt(v);
     let phi = 2 * flt_pi * u;
-    make_dir_sample(math, c, s, phi, cosine_hemisphere_pdf(c))
+    make_dir_sample(c, s, phi, cosine_hemisphere_pdf(c))
 }
 
 // Probability density function for cosine-power weighted hemisphere sampling
-fn @cosine_power_hemisphere_pdf(_math: Intrinsics, c: f32, k: f32) -> f32 {
-    fastpow/*math.powf*/(c, k) * (k + 1) * (1 / (2 * flt_pi))
+fn @cosine_power_hemisphere_pdf(c: f32, k: f32) -> f32 {
+    fastpow/*math_builtins::pow*/(c, k) * (k + 1) * (1 / (2 * flt_pi))
 }
 
 // Samples a direction on a hemisphere proportionally to the power of the cosine with the surface normal
-fn @sample_cosine_power_hemisphere(math: Intrinsics, k: f32, u: f32, v: f32) -> DirSample {
-    let c = math.fminf(fastpow/*math.powf*/(v, 1 / (k + 1)), 1);
-    let s = math.sqrtf(1 - c * c);
+fn @sample_cosine_power_hemisphere(k: f32, u: f32, v: f32) -> DirSample {
+    let c = math_builtins::fmin[f32](fastpow/*math_builtins::pow*/(v, 1 / (k + 1)), 1);
+    let s = math_builtins::sqrt(1 - c * c);
     let phi = 2 * flt_pi * u;
     // We have:
     // pow(c, k) = pow(pow(v, 1 / (k + 1)), k)
@@ -98,7 +98,7 @@ fn @sample_cosine_power_hemisphere(math: Intrinsics, k: f32, u: f32, v: f32) -> 
     //           = v / c
     let pow_c_k = select(c != 0, v / c, 0:f32);
     let pdf = pow_c_k * (k + 1) * (1 / (2 * flt_pi));
-    make_dir_sample(math, c, s, phi, pdf)
+    make_dir_sample(c, s, phi, pdf)
 }
 
 // Initializer for Bernstein's hash function

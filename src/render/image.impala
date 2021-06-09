@@ -6,12 +6,12 @@ struct Image {
 }
 
 struct BorderHandling {
-    horz: fn (Intrinsics, f32) -> f32,
-    vert: fn (Intrinsics, f32) -> f32
+    horz: fn (f32) -> f32,
+    vert: fn (f32) -> f32
 }
 
 type Texture = fn (Vec2) -> Color;
-type ImageFilter = fn (Intrinsics, Image, Vec2) -> Color;
+type ImageFilter = fn (Image, Vec2) -> Color;
 
 fn @make_image(pixels: fn (i32, i32) -> Color, width: i32, height: i32) = Image {
     pixels = pixels,
@@ -26,9 +26,10 @@ fn @make_image_rgba32(pixels: fn (i32, i32) -> u32, width: i32, height: i32) -> 
             let r = pixel & 0xFF:u32;
             let g = (pixel >>  8:u32) & 0xFF:u32;
             let b = (pixel >> 16:u32) & 0xFF:u32;
-            make_color((r as f32) * (1 / 255),
-                       (g as f32) * (1 / 255),
-                       (b as f32) * (1 / 255))
+            make_color(
+                (r as f32) * (1 / 255),
+                (g as f32) * (1 / 255),
+                (b as f32) * (1 / 255))
         },
         width  = width,
         height = height
@@ -36,7 +37,7 @@ fn @make_image_rgba32(pixels: fn (i32, i32) -> u32, width: i32, height: i32) -> 
 }
 
 fn @make_clamp_border() -> BorderHandling {
-    let clamp = @ |math: Intrinsics, x: f32| math.fminf(1, math.fmaxf(0, x));
+    let clamp = @ |x: f32| math_builtins::fmin[f32](math_builtins::fmax[f32](0, x), 1);
     BorderHandling {
         horz = clamp,
         vert = clamp
@@ -44,7 +45,7 @@ fn @make_clamp_border() -> BorderHandling {
 }
 
 fn @make_repeat_border() -> BorderHandling {
-    let repeat = @ |math: Intrinsics, x: f32| x - math.floorf(x);
+    let repeat = @ |x: f32| x - math_builtins::floor(x);
     BorderHandling {
         horz = repeat,
         vert = repeat
@@ -52,20 +53,21 @@ fn @make_repeat_border() -> BorderHandling {
 }
 
 fn @make_nearest_filter() -> ImageFilter {
-    @ |math, img, uv| {
-        img.pixels(math.min((uv.x * img.width  as f32) as i32, img.width  - 1),
-                   math.min((uv.y * img.height as f32) as i32, img.height - 1))
+    @ |img, uv| {
+        img.pixels(
+            select_with[i32]((uv.x * img.width  as f32) as i32, img.width  - 1, |x, y| x < y),
+            select_with[i32]((uv.y * img.height as f32) as i32, img.height - 1, |x, y| x < y))
     }
 }
 
 fn @make_bilinear_filter() -> ImageFilter {
-    @ |math, img, uv| {
+    @ |img, uv| {
         let u = uv.x * img.width as f32;
         let v = uv.y * img.height as f32;
-        let x0 = math.min(u as i32, img.width  - 1);
-        let y0 = math.min(v as i32, img.height - 1);
-        let x1 = math.min(x0 + 1, img.width  - 1);
-        let y1 = math.min(y0 + 1, img.height - 1);
+        let x0 = select_with[i32](u as i32, img.width  - 1, |x, y| x < y);
+        let y0 = select_with[i32](v as i32, img.height - 1, |x, y| x < y);
+        let x1 = select_with[i32](x0 + 1, img.width  - 1, |x, y| x < y);
+        let y1 = select_with[i32](y0 + 1, img.height - 1, |x, y| x < y);
         let kx = u - (u as i32 as f32);
         let ky = v - (v as i32 as f32);
 
@@ -81,10 +83,10 @@ fn @make_bilinear_filter() -> ImageFilter {
     }
 }
 
-fn @make_texture(math: Intrinsics, border: BorderHandling, filter: ImageFilter, image: Image) -> Texture {
+fn @make_texture(border: BorderHandling, filter: ImageFilter, image: Image) -> Texture {
     @ |uv| {
-        let u = border.horz(math, uv.x);
-        let v = border.vert(math, uv.y);
-        filter(math, image, make_vec2(u, v))
+        let u = border.horz(uv.x);
+        let v = border.vert(uv.y);
+        filter(image, make_vec2(u, v))
     }
 }

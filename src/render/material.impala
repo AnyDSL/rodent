@@ -76,7 +76,7 @@ fn @make_black_bsdf() = Bsdf {
 };
 
 // Creates a purely diffuse BSDF
-fn @make_diffuse_bsdf(math: Intrinsics, surf: SurfaceElement, kd: Color) = Bsdf {
+fn @make_diffuse_bsdf(surf: SurfaceElement, kd: Color) = Bsdf {
     eval = @ |_, _| {
         color_mulf(kd, 1 / flt_pi)
     },
@@ -84,7 +84,7 @@ fn @make_diffuse_bsdf(math: Intrinsics, surf: SurfaceElement, kd: Color) = Bsdf 
         cosine_hemisphere_pdf(positive_cos(in_dir, surf.local.col(2)))
     },
     sample = @ |rnd, _, _| {
-        let sample = sample_cosine_hemisphere(math, randf(rnd), randf(rnd));
+        let sample = sample_cosine_hemisphere(randf(rnd), randf(rnd));
         let color = color_mulf(kd, 1 / flt_pi);
         make_bsdf_sample(surf, mat3x3_mul(surf.local, sample.dir), sample.pdf, sample.dir.z, color, false)
     },
@@ -92,18 +92,18 @@ fn @make_diffuse_bsdf(math: Intrinsics, surf: SurfaceElement, kd: Color) = Bsdf 
 };
 
 // Creates a physically-correct Phong BSDF
-fn @make_phong_bsdf(math: Intrinsics, surf: SurfaceElement, ks: Color, ns: f32) = Bsdf {
+fn @make_phong_bsdf(surf: SurfaceElement, ks: Color, ns: f32) = Bsdf {
     eval = @ |in_dir, out_dir| {
         let cos = positive_cos(in_dir, vec3_reflect(out_dir, surf.local.col(2)));
-        color_mulf(ks, fastpow/*math.powf*/(cos, ns) * (ns + 2) * (1 / (2 * flt_pi)))
+        color_mulf(ks, fastpow/*math_builtins::pow*/(cos, ns) * (ns + 2) * (1 / (2 * flt_pi)))
     },
     pdf = @ |in_dir, out_dir| {
         let cos = positive_cos(in_dir, vec3_reflect(out_dir, surf.local.col(2)));
-        cosine_power_hemisphere_pdf(math, cos, ns)
+        cosine_power_hemisphere_pdf(cos, ns)
     },
     sample = @ |rnd, out_dir, _| {
         let reflect_out = vec3_reflect(out_dir, surf.local.col(2));
-        let sample = sample_cosine_power_hemisphere(math, ns, randf(rnd), randf(rnd));
+        let sample = sample_cosine_power_hemisphere(ns, randf(rnd), randf(rnd));
         let in_dir = mat3x3_mul(make_orthonormal_mat3x3(reflect_out), sample.dir);
         let cos = positive_cos(in_dir, surf.local.col(2));
         let color = color_mulf(ks, sample.pdf * (ns + 2) / (ns + 1));
@@ -113,7 +113,7 @@ fn @make_phong_bsdf(math: Intrinsics, surf: SurfaceElement, ks: Color, ns: f32) 
 };
 
 // Creates a perfect mirror BSDF
-fn @make_mirror_bsdf(_math: Intrinsics, surf: SurfaceElement, ks: Color) = Bsdf {
+fn @make_mirror_bsdf(surf: SurfaceElement, ks: Color) = Bsdf {
     eval   = @ |_, _| black,
     pdf    = @ |_, _| 0,
     sample = @ |_, out_dir, _| {
@@ -123,7 +123,7 @@ fn @make_mirror_bsdf(_math: Intrinsics, surf: SurfaceElement, ks: Color) = Bsdf 
 };
 
 // Creates a perfect glass BSDF
-fn @make_glass_bsdf(math: Intrinsics, surf: SurfaceElement, n1: f32, n2: f32, ks: Color, kt: Color) = Bsdf {
+fn @make_glass_bsdf(surf: SurfaceElement, n1: f32, n2: f32, ks: Color, kt: Color) = Bsdf {
     eval   = @ |_, _| black,
     pdf    = @ |_, _| 0,
     sample = @ |rnd, out_dir, adjoint| {
@@ -134,7 +134,7 @@ fn @make_glass_bsdf(math: Intrinsics, surf: SurfaceElement, n1: f32, n2: f32, ks
 
         if cos2_t > 0 {
             // Refraction
-            let cos_t = math.sqrtf(cos2_t);
+            let cos_t = math_builtins::sqrt(cos2_t);
             let F = fresnel_factor(k, cos_i, cos_t);
             if (randf(rnd) > F) {
                 let t = vec3_sub(vec3_mulf(n, k * cos_i - cos_t), vec3_mulf(out_dir, k));
