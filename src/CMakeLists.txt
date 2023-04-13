@@ -112,7 +112,7 @@ set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/main.impala PROPERTIES G
 add_library(driver ${DRIVER_SRCS})
 target_include_directories(driver PUBLIC ${LZ4_INCLUDE_DIR})
 if (EMBREE_FOUND)
-    target_include_directories(driver PUBLIC ${EMBREE_ROOT_DIR}/include ${EMBREE_ROOT_DIR} ${EMBREE_LIBRARY_DIR} ${PNG_INCLUDE_DIRS} ${JPEG_INCLUDE_DIRS} ${TBB_INCLUDE_DIRS} ${LZ4_INCLUDE_DIR})
+    target_include_directories(driver PUBLIC ${EMBREE_ROOT_DIR}/include ${EMBREE_ROOT_DIR} ${EMBREE_LIBRARY_DIR} ${PNG_INCLUDE_DIRS} ${JPEG_INCLUDE_DIRS} ${LZ4_INCLUDE_DIR})
     target_link_libraries(driver ${EMBREE_DEPENDENCIES})
     target_compile_definitions(driver PUBLIC -DENABLE_EMBREE_DEVICE)
 endif()
@@ -127,7 +127,7 @@ if (COLORIZE)
 endif()
 
 add_executable(rodent ${RODENT_OBJS})
-target_link_libraries(rodent driver ${AnyDSL_runtime_LIBRARIES} ${PNG_LIBRARIES} ${JPEG_LIBRARIES} ${TBB_LIBRARIES} ${LZ4_LIBRARY})
+target_link_libraries(rodent driver ${AnyDSL_runtime_LIBRARIES} ${PNG_LIBRARIES} ${JPEG_LIBRARIES} TBB::tbb ${LZ4_LIBRARY})
 
 if (SCENE_FILE STREQUAL "${PROJECT_SOURCE_DIR}/testing/cornell_box.obj")
     # Test rodent when the cornell box is used
