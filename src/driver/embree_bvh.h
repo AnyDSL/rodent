@@ -74,44 +74,44 @@ void extract_bvh_leaf(const obj::TriMesh& tri_mesh, NodeRef leaf, std::vector<Bv
                 new_tris.push_back(new_tri);
                 cur = 0;
             }
-            new_tri.v0[0][cur] = tris[i].v0.x[j];
-            new_tri.v0[1][cur] = tris[i].v0.y[j];
-            new_tri.v0[2][cur] = tris[i].v0.z[j];
-            new_tri.e1[0][cur] = tris[i].e1.x[j];
-            new_tri.e1[1][cur] = tris[i].e1.y[j];
-            new_tri.e1[2][cur] = tris[i].e1.z[j];
-            new_tri.e2[0][cur] = tris[i].e2.x[j];
-            new_tri.e2[1][cur] = tris[i].e2.y[j];
-            new_tri.e2[2][cur] = tris[i].e2.z[j];
-            new_tri. n[0][cur] = new_tri.e1[1][cur] * new_tri.e2[2][cur] - new_tri.e1[2][cur] * new_tri.e2[1][cur];
-            new_tri. n[1][cur] = new_tri.e1[2][cur] * new_tri.e2[0][cur] - new_tri.e1[0][cur] * new_tri.e2[2][cur];
-            new_tri. n[2][cur] = new_tri.e1[0][cur] * new_tri.e2[1][cur] - new_tri.e1[1][cur] * new_tri.e2[0][cur];
+            new_tri.v0.e[0].e[cur] = tris[i].v0.x[j];
+            new_tri.v0.e[1].e[cur] = tris[i].v0.y[j];
+            new_tri.v0.e[2].e[cur] = tris[i].v0.z[j];
+            new_tri.e1.e[0].e[cur] = tris[i].e1.x[j];
+            new_tri.e1.e[1].e[cur] = tris[i].e1.y[j];
+            new_tri.e1.e[2].e[cur] = tris[i].e1.z[j];
+            new_tri.e2.e[0].e[cur] = tris[i].e2.x[j];
+            new_tri.e2.e[1].e[cur] = tris[i].e2.y[j];
+            new_tri.e2.e[2].e[cur] = tris[i].e2.z[j];
+            new_tri. n.e[0].e[cur] = new_tri.e1.e[1].e[cur] * new_tri.e2.e[2].e[cur] - new_tri.e1.e[2].e[cur] * new_tri.e2.e[1].e[cur];
+            new_tri. n.e[1].e[cur] = new_tri.e1.e[2].e[cur] * new_tri.e2.e[0].e[cur] - new_tri.e1.e[0].e[cur] * new_tri.e2.e[2].e[cur];
+            new_tri. n.e[2].e[cur] = new_tri.e1.e[0].e[cur] * new_tri.e2.e[1].e[cur] - new_tri.e1.e[1].e[cur] * new_tri.e2.e[0].e[cur];
             auto prim_id = tris[i].primID(j);
-            new_tri.prim_id[cur] = prim_id;
-            new_tri.geom_id[cur] = tri_mesh.indices[prim_id * 4 + 3];
+            new_tri.prim_id.e[cur] = prim_id;
+            new_tri.geom_id.e[cur] = tri_mesh.indices[prim_id * 4 + 3];
             cur++;
         }
     }
     if (cur > 0) {
         for (size_t j = cur; j < M; j++) {
-            new_tri.v0[0][j] = 0.0f;
-            new_tri.v0[1][j] = 0.0f;
-            new_tri.v0[2][j] = 0.0f;
-            new_tri.e1[0][j] = 0.0f;
-            new_tri.e1[1][j] = 0.0f;
-            new_tri.e1[2][j] = 0.0f;
-            new_tri.e2[0][j] = 0.0f;
-            new_tri.e2[1][j] = 0.0f;
-            new_tri.e2[2][j] = 0.0f;
-            new_tri.n[0][j]  = 0.0f;
-            new_tri.n[1][j]  = 0.0f;
-            new_tri.n[2][j]  = 0.0f;
-            new_tri.prim_id[j] = 0xFFFFFFFF;
-            new_tri.geom_id[j] = 0xFFFFFFFF;
+            new_tri.v0.e[0].e[j] = 0.0f;
+            new_tri.v0.e[1].e[j] = 0.0f;
+            new_tri.v0.e[2].e[j] = 0.0f;
+            new_tri.e1.e[0].e[j] = 0.0f;
+            new_tri.e1.e[1].e[j] = 0.0f;
+            new_tri.e1.e[2].e[j] = 0.0f;
+            new_tri.e2.e[0].e[j] = 0.0f;
+            new_tri.e2.e[1].e[j] = 0.0f;
+            new_tri.e2.e[2].e[j] = 0.0f;
+            new_tri. n.e[0].e[j] = 0.0f;
+            new_tri. n.e[1].e[j] = 0.0f;
+            new_tri. n.e[2].e[j] = 0.0f;
+            new_tri.prim_id.e[j] = 0xFFFFFFFF;
+            new_tri.geom_id.e[j] = 0xFFFFFFFF;
         }
         new_tris.push_back(new_tri);
     }
-    new_tris.back().prim_id[M - 1] |= 0x80000000;
+    new_tris.back().prim_id.e[M - 1] |= 0x80000000;
 }
 
 template <size_t N, size_t M, typename Bvh, typename NodeRef, typename BvhNode, typename BvhTri>
@@ -136,18 +136,18 @@ void extract_bvh_node(const obj::TriMesh& tri_mesh,
     for (size_t i = 0; i < N; i++) {
         if (n->child(i) == Bvh::emptyNode) continue;
 
-        new_node.bounds[0][c] = n->bounds(i).lower.x;
-        new_node.bounds[1][c] = n->bounds(i).upper.x;
-        new_node.bounds[2][c] = n->bounds(i).lower.y;
-        new_node.bounds[3][c] = n->bounds(i).upper.y;
-        new_node.bounds[4][c] = n->bounds(i).lower.z;
-        new_node.bounds[5][c] = n->bounds(i).upper.z;
+        new_node.bounds.e[0].e[c] = n->bounds(i).lower.x;
+        new_node.bounds.e[1].e[c] = n->bounds(i).upper.x;
+        new_node.bounds.e[2].e[c] = n->bounds(i).lower.y;
+        new_node.bounds.e[3].e[c] = n->bounds(i).upper.y;
+        new_node.bounds.e[4].e[c] = n->bounds(i).lower.z;
+        new_node.bounds.e[5].e[c] = n->bounds(i).upper.z;
 
         if (n->child(i).isAlignedNode()) {
-            new_node.child[c] = first_child + 1;
+            new_node.child.e[c] = first_child + 1;
             extract_bvh_node<N, M, Bvh>(tri_mesh, n->child(i), first_child++, new_nodes, new_tris);
         } else if (n->child(i).isLeaf()) {
-            new_node.child[c] = ~new_tris.size();
+            new_node.child.e[c] = ~new_tris.size();
             extract_bvh_leaf<M>(tri_mesh, n->child(i), new_tris);
         } else {
             assert(false);
@@ -157,10 +157,10 @@ void extract_bvh_node(const obj::TriMesh& tri_mesh,
     }
     for (; c < N; c++) {
         for (int i = 0; i < 3; i++) {
-            new_node.bounds[i * 2 + 0][c] =  std::numeric_limits<float>::infinity();
-            new_node.bounds[i * 2 + 1][c] = -std::numeric_limits<float>::infinity();
+            new_node.bounds.e[i * 2 + 0].e[c] =  std::numeric_limits<float>::infinity();
+            new_node.bounds.e[i * 2 + 1].e[c] = -std::numeric_limits<float>::infinity();
         }
-        new_node.child[c] = 0;
+        new_node.child.e[c] = 0;
     }
     new_nodes[index] = new_node;
 }
