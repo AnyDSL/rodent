@@ -10,7 +10,7 @@ if (EMBREE_FOUND)
 endif ()
 
 add_executable(bvh_extractor ${EXTRACTOR_SRCS})
-target_include_directories(bvh_extractor PUBLIC ../../src)
+target_include_directories(bvh_extractor PUBLIC ../common ../../src)
 target_link_libraries(bvh_extractor PUBLIC traversal_interface)
 
 if (EMBREE_FOUND)
