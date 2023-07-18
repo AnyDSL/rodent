@@ -31,7 +31,7 @@ inline bool locate_block(std::istream& is, BvhType type) {
         is.seekg(offset, std::istream::cur);
 
         is.read((char*)&offset, sizeof(uint64_t));
-        if (is.gcount() != sizeof(std::uint64_t)) return false;
+        if (is.gcount() != sizeof(uint64_t)) return false;
         is.read((char*)&block_type, sizeof(uint32_t));
         if (is.gcount() != sizeof(uint32_t)) return false;
 

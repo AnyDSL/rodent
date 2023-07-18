@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <png.h>
 #include <cstring>
+#include <cstdint>
 
 static void write_to_stream(png_structp png_ptr, png_bytep data, png_size_t length) {
     png_voidp a = png_get_io_ptr(png_ptr);
