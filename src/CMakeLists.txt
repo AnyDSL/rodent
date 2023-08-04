@@ -84,7 +84,6 @@ if (NOT DISABLE_GUI)
 endif()
 find_package(PNG REQUIRED)
 find_package(JPEG REQUIRED)
-find_package(TBB REQUIRED)
 find_package(LZ4 REQUIRED)
 
 add_executable(converter ${CONVERTER_SRCS})
@@ -129,7 +128,7 @@ if (COLORIZE)
 endif()
 
 add_executable(rodent ${RODENT_OBJS})
-target_link_libraries(rodent driver ${AnyDSL_runtime_LIBRARIES} ${PNG_LIBRARIES} ${JPEG_LIBRARIES} TBB::tbb ${LZ4_LIBRARY})
+target_link_libraries(rodent driver ${AnyDSL_runtime_LIBRARIES} ${PNG_LIBRARIES} ${JPEG_LIBRARIES} ${LZ4_LIBRARY})
 
 if (SCENE_FILE STREQUAL "${PROJECT_SOURCE_DIR}/testing/cornell_box.obj")
     # Test rodent when the cornell box is used
