@@ -639,7 +639,7 @@ fn @make_amdgpu_device(dev: i32, streaming: bool) -> Device {
     };
     make_gpu_device(
         dev_id,
-        amdgpu_accelerator(dev),
+        amdgpu_hsa_accelerator(dev),
         amdgpu_intrinsics,
         make_amdgpu_min_max(),
         load_bvh,
