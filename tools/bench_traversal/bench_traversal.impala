@@ -494,7 +494,7 @@ fn @make_cpu_hit8(hits: &mut [Hit8], any_hit: bool) -> fn (i32, i32, Hit) -> () 
 
 #[export] fn amdgpu_intersect_single_ray1_bvh2_tri1(dev: i32, nodes: &[Node2], tris: &[Tri1], rays: &[Ray1], hits: &mut [Hit1], num_rays: i32) -> () {
     if enable_gpu_bvh2_tri1 {
-        let device = amdgpu_accelerator(dev);
+        let device = amdgpu_hsa_accelerator(dev);
         gpu_traverse_single(
             device,
             amdgpu_intrinsics,
@@ -512,7 +512,7 @@ fn @make_cpu_hit8(hits: &mut [Hit8], any_hit: bool) -> fn (i32, i32, Hit) -> () 
 
 #[export] fn amdgpu_occluded_single_ray1_bvh2_tri1(dev: i32, nodes: &[Node2], tris: &[Tri1], rays: &[Ray1], hits: &mut [Hit1], num_rays: i32) -> () {
     if enable_gpu_bvh2_tri1 {
-        let device = amdgpu_accelerator(dev);
+        let device = amdgpu_hsa_accelerator(dev);
         gpu_traverse_single(
             device,
             amdgpu_intrinsics,
