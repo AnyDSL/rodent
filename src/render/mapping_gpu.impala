@@ -674,3 +674,61 @@ fn @make_amdgpu_device(dev: i32, streaming: bool) -> Device {
         streaming
     )
 }
+
+fn @make_opencl_device(dev: i32, streaming: bool) -> Device {
+    let dev_id = runtime_device(2, dev);
+    let load_bvh = @ |filename: &[u8]| {
+        let mut nodes: &[Node2];
+        let mut tris: &[Tri1];
+        rodent_load_bvh2_tri1(dev_id, filename, &mut nodes, &mut tris);
+        make_gpu_bvh2_tri1(nodes, tris, false)
+    };
+    let read_pixel = @ |p: &[u32], i: i32| p(i);
+    let make_buffer = @ |p: &[i8]| {
+        DeviceBuffer {
+            load_f32  = @ |i| (p as &addrspace(1)[f32])(i),
+            load_i32  = @ |i| (p as &addrspace(1)[i32])(i),
+            load_vec2 = @ |i| {
+                let v = (p as &addrspace(1)[simd[f32 * 4]])(i);
+                make_vec2(v(0), v(1))
+            },
+            load_vec3 = @ |i| {
+                let v = (p as &addrspace(1)[simd[f32 * 4]])(i);
+                make_vec3(v(0), v(1), v(2))
+            },
+            load_vec4 = @ |i| {
+                let v = (p as &addrspace(1)[simd[f32 * 4]])(i);
+                make_vec4(v(0), v(1), v(2), v(3))
+            },
+            load_int2 = @ |i| {
+                let v = (p as &addrspace(1)[simd[i32 * 4]])(i);
+                (v(0), v(1))
+            },
+            load_int3 = @ |i| {
+                let v = (p as &addrspace(1)[simd[i32 * 4]])(i);
+                (v(0), v(1), v(2))
+            },
+            load_int4 = @ |i| {
+                let v = (p as &addrspace(1)[simd[i32 * 4]])(i);
+                (v(0), v(1), v(2), v(3))
+            }
+        }
+    };
+    let atomics = Atomics {
+        add_global_i32 = @ |p, i| opencl_atomic_add_global(p as &mut addrspace(1)i32, i),
+        add_global_f32 = @ |p, i| opencl_atomic_add_global_f32(p as &mut addrspace(1)f32, i),
+        add_shared_i32 = @ |p, i| opencl_atomic_add_shared(p, i),
+        add_shared_f32 = @ |p, i| atomic_p3(11:u32, p, i, 2:u32, "wavefront")
+    };
+    make_gpu_device(
+        dev_id,
+        opencl_accelerator(dev),
+        opencl_intrinsics,
+        make_default_min_max(),
+        load_bvh,
+        read_pixel,
+        make_buffer,
+        atomics,
+        streaming
+    )
+}

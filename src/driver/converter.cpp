@@ -32,6 +32,7 @@ enum class Target : uint32_t {
     NVVM_MEGAKERNEL,
     AMDGPU_STREAMING,
     AMDGPU_MEGAKERNEL,
+    OPENCL_MEGAKERNEL,
     INVALID
 };
 
@@ -629,7 +630,8 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
     bool enable_padding = target == Target::NVVM_STREAMING   ||
                           target == Target::NVVM_MEGAKERNEL  ||
                           target == Target::AMDGPU_STREAMING ||
-                          target == Target::AMDGPU_MEGAKERNEL;
+                          target == Target::AMDGPU_MEGAKERNEL ||
+                          target == Target::OPENCL_MEGAKERNEL;
     switch (target) {
         case Target::GENERIC:           os << "    let device   = make_cpu_default_device();\n";               break;
         case Target::AVX2:              os << "    let device   = make_avx2_device(false);\n";                 break;
@@ -641,6 +643,7 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
         case Target::NVVM_MEGAKERNEL:   os << "    let device   = make_nvvm_device(" << dev <<", false);\n";   break;
         case Target::AMDGPU_STREAMING:  os << "    let device   = make_amdgpu_device(" << dev <<", true);\n";  break;
         case Target::AMDGPU_MEGAKERNEL: os << "    let device   = make_amdgpu_device(" << dev <<", false);\n"; break;
+        case Target::OPENCL_MEGAKERNEL: os << "    let device   = make_opencl_device(" << dev <<", false);\n"; break;
         default:
             assert(false);
             break;
@@ -714,7 +717,7 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
         info("Generating BVH for '", file_name, "'");
         std::remove("data/bvh.bin");
         if (target == Target::NVVM_STREAMING   || target == Target::NVVM_MEGAKERNEL ||
-            target == Target::AMDGPU_STREAMING || target == Target::AMDGPU_MEGAKERNEL) {
+            target == Target::AMDGPU_STREAMING || target == Target::AMDGPU_MEGAKERNEL || target == Target::OPENCL_MEGAKERNEL) {
             std::vector<typename BvhNTriM<2, 1>::Node> nodes;
             std::vector<typename BvhNTriM<2, 1>::Tri> tris;
             build_bvh<2, 1>(tri_mesh, nodes, tris);
@@ -989,6 +992,7 @@ static void usage() {
               << "    generic, sse42, avx, avx2, avx2-embree, asimd,\n"
               << "    nvvm = nvvm-streaming, nvvm-megakernel,\n"
               << "    amdgpu = amdgpu-streaming, amdgpu-megakernel\n"
+              << "    opencl = opencl-megakernel\n"
               << std::flush;
 }
 
@@ -1038,6 +1042,8 @@ int main(int argc, char** argv) {
                     target = Target::AMDGPU_STREAMING;
                 else if (!strcmp(argv[i], "amdgpu-megakernel"))
                     target = Target::AMDGPU_MEGAKERNEL;
+                else if (!strcmp(argv[i], "opencl"))
+                    target = Target::OPENCL_MEGAKERNEL;
                 else if (!strcmp(argv[i], "generic"))
                     target = Target::GENERIC;
                 else {
@@ -1072,7 +1078,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    if (fusion && target != Target::NVVM_MEGAKERNEL && target != Target::AMDGPU_MEGAKERNEL) {
+    if (fusion && target != Target::NVVM_MEGAKERNEL && target != Target::AMDGPU_MEGAKERNEL && target != Target::OPENCL_MEGAKERNEL) {
         std::cerr << "Fusion is only available for megakernel targets. Aborting." << std::endl;
         return 1;
     }
