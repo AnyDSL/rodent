@@ -78,7 +78,8 @@ fn @fastpow(x: f32, p: f32) = fastpow2(p * fastlog2(x));
 
 // Likely/unlikely -----------------------------------------------------------------
 
-#[import(cc = "device", name = "llvm.expect.i1")] fn expect(bool, bool) -> bool;
+//#[import(cc = "device", name = "llvm.expect.i1")] fn expect(bool, bool) -> bool;
+fn expect(a: bool, b: bool) -> bool = a;
 
 fn @  likely(cond: bool) = expect(cond,  true);
 fn @unlikely(cond: bool) = expect(cond, false);
