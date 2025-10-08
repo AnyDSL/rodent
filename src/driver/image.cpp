@@ -1,6 +1,7 @@
 #include <memory>
 #include <fstream>
 #include <cmath>
+#include <cstdint>
 
 #include <png.h>
 #include <jpeglib.h>
