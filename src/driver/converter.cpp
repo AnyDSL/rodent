@@ -34,6 +34,8 @@ enum class Target : uint32_t {
     AMDGPU_MEGAKERNEL,
     OPENCL_STREAMING,
     OPENCL_MEGAKERNEL,
+    VULKAN_STREAMING,
+    VULKAN_MEGAKERNEL,
     INVALID
 };
 
@@ -633,7 +635,9 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
                           target == Target::AMDGPU_STREAMING ||
                           target == Target::AMDGPU_MEGAKERNEL ||
                           target == Target::OPENCL_STREAMING  ||
-                          target == Target::OPENCL_MEGAKERNEL;
+                          target == Target::OPENCL_MEGAKERNEL ||
+                          target == Target::VULKAN_STREAMING  ||
+                          target == Target::VULKAN_MEGAKERNEL;
     switch (target) {
         case Target::GENERIC:           os << "    let device   = make_cpu_default_device();\n";               break;
         case Target::AVX2:              os << "    let device   = make_avx2_device(false);\n";                 break;
@@ -647,6 +651,8 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
         case Target::AMDGPU_MEGAKERNEL: os << "    let device   = make_amdgpu_device(" << dev <<", false);\n"; break;
         case Target::OPENCL_STREAMING:  os << "    let device   = make_opencl_device(" << dev <<", true);\n"; break;
         case Target::OPENCL_MEGAKERNEL: os << "    let device   = make_opencl_device(" << dev <<", false);\n"; break;
+        case Target::VULKAN_STREAMING:  os << "    let device   = make_vulkan_device(" << dev <<", true);\n"; break;
+        case Target::VULKAN_MEGAKERNEL: os << "    let device   = make_vulkan_device(" << dev <<", false);\n"; break;
         default:
             assert(false);
             break;
@@ -721,7 +727,8 @@ static bool convert_obj(const std::string& file_name, Target target, size_t dev,
         std::remove("data/bvh.bin");
         if (target == Target::NVVM_STREAMING   || target == Target::NVVM_MEGAKERNEL ||
             target == Target::AMDGPU_STREAMING || target == Target::AMDGPU_MEGAKERNEL ||
-            target == Target::OPENCL_STREAMING || target == Target::OPENCL_MEGAKERNEL) {
+            target == Target::OPENCL_STREAMING || target == Target::OPENCL_MEGAKERNEL ||
+            target == Target::VULKAN_STREAMING || target == Target::VULKAN_MEGAKERNEL) {
             std::vector<typename BvhNTriM<2, 1>::Node> nodes;
             std::vector<typename BvhNTriM<2, 1>::Tri> tris;
             build_bvh<2, 1>(tri_mesh, nodes, tris);
@@ -997,6 +1004,7 @@ static void usage() {
               << "    nvvm = nvvm-streaming, nvvm-megakernel,\n"
               << "    amdgpu = amdgpu-streaming, amdgpu-megakernel\n"
               << "    opencl = opencl-streaming, opencl-megakernel\n"
+              << "    vulkan = vulkan-streaming, vulkan-megakernel\n"
               << std::flush;
 }
 
@@ -1050,6 +1058,10 @@ int main(int argc, char** argv) {
                     target = Target::OPENCL_STREAMING;
                 else if (!strcmp(argv[i], "opencl-megakernel"))
                     target = Target::OPENCL_MEGAKERNEL;
+                else if (!strcmp(argv[i], "vulkan") || !strcmp(argv[i], "vulkan-streaming"))
+                    target = Target::VULKAN_STREAMING;
+                else if (!strcmp(argv[i], "vulkan-megakernel"))
+                    target = Target::VULKAN_MEGAKERNEL;
                 else if (!strcmp(argv[i], "generic"))
                     target = Target::GENERIC;
                 else {
