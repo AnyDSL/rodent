@@ -734,7 +734,7 @@ fn @make_opencl_device(dev: i32, streaming: bool) -> Device {
 }
 
 fn @make_vulkan_device(dev: i32, streaming: bool) -> Device {
-    let dev_id = runtime_device(2, dev);
+    let dev_id = runtime_device(6, dev);
     let load_bvh = @ |filename: &[u8]| {
         let mut nodes: &[Node2];
         let mut tris: &[Tri1];

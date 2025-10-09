@@ -22,7 +22,7 @@ fn @make_gpu_bvh2_tri1(nodes: &[Node2], tris: &[Tri1], is_nvvm: bool) -> Bvh {
 
     Bvh {
         node = @ |j| {
-            let simd_ptr = &nodes(j) as &addrspace(1)[simd[f32 * 4]];
+            let simd_ptr = &(nodes as &addrspace(1)[Node2])(j) as &addrspace(1)[simd[f32 * 4]];
             let bb0 = load4_f32(simd_ptr, 0);
             let bb1 = load4_f32(simd_ptr, 1);
             let bb2 = load4_f32(simd_ptr, 2);
@@ -39,11 +39,16 @@ fn @make_gpu_bvh2_tri1(nodes: &[Node2], tris: &[Tri1], is_nvvm: bool) -> Bvh {
                     }
                 },
                 ordered_bbox = @ |_, _| undef[BBox](), // Not implemented
-                child = @ |i| children(i)
+                child = @ |i| {
+                    //if (spv_vk_get_global_id()(0) == 7 && spv_vk_get_global_id()(1) == 1) {
+                    //    spv_printfdl("child %d = %lx\n", i, simd_ptr as u64);
+                    //}
+                    children(i)
+                }
             }
         },
         prim = @ |j| {
-            let simd_ptr = &tris(j) as &addrspace(1)[simd[f32 * 4]];
+            let simd_ptr = &(tris as &addrspace(1)[Tri1])(j) as &addrspace(1)[simd[f32 * 4]];
             let tri0 = load4_f32(simd_ptr, 0);
             let tri1 = load4_f32(simd_ptr, 1);
             let tri2 = load4_f32(simd_ptr, 2);
