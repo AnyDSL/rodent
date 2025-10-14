@@ -488,6 +488,7 @@ fn @gpu_mega_kernel_trace( dev_id: i32
                         },
                         _ => ()
                     }
+                    pe_info("i: ", i);
                     break()
                 }
             }

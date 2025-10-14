@@ -155,14 +155,14 @@ fn @intersect_ray_tri(math: Intrinsics, backface_culling: bool, ray: Ray, tri: T
     mask &= v >= 0;
     mask &= u + v <= abs_det;
 
-    if likely(rv_all(!mask)) { return(Option[(f32, f32, f32)]::None) }
+    //if likely(rv_all(!mask)) { return(Option[(f32, f32, f32)]::None) }
 
     let t = prodsign(vec3_dot(c, tri.n), det);
     mask &= if backface_culling { det < 0 } else { abs_det != 0 };
     mask &= t >= abs_det * ray.tmin;
     mask &= t <= abs_det * ray.tmax;
 
-    if likely(rv_all(!mask)) { return(Option[(f32, f32, f32)]::None) }
+    //if likely(rv_all(!mask)) { return(Option[(f32, f32, f32)]::None) }
 
     if mask {
         let inv_det = 1 / abs_det;
