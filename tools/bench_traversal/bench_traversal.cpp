@@ -1,5 +1,6 @@
 #include <iostream>
 #include <cstring>
+#include <cassert>
 #include <vector>
 #include <numeric>
 #include <algorithm>
@@ -12,7 +13,9 @@
 enum class Target {
     CPU,
     NVVM,
-    AMDGPU
+    AMDGPU,
+    OpenCL,
+    Vulkan,
 };
 
 inline void check_argument(int i, int argc, char** argv) {
@@ -123,12 +126,28 @@ static double bench_cpu_single(Node4* nodes, Tri4* tris, Ray1* rays, Hit1* hits,
 
 static double bench_gpu(Node2* nodes, Tri1* tris, Ray1* rays, Hit1* hits, size_t n, bool any_hit, Target target, int32_t dev) {
     auto t0 = anydsl_get_kernel_time();
-    if (target == Target::AMDGPU) {
-        if (any_hit) amdgpu_occluded_single_ray1_bvh2_tri1(dev, nodes, tris, rays, hits, n);
-        else         amdgpu_intersect_single_ray1_bvh2_tri1(dev, nodes, tris, rays, hits, n);
-    } else {
-        if (any_hit) nvvm_occluded_single_ray1_bvh2_tri1(dev, nodes, tris, rays, hits, n);
-        else         nvvm_intersect_single_ray1_bvh2_tri1(dev, nodes, tris, rays, hits, n);
+    switch (target) {
+        case Target::AMDGPU: {
+            if (any_hit) amdgpu_occluded_single_ray1_bvh2_tri1(dev, nodes, tris, rays, hits, n);
+            else         amdgpu_intersect_single_ray1_bvh2_tri1(dev, nodes, tris, rays, hits, n);
+            break;
+        }
+        case Target::NVVM: {
+            if (any_hit) nvvm_occluded_single_ray1_bvh2_tri1(dev, nodes, tris, rays, hits, n);
+            else         nvvm_intersect_single_ray1_bvh2_tri1(dev, nodes, tris, rays, hits, n);
+            break;
+        }
+        case Target::OpenCL: {
+            if (any_hit) opencl_occluded_single_ray1_bvh2_tri1(dev, nodes, tris, rays, hits, n);
+            else         opencl_intersect_single_ray1_bvh2_tri1(dev, nodes, tris, rays, hits, n);
+            break;
+        }
+        case Target::Vulkan: {
+            if (any_hit) vulkan_occluded_single_ray1_bvh2_tri1(dev, nodes, tris, rays, hits, n);
+            else         vulkan_intersect_single_ray1_bvh2_tri1(dev, nodes, tris, rays, hits, n);
+            break;
+        }
+        default: assert(false);
     }
     auto t1 = anydsl_get_kernel_time();
     return (t1 - t0) / 1000.0;
@@ -178,6 +197,10 @@ int main(int argc, char** argv) {
                     target = Target::AMDGPU;
                 } else if (!strcmp(argv[i + 1], "nvvm")) {
                     target = Target::NVVM;
+                } else if (!strcmp(argv[i + 1], "opencl")) {
+                    target = Target::OpenCL;
+                } else if (!strcmp(argv[i + 1], "vulkan")) {
+                    target = Target::Vulkan;
                 } else {
                     std::cerr << "Unknown GPU platform '" << argv[i + 1] << "'" << std::endl;
                     return 1;
@@ -210,12 +233,16 @@ int main(int argc, char** argv) {
             return 1;
         }
     }
-    bool use_gpu = target == Target::NVVM || target == Target::AMDGPU;
+    bool use_gpu = true;
     auto platform = anydsl::Platform::Host;
     auto device = anydsl::Device(dev);
     switch (target) {
+        case Target::CPU: use_gpu = false; break;
         case Target::AMDGPU: platform = anydsl::Platform::HSA;  break;
         case Target::NVVM:   platform = anydsl::Platform::Cuda; break;
+        case Target::OpenCL: platform = anydsl::Platform::OpenCL; break;
+        case Target::Vulkan: platform = anydsl::Platform::Vulkan; break;
+        default: assert(false);
     }
 
     if (bvh_file == "") {

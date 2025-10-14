@@ -527,3 +527,76 @@ fn @make_cpu_hit8(hits: &mut [Hit8], any_hit: bool) -> fn (i32, i32, Hit) -> () 
         device.sync()
     } else { variant_not_available("amdgpu_occluded_single_ray1_bvh2_tri1"); }
 }
+
+#[export] fn opencl_intersect_single_ray1_bvh2_tri1(dev: i32, nodes: &[Node2], tris: &[Tri1], rays: &[Ray1], hits: &mut [Hit1], num_rays: i32) -> () {
+    if enable_gpu_bvh2_tri1 {
+        let device = opencl_spirv_accelerator(dev);
+        gpu_traverse_single(
+            device,
+            opencl_intrinsics,
+            make_default_min_max(),
+            make_gpu_bvh2_tri1(nodes, tris, false),
+            make_gpu_ray1(rays),
+            make_gpu_hit1(hits),
+            1 /*packet_size*/,
+            num_rays,
+            false /*any_hit*/,
+        );
+        device.sync()
+    } else { variant_not_available("opencl_intersect_single_ray1_bvh2_tri1"); }
+}
+
+#[export] fn opencl_occluded_single_ray1_bvh2_tri1(dev: i32, nodes: &[Node2], tris: &[Tri1], rays: &[Ray1], hits: &mut [Hit1], num_rays: i32) -> () {
+    if enable_gpu_bvh2_tri1 {
+        let device = opencl_spirv_accelerator(dev);
+        gpu_traverse_single(
+            device,
+            opencl_intrinsics,
+            make_default_min_max(),
+            make_gpu_bvh2_tri1(nodes, tris, false),
+            make_gpu_ray1(rays),
+            make_gpu_hit1(hits),
+            1 /*packet_size*/,
+            num_rays,
+            true /*any_hit*/,
+        );
+        device.sync()
+    } else { variant_not_available("opencl_occluded_single_ray1_bvh2_tri1"); }
+}
+
+
+#[export] fn vulkan_intersect_single_ray1_bvh2_tri1(dev: i32, nodes: &[Node2], tris: &[Tri1], rays: &[Ray1], hits: &mut [Hit1], num_rays: i32) -> () {
+    if enable_gpu_bvh2_tri1 {
+        let device = vulkan_accelerator(dev);
+        gpu_traverse_single(
+            device,
+            vulkan_intrinsics,
+            make_default_min_max(),
+            make_gpu_bvh2_tri1(nodes, tris, false),
+            make_gpu_ray1(rays),
+            make_gpu_hit1(hits),
+            1 /*packet_size*/,
+            num_rays,
+            false /*any_hit*/,
+        );
+        device.sync()
+    } else { variant_not_available("vulkan_intersect_single_ray1_bvh2_tri1"); }
+}
+
+#[export] fn vulkan_occluded_single_ray1_bvh2_tri1(dev: i32, nodes: &[Node2], tris: &[Tri1], rays: &[Ray1], hits: &mut [Hit1], num_rays: i32) -> () {
+    if enable_gpu_bvh2_tri1 {
+        let device = vulkan_accelerator(dev);
+        gpu_traverse_single(
+            device,
+            vulkan_intrinsics,
+            make_default_min_max(),
+            make_gpu_bvh2_tri1(nodes, tris, false),
+            make_gpu_ray1(rays),
+            make_gpu_hit1(hits),
+            1 /*packet_size*/,
+            num_rays,
+            true /*any_hit*/,
+        );
+        device.sync()
+    } else { variant_not_available("vulkan_occluded_single_ray1_bvh2_tri1"); }
+}
