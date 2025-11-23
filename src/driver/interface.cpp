@@ -595,9 +595,9 @@ void rodent_load_jpg(int dev, unsigned char* file, uint8_t** pixels, int* width,
     *height = std::get<2>(img);
 }
 
-uint8_t* rodent_load_buffer(int dev, unsigned char* file) {
+int8_t* rodent_load_buffer(int dev, uint8_t* file) {
     auto& array = interface->load_buffer(dev, reinterpret_cast<const char*>(file));
-    return const_cast<uint8_t*>(array.data());
+    return reinterpret_cast<int8_t*>(const_cast<uint8_t*>(array.data()));
 }
 
 void rodent_load_bvh2_tri1(int dev, unsigned char* file, Node2** nodes, Tri1** tris) {
