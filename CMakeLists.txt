@@ -1,5 +1,4 @@
-# Require CMake 3.19 in order to be able to add sources to interface libraries
-cmake_minimum_required(VERSION 3.19)
+cmake_minimum_required(VERSION 3.20.0)
 
 project(rodent)
 
