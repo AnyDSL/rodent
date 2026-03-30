@@ -1,6 +1,8 @@
 #ifndef IMAGE_H
 #define IMAGE_H
 
+#include <cstdint>
+
 #include "file_path.h"
 
 struct ImageRgba32 {
