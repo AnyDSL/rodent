@@ -56,7 +56,7 @@ fn @make_gpu_bvh2_tri1(nodes: &[Node2], tris: &[Tri1], is_nvvm: bool) -> Bvh {
                     let e2  = make_vec3(tri2(0), tri2(1), tri2(2));
                     let n   = vec3_cross(e1, e2);
                     let tri = make_tri(v0, e1, e2, n);
-                    match intersect_ray_tri(math, false /*backface_culling*/, ray, tri) {
+                    match intersect_ray_tri_gpu(math, false /*backface_culling*/, ray, tri) {
                         Option[(f32, f32, f32)]::Some((t, u, v)) => {
                             make_option(make_hit(geom_id, prim_id & 0x7FFFFFFF, t, make_vec2(u, v)))
                         },

@@ -142,7 +142,7 @@ fn @bbox_half_area(a: BBox) -> f32 {
     ext.x * (ext.y + ext.z) + ext.y * ext.z
 }
 
-fn @intersect_ray_tri(math: Intrinsics, backface_culling: bool, ray: Ray, tri: Tri) -> Option[(f32, f32, f32)] {
+fn @intersect_ray_tri_cpu(math: Intrinsics, backface_culling: bool, ray: Ray, tri: Tri) -> Option[(f32, f32, f32)] {
     let c = vec3_sub(tri.v0, ray.org);
     let r = vec3_cross(ray.dir, c);
     let det = vec3_dot(tri.n, ray.dir);
@@ -163,6 +163,34 @@ fn @intersect_ray_tri(math: Intrinsics, backface_culling: bool, ray: Ray, tri: T
     mask &= t <= abs_det * ray.tmax;
 
     if likely(rv_all(!mask)) { return(Option[(f32, f32, f32)]::None) }
+
+    if mask {
+        let inv_det = 1 / abs_det;
+        make_option(t * inv_det, u * inv_det, v * inv_det)
+    } else {
+        Option[(f32, f32, f32)]::None
+    }
+}
+
+fn @intersect_ray_tri_gpu(math: Intrinsics, backface_culling: bool, ray: Ray, tri: Tri) -> Option[(f32, f32, f32)] {
+    let c = vec3_sub(tri.v0, ray.org);
+    let r = vec3_cross(ray.dir, c);
+    let det = vec3_dot(tri.n, ray.dir);
+    let abs_det = math.fabsf(det);
+
+    let u = prodsign(vec3_dot(r, tri.e2), det);
+    let mut mask = u >= 0;
+
+    let v = prodsign(vec3_dot(r, tri.e1), det);
+    mask &= v >= 0;
+    mask &= u + v <= abs_det;
+
+    if likely(!mask) { return(Option[(f32, f32, f32)]::None) }
+
+    let t = prodsign(vec3_dot(c, tri.n), det);
+    mask &= if backface_culling { det < 0 } else { abs_det != 0 };
+    mask &= t >= abs_det * ray.tmin;
+    mask &= t <= abs_det * ray.tmax;
 
     if mask {
         let inv_det = 1 / abs_det;
